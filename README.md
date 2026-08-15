@@ -1,5 +1,12 @@
 # BRICK Framework
 
+**BRICK** means **Building Reusable Interfaces, Components and Kits**.
+
+It is a modular C++ framework for building portable embedded software across
+different hardware platforms. The name emphasizes the intended way of using
+the project: applications are assembled from reusable building blocks, while
+platform-specific code remains isolated in adapters.
+
 **BRICK** to modularny zestaw bibliotek C++ przeznaczony do budowy przenośnego oprogramowania embedded dla różnych platform sprzętowych.
 
 Głównym celem projektu jest stworzenie wspólnej infrastruktury, którą można wykorzystywać w wielu niezależnych projektach bez silnego wiązania kodu aplikacyjnego i sterowników urządzeń z konkretnym mikrokontrolerem, SDK producenta lub systemem operacyjnym.

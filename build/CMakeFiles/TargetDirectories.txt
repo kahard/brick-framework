@@ -1,4 +1,0 @@
-D:/work/brick_framework/build/CMakeFiles/brick_core_tests.dir
-D:/work/brick_framework/build/CMakeFiles/test.dir
-D:/work/brick_framework/build/CMakeFiles/edit_cache.dir
-D:/work/brick_framework/build/CMakeFiles/rebuild_cache.dir

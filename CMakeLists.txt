@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(brick_framework LANGUAGES CXX)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" BRICK_VERSION LIMIT_COUNT 1)
+project(brick_framework VERSION ${BRICK_VERSION} LANGUAGES CXX)
 
 option(BRICK_BUILD_TESTS "Build BRICK PC tests" ON)
 

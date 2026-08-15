@@ -1,0 +1,19 @@
+Start testing: Aug 15 17:52 Œrodkowoeuropejski czas letni
+----------------------------------------------------------
+1/1 Testing: brick_core_tests
+1/1 Test: brick_core_tests
+Command: "D:/work/brick_framework/build/brick_core_tests.exe"
+Directory: D:/work/brick_framework/build
+"brick_core_tests" start time: Aug 15 17:52 Œrodkowoeuropejski czas letni
+Output:
+----------------------------------------------------------
+BRICK PC tests passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"brick_core_tests" end time: Aug 15 17:52 Œrodkowoeuropejski czas letni
+"brick_core_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 15 17:52 Œrodkowoeuropejski czas letni

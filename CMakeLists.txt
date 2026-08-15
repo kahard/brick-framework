@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.20)
+project(brick_framework LANGUAGES CXX)
+
+option(BRICK_BUILD_TESTS "Build BRICK PC tests" ON)
+
+add_library(brick_interfaces INTERFACE)
+add_library(BRICK::Interfaces ALIAS brick_interfaces)
+target_include_directories(brick_interfaces INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/interfaces/include")
+
+add_library(brick_core INTERFACE)
+add_library(BRICK::Core ALIAS brick_core)
+target_include_directories(brick_core INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/core/include")
+target_link_libraries(brick_core INTERFACE BRICK::Interfaces)
+
+add_library(brick_platform_esp32 INTERFACE)
+add_library(BRICK::PlatformESP32 ALIAS brick_platform_esp32)
+target_include_directories(brick_platform_esp32 INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/platforms/esp32/include")
+target_link_libraries(brick_platform_esp32 INTERFACE BRICK::Core)
+
+if(BRICK_BUILD_TESTS)
+  enable_testing()
+  add_executable(brick_core_tests tests/brick/brick_core_tests.cpp)
+  target_compile_features(brick_core_tests PRIVATE cxx_std_17)
+  target_compile_options(brick_core_tests PRIVATE -Wall -Wextra -Werror)
+  target_link_libraries(brick_core_tests PRIVATE BRICK::Core)
+  add_test(NAME brick_core_tests COMMAND brick_core_tests)
+endif()

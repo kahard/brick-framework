@@ -20,6 +20,8 @@ inline MipiDsiPanelConfig jc1060_1024x600(
   config.vsync_back_porch = 23;
   config.vsync_front_porch = 12;
   config.reset_gpio = GPIO_NUM_27;
+  config.mipi_dsi_ldo_channel = 3;
+  config.mipi_dsi_ldo_voltage_mv = 2500;
   config.init_sequence = init_sequence;
   config.init_sequence_size = init_sequence_size;
   return config;

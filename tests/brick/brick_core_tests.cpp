@@ -11,6 +11,7 @@
 #include "brick/core/audio/wav_decoder.hpp"
 #include "brick/core/audio/audio_player.hpp"
 #include "brick/core/timing/periodic_timer.hpp"
+#include "brick/core/input/touch_mapper.hpp"
 
 namespace {
 
@@ -179,6 +180,36 @@ void test_audio_player() {
   assert(output.stopped);
 }
 
+void test_touch_mapper() {
+  using brick::core::input::TouchCalibration;
+  using brick::core::input::TouchMapper;
+  using brick::interfaces::display::DisplaySize;
+  using brick::interfaces::display::TouchState;
+
+  TouchMapper mapper(DisplaySize{480, 480}, TouchCalibration{200, 3800, 300, 3900});
+  auto top_left = mapper.map(0, 200, 300, 100);
+  assert(top_left.x == 0);
+  assert(top_left.y == 0);
+  assert(top_left.pressure == 100);
+  assert(top_left.state == TouchState::moved);
+
+  auto bottom_right = mapper.map(0, 3800, 3900);
+  assert(bottom_right.x == 479);
+  assert(bottom_right.y == 479);
+
+  TouchMapper inverted(DisplaySize{100, 50},
+                       TouchCalibration{0, 1000, 0, 1000, true, true, false});
+  auto point = inverted.map(1, 250, 750);
+  assert(point.x == 75);
+  assert(point.y == 13);
+
+  TouchMapper swapped(DisplaySize{200, 100},
+                      TouchCalibration{0, 1000, 0, 2000, false, false, true});
+  auto swapped_point = swapped.map(2, 500, 1000);
+  assert(swapped_point.x == 99);
+  assert(swapped_point.y == 49);
+}
+
 }  // namespace
 
 int main() {
@@ -186,6 +217,7 @@ int main() {
   test_bmp_decoder();
   test_wav_decoder();
   test_audio_player();
+  test_touch_mapper();
   std::puts("BRICK PC tests passed");
   return 0;
 }

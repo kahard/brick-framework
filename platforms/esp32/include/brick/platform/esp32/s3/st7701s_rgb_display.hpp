@@ -41,6 +41,8 @@ struct St7701sRgbPanelConfig {
   gpio_num_t pclk_gpio = GPIO_NUM_NC;
   std::array<int, 16> data_gpios{};
   gpio_num_t reset_gpio = GPIO_NUM_NC;
+  gpio_num_t backlight_gpio = GPIO_NUM_NC;
+  bool backlight_active_high = true;
 
   // Sequence format: command, argument_count, arguments...
   // A command with argument_count 0xFF is a delay in milliseconds.
@@ -72,6 +74,11 @@ class St7701sRgbDisplay final
              static_cast<unsigned long>(config_.pixel_clock_hz));
     if (!begin_spi_() || !send_init_sequence_()) return false;
     if (!begin_rgb_panel_()) return false;
+    if (config_.backlight_gpio != GPIO_NUM_NC) {
+      gpio_set_direction(config_.backlight_gpio, GPIO_MODE_OUTPUT);
+      gpio_set_level(config_.backlight_gpio,
+                     config_.backlight_active_high ? 1 : 0);
+    }
     initialized_ = true;
     return true;
   }

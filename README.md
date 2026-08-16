@@ -40,7 +40,10 @@ The initial implementation includes:
 - WAV decoding and audio buffering,
 - audio-player interfaces and a periodic player,
 - LVGL image presentation,
-- ESP32 PWM audio output.
+- ESP32 PWM audio output,
+- portable display, touchscreen, and backlight interfaces,
+- touch calibration and coordinate mapping,
+- an ESP-IDF MIPI-DSI adapter with a JC1060 1024x600 profile.
 
 Core code depends on interfaces, not on ESP-IDF or LVGL. Platform adapters are
 kept in `platforms/` and are included only by applications that need them.

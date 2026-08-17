@@ -27,6 +27,7 @@ brick-framework/
 │   ├── pc/            PC implementations and test support
 │   └── stm32/         STM32 adapters
 ├── tests/             PC regression tests
+├── examples/          links to hardware examples in brick-test-apps
 └── cmake/             shared build configuration
 ```
 
@@ -47,6 +48,9 @@ The initial implementation includes:
 
 Core code depends on interfaces, not on ESP-IDF or LVGL. Platform adapters are
 kept in `platforms/` and are included only by applications that need them.
+
+Complete hardware examples and smoke-test applications are maintained
+separately in [`brick-test-apps`](https://github.com/kahard/brick-test-apps).
 
 ## Build and test on PC
 

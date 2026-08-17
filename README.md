@@ -11,7 +11,7 @@ the same core code can be reused on embedded targets and tested on a PC.
 The framework is in early development. The first working modules were extracted
 from the `wled-ha-panel` project and are currently used on ESP32-S3 hardware.
 
-Current release: **0.1.0** ([`v0.1.0`](https://github.com/kahard/brick-framework/releases/tag/v0.1.0)).
+Current release: **0.2.0** ([`v0.2.0`](https://github.com/kahard/brick-framework/releases/tag/v0.2.0)).
 
 ## Repository layout
 
@@ -71,7 +71,7 @@ audio player using deterministic in-memory fakes.
 - Feature and fix branches are created from `develop` and merged through pull
   requests.
 - `master` contains stable releases only.
-- Releases use Semantic Versioning and immutable tags such as `v0.1.0`.
+- Releases use Semantic Versioning and immutable tags such as `v0.2.0`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [VERSIONING.md](VERSIONING.md) for
 the complete workflow. The original Polish architecture notes are available

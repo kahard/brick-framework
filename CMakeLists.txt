@@ -9,11 +9,20 @@ add_library(BRICK::Interfaces ALIAS brick_interfaces)
 target_include_directories(brick_interfaces INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/interfaces/include")
 
-add_library(brick_core INTERFACE)
+add_library(brick_core STATIC
+    libs/core/src/AudioBuffer.cpp
+    libs/core/src/BmpDecoder.cpp
+    libs/core/src/PeriodicAudioPlayer.cpp
+    libs/core/src/PeriodicTimer.cpp
+    libs/core/src/TouchMapper.cpp
+    libs/core/src/WavDecoder.cpp)
 add_library(BRICK::Core ALIAS brick_core)
 target_include_directories(brick_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/core/include")
-target_link_libraries(brick_core INTERFACE BRICK::Interfaces)
+target_include_directories(brick_core PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/core/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/interfaces/include")
+target_link_libraries(brick_core PUBLIC BRICK::Interfaces)
 
 add_library(brick_platform_esp32 INTERFACE)
 add_library(BRICK::PlatformESP32 ALIAS brick_platform_esp32)

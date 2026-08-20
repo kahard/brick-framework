@@ -25,6 +25,21 @@ def write_manifest(stream: TextIO, records: list[tuple[str, Path, int, int, str,
     stream.write(f"# total_size\t{total_size}\n")
 
 
+def write_c_source(path: Path, symbol: str, data: bytes) -> None:
+    lines = [
+        '#include "asset_bundle.h"',
+        "#include <pgmspace.h>",
+        "",
+        f"const std::uint8_t PROGMEM {symbol}[] = {{",
+    ]
+    for offset in range(0, len(data), 16):
+        chunk = data[offset : offset + 16]
+        lines.append("    " + ", ".join(f"0x{byte:02X}" for byte in chunk) + ",")
+    lines += ["};", ""]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -35,6 +50,15 @@ def main() -> int:
         help="optional tab-separated text catalog with names, offsets and metadata",
     )
     parser.add_argument(
+        "--c-source",
+        type=Path,
+        help="optional C++ source containing the bundle as a PROGMEM byte array",
+    )
+    parser.add_argument(
+        "--c-symbol",
+        help="symbol name for --c-source",
+    )
+    parser.add_argument(
         "--asset",
         action="append",
         required=True,
@@ -42,6 +66,8 @@ def main() -> int:
         help="asset definition, e.g. joy_tears=joy.bin,480x480,rgb565",
     )
     args = parser.parse_args()
+    if (args.c_source is None) != (args.c_symbol is None):
+        raise SystemExit("--c-source and --c-symbol must be provided together")
 
     records: list[tuple[str, Path, int, int, str, int]] = []
     names: set[str] = set()
@@ -124,6 +150,8 @@ def main() -> int:
         args.manifest.parent.mkdir(parents=True, exist_ok=True)
         with args.manifest.open("w", encoding="utf-8", newline="") as manifest:
             write_manifest(manifest, records, offsets, len(blob))
+    if args.c_source is not None:
+        write_c_source(args.c_source, identifier(args.c_symbol), blob)
     print(f"Generated {args.output} ({len(blob)} bytes) and {args.header}")
     return 0
 

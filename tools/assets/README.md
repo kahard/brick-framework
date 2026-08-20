@@ -82,3 +82,15 @@ descriptor and a relative payload offset, so the streamer does not need to
 know where the bytes physically live. A platform adapter is responsible for
 mapping the descriptor offset to its storage medium and checking the storage
 boundaries.
+
+For Arduino targets that keep the bundle in program memory, the generator can
+also emit a source file containing one `PROGMEM` byte array:
+
+```powershell
+python tools/assets/bundle_assets.py `
+  --output generated/assets.bin `
+  --header generated/assets.h `
+  --c-source generated/assets.cpp `
+  --c-symbol brick_asset_bundle `
+  --asset joy_tears=joy.bin,240x240,rgb565
+```

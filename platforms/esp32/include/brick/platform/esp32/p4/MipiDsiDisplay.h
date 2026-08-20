@@ -48,7 +48,7 @@ public:
     brick::interfaces::display::DisplaySize size() const override;
     brick::interfaces::display::PixelFormat pixel_format() const override;
     bool                                    set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool                                    draw_pixels(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height, const std::uint8_t* pixels, std::size_t byte_count) override;
+    bool                                    draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
 
 private:
     bool send_init_sequence_();

@@ -12,6 +12,10 @@
 #include "brick/core/image/BmpDecoder.h"
 #include "brick/core/input/TouchMapper.h"
 #include "brick/core/timing/PeriodicTimer.h"
+#include "brick/interfaces/display/DisplayCapabilities.h"
+#include "brick/interfaces/display/IDisplayDevice.h"
+#include "brick/interfaces/display/DisplayRect.h"
+#include "brick/interfaces/display/PixelBuffer.h"
 
 namespace
 {
@@ -58,6 +62,29 @@ public:
 private:
     const std::vector<std::uint8_t>& data_;
     std::size_t                      position_ = 0;
+};
+
+class FakeDisplay final : public brick::interfaces::display::IDisplayDevice
+{
+public:
+    bool begin() override { return true; }
+    brick::interfaces::display::DisplaySize size() const override { return { 320, 240 }; }
+    brick::interfaces::display::PixelFormat pixel_format() const override { return brick::interfaces::display::PixelFormat::rgb565; }
+    bool set_rotation(brick::interfaces::display::Rotation) override { return true; }
+
+    bool draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override
+    {
+        if (!buffer.valid() || buffer.format != pixel_format() || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
+            return false;
+        last_area = area;
+        last_pixels = buffer.data;
+        last_byte_count = buffer.stride_bytes * buffer.height;
+        return true;
+    }
+
+    brick::interfaces::display::DisplayRect last_area{};
+    const std::uint8_t* last_pixels = nullptr;
+    std::size_t last_byte_count = 0;
 };
 
 class MemoryFileSystem final : public brick::interfaces::storage::IFileSystem
@@ -243,6 +270,32 @@ void test_touch_mapper()
 
 int main()
 {
+    using brick::interfaces::display::DisplayCapabilities;
+    using brick::interfaces::display::DisplayRect;
+    using brick::interfaces::display::PixelBuffer;
+
+    constexpr DisplayRect screen{ 0, 0, 320, 240 };
+    assert(screen.contains(DisplayRect{ 10, 20, 100, 50 }));
+    assert(!screen.contains(DisplayRect{ 300, 20, 30, 50 }));
+    const DisplayRect empty_rect{ 0, 0, 0, 10 };
+    assert(empty_rect.empty());
+
+    const std::uint8_t pixels[64] = {};
+    const PixelBuffer partial{ pixels, 8, 4, 20, brick::interfaces::display::PixelFormat::rgb565, true };
+    assert(partial.valid());
+    assert(partial.stride_bytes > partial.width * 2);
+
+    const DisplayCapabilities capabilities{};
+    assert(capabilities.max_buffer_count == 1);
+
+    FakeDisplay display;
+    const PixelBuffer packed{ pixels, 8, 4, 16, brick::interfaces::display::PixelFormat::rgb565, false };
+    assert(display.draw_buffer({ 12, 30, 8, 4 }, packed));
+    assert(display.last_area.x == 12 && display.last_area.y == 30);
+    assert(display.last_pixels == pixels && display.last_byte_count == 64);
+    const PixelBuffer padded{ pixels, 8, 4, 20, brick::interfaces::display::PixelFormat::rgb565, false };
+    assert(!display.draw_buffer({ 12, 30, 8, 4 }, padded));
+
     test_periodic_timer();
     test_bmp_decoder();
     test_wav_decoder();

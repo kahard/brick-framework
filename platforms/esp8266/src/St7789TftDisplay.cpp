@@ -35,6 +35,25 @@ brick::interfaces::display::PixelFormat St7789TftDisplay::pixel_format() const
     return brick::interfaces::display::PixelFormat::rgb565;
 }
 
+brick::interfaces::display::DisplayCapabilities St7789TftDisplay::capabilities() const
+{
+    return {
+        brick::interfaces::display::DisplayPanelType::spi,
+        size(),
+        pixel_format(),
+        static_cast<std::size_t>(size().width) * size().height * brick::interfaces::display::pixel_format_bytes(pixel_format()),
+        4,
+        0,
+        false,
+        false,
+        false,
+        true,
+        false,
+        1,
+        brick::interfaces::display::RenderMode::partial,
+    };
+}
+
 bool St7789TftDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
 {
     const auto value = static_cast<std::uint8_t>(rotation);
@@ -46,13 +65,15 @@ bool St7789TftDisplay::set_rotation(brick::interfaces::display::Rotation rotatio
     return true;
 }
 
-bool St7789TftDisplay::draw_pixels(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height, const std::uint8_t* pixels, std::size_t byte_count)
+bool St7789TftDisplay::draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer)
 {
     const auto display_size = size();
-    const auto required     = static_cast<std::size_t>(width) * height * 2;
-    if (!initialized_ || pixels == nullptr || width == 0 || height == 0 || x + width > display_size.width || y + height > display_size.height || byte_count < required)
+    if (!initialized_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > display_size.width || area.y + area.height > display_size.height ||
+        !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width) || buffer.height != static_cast<std::uint32_t>(area.height) ||
+        buffer.format != pixel_format() || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
         return false;
-    tft_.pushImage(x, y, width, height, const_cast<std::uint16_t*>(reinterpret_cast<const std::uint16_t*>(pixels)));
+    tft_.pushImage(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y), static_cast<std::uint16_t>(area.width),
+                   static_cast<std::uint16_t>(area.height), const_cast<std::uint16_t*>(reinterpret_cast<const std::uint16_t*>(buffer.data)));
     return true;
 }
 

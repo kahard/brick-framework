@@ -91,11 +91,13 @@ bool MipiDsiDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
     return !initialized_ || apply_rotation_();
 }
 
-bool MipiDsiDisplay::draw_pixels(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height, const std::uint8_t* pixels, std::size_t byte_count)
+bool MipiDsiDisplay::draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer)
 {
-    if (!initialized_ || pixels == nullptr || width == 0 || height == 0 || x + width > config_.width || y + height > config_.height || byte_count < static_cast<std::size_t>(width) * height * 2)
+    if (!initialized_ || panel_ == nullptr || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width || area.y + area.height > config_.height ||
+        !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width) || buffer.height != static_cast<std::uint32_t>(area.height) ||
+        buffer.format != pixel_format() || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
         return false;
-    return esp_lcd_panel_draw_bitmap(panel_, x, y, x + width, y + height, pixels) == ESP_OK;
+    return esp_lcd_panel_draw_bitmap(panel_, area.x, area.y, area.x + area.width, area.y + area.height, buffer.data) == ESP_OK;
 }
 
 bool MipiDsiDisplay::send_init_sequence_()

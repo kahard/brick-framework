@@ -64,10 +64,21 @@ manifest containing stable IDs, offsets, sizes and image metadata:
 python tools/assets/bundle_assets.py `
   --output assets/generated/assets.bin `
   --header assets/generated/assets.h `
+  --manifest assets/generated/assets.tsv `
   --asset joy_tears=assets/generated/joy_tears.bin,480x480,rgb565 `
   --asset red_background=assets/generated/red.bin,480x480,rgb565
 ```
 
 The bundle is deliberately just concatenated payloads. The generated manifest
-is the catalog; the storage backend can later be an embedded binary, a flash
-partition, external flash, filesystem or another memory device.
+is the catalog; the optional tab-separated file is useful for inspection and
+upload tooling. There is no per-asset header in the binary: every offset points
+directly at pixel data, relative to the beginning of the bundle. The generator
+rejects duplicate names, invalid dimensions, wrong payload sizes and bundles
+that cannot be addressed with 32-bit offsets.
+
+The storage backend can be an embedded binary, a flash partition, external
+flash, filesystem or another memory device. `IAssetSource` receives the
+descriptor and a relative payload offset, so the streamer does not need to
+know where the bytes physically live. A platform adapter is responsible for
+mapping the descriptor offset to its storage medium and checking the storage
+boundaries.

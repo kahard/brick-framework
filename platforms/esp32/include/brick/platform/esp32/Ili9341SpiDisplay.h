@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -60,6 +61,7 @@ private:
     spi_device_handle_t          spi_device_ = nullptr;
     bool                         spi_ready_  = false;
     bool                         started_    = false;
+    alignas(4) std::array<std::uint8_t, 4096> pixel_tx_buffer_{};
     static constexpr const char* TAG         = "brick_ili9341_spi";
 };
 

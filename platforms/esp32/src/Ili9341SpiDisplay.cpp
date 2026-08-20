@@ -147,8 +147,18 @@ bool Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
     constexpr std::size_t kChunk = 4096;
     while (length != 0)
     {
-        const auto chunk = std::min(length, kChunk);
-        if (!transmit_(true, data, chunk))
+        auto chunk = std::min(length, kChunk);
+        // RGB565 assets are stored in the portable little-endian memory
+        // representation. ILI9341 expects each pixel on SPI MSB first.
+        chunk &= ~std::size_t{1};
+        if (chunk == 0)
+            return false;
+        for (std::size_t index = 0; index < chunk; index += 2)
+        {
+            pixel_tx_buffer_[index]     = data[index + 1];
+            pixel_tx_buffer_[index + 1] = data[index];
+        }
+        if (!transmit_(true, pixel_tx_buffer_.data(), chunk))
             return false;
         data += chunk;
         length -= chunk;

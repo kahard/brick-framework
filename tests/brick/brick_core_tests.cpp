@@ -116,6 +116,30 @@ public:
     std::vector<std::size_t> sizes;
 };
 
+class MemoryAssetSource final : public brick::interfaces::display::IAssetSource
+{
+public:
+    explicit MemoryAssetSource(const std::vector<std::uint8_t>& data) : data_(data) {}
+
+    bool read(const brick::interfaces::display::AssetDescriptor& asset,
+              std::size_t offset,
+              std::uint8_t* destination,
+              std::size_t bytes) override
+    {
+        if (destination == nullptr || offset > asset.size || bytes > asset.size - offset ||
+            asset.offset > data_.size() || bytes > data_.size() - asset.offset - offset)
+            return false;
+        std::memcpy(destination, data_.data() + asset.offset + offset, bytes);
+        offsets.push_back(offset);
+        sizes.push_back(bytes);
+        return true;
+    }
+
+    const std::vector<std::uint8_t>& data_;
+    std::vector<std::size_t> offsets;
+    std::vector<std::size_t> sizes;
+};
+
 class MemoryFileSystem final : public brick::interfaces::storage::IFileSystem
 {
 public:
@@ -355,6 +379,30 @@ void test_asset_bundle()
     assert(!bundle.image(99).valid());
 }
 
+void test_asset_source_streamer()
+{
+    using brick::interfaces::display::AssetDescriptor;
+    using brick::interfaces::display::DisplayRect;
+    using brick::interfaces::display::PixelFormat;
+
+    const std::vector<std::uint8_t> bundle_data{99, 98, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 97};
+    const AssetDescriptor asset{7, 2, 12, 2, 3, 4, PixelFormat::rgb565};
+    MemoryAssetSource source(bundle_data);
+    FakeDisplay display;
+    brick::core::image::AssetStreamer streamer(display);
+    std::uint8_t scratch[4] = {};
+
+    assert(streamer.stream(asset, source, DisplayRect{0, 0, 2, 3}, scratch, sizeof(scratch)));
+    assert((source.offsets == std::vector<std::size_t>{0, 4, 8}));
+    assert((source.sizes == std::vector<std::size_t>{4, 4, 4}));
+    assert(display.submitted_byte_counts.size() == 3);
+    assert(display.submitted_byte_counts[0] == 4 && display.submitted_byte_counts[2] == 4);
+
+    const AssetDescriptor out_of_bounds{8, 13, 4, 2, 1, 4, PixelFormat::rgb565};
+    assert(!streamer.stream(out_of_bounds, source, DisplayRect{0, 0, 2, 1}, scratch,
+                            sizeof(scratch)));
+}
+
 }  // namespace
 
 int main()
@@ -392,6 +440,7 @@ int main()
     test_touch_mapper();
     test_asset_streamer();
     test_asset_bundle();
+    test_asset_source_streamer();
     std::puts("BRICK PC tests passed");
     return 0;
 }

@@ -26,7 +26,9 @@ bool Xpt2046Touchscreen::begin()
         gpio_config_t input = {};
         input.pin_bit_mask  = 1ULL << config_.interrupt_gpio;
         input.mode          = GPIO_MODE_INPUT;
-        input.pull_up_en    = GPIO_PULLUP_ENABLE;
+        const bool input_only_pad = config_.interrupt_gpio >= GPIO_NUM_34 &&
+                                    config_.interrupt_gpio <= GPIO_NUM_39;
+        input.pull_up_en    = input_only_pad ? GPIO_PULLUP_DISABLE : GPIO_PULLUP_ENABLE;
         if (gpio_config(&input) != ESP_OK)
             return false;
     }

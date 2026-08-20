@@ -83,6 +83,11 @@ def main() -> int:
     lines += [
         "};",
         "inline constexpr std::size_t entry_count = sizeof(entries) / sizeof(entries[0]);",
+        "inline const brick::interfaces::display::AssetDescriptor* find(Id id) {",
+        "    for (std::size_t index = 0; index < entry_count; ++index)",
+        "        if (entries[index].id == static_cast<std::uint32_t>(id)) return &entries[index];",
+        "    return nullptr;",
+        "}",
         "}  // namespace generated_assets",
         "",
     ]

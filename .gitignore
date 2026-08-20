@@ -3,3 +3,5 @@
 *.user
 *.suo
 *.vcxproj.user
+**/assets/generated/
+**/generated_assets.h

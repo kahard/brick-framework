@@ -42,8 +42,9 @@ public:
     bool                                    begin() override;
     brick::interfaces::display::DisplaySize size() const override;
     brick::interfaces::display::PixelFormat pixel_format() const override;
+    brick::interfaces::display::DisplayCapabilities capabilities() const override;
     bool                                    set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool                                    draw_pixels(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height, const std::uint8_t* pixels, std::size_t byte_count) override;
+    bool                                    draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
 
 private:
     bool begin_spi_();
@@ -52,6 +53,7 @@ private:
     bool send_command_(std::uint8_t command, std::initializer_list<std::uint8_t> args);
     bool send_command_(std::uint8_t command, const std::uint8_t* args, std::size_t length);
     bool send_data_(const std::uint8_t* data, std::size_t length);
+    bool set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height);
     bool initialize_panel_();
 
     Ili9341SpiDisplayConfig      config_;

@@ -18,6 +18,18 @@ enum class PixelFormat : std::uint8_t
     rgb888,
 };
 
+constexpr std::size_t pixel_format_bytes(PixelFormat format)
+{
+    switch (format)
+    {
+        case PixelFormat::rgb565:
+            return 2;
+        case PixelFormat::rgb888:
+            return 3;
+    }
+    return 0;
+}
+
 enum class Rotation : std::uint8_t
 {
     rotate_0,

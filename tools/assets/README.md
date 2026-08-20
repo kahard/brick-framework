@@ -54,3 +54,20 @@ transfers) and `rgba8888` (intended for compositing or LVGL-side conversion).
 The generated `.h` and `.c` files are self-contained and C-compatible.
 The optional `.bin` output contains only packed pixel data, which is useful for
 streaming from flash or an SD card without keeping a complete C array in RAM.
+
+## Asset bundles
+
+Several raw assets can be packed into one binary file with a generated C++
+manifest containing stable IDs, offsets, sizes and image metadata:
+
+```powershell
+python tools/assets/bundle_assets.py `
+  --output assets/generated/assets.bin `
+  --header assets/generated/assets.h `
+  --asset joy_tears=assets/generated/joy_tears.bin,480x480,rgb565 `
+  --asset red_background=assets/generated/red.bin,480x480,rgb565
+```
+
+The bundle is deliberately just concatenated payloads. The generated manifest
+is the catalog; the storage backend can later be an embedded binary, a flash
+partition, external flash, filesystem or another memory device.

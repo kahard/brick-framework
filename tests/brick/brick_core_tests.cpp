@@ -1,5 +1,7 @@
 #include <cassert>
+#include <array>
 
+#include "brick/core/image/AssetBundle.h"
 #include "brick/core/image/AssetStreamer.h"
 #include <cstdint>
 #include <cstdio>
@@ -329,6 +331,30 @@ void test_asset_streamer()
     assert(std::memcmp(framebuffer_data, pixels.data(), pixels.size()) == 0);
 }
 
+void test_asset_bundle()
+{
+    using brick::core::image::AssetBundle;
+    using brick::interfaces::display::AssetDescriptor;
+    using brick::interfaces::display::AssetId;
+    using brick::interfaces::display::PixelFormat;
+
+    const std::array<std::uint8_t, 8> data{1, 2, 3, 4, 5, 6, 7, 8};
+    const AssetDescriptor entries[] = {
+        {static_cast<AssetId>(1), 0, 4, 2, 1, 4, PixelFormat::rgb565},
+        {static_cast<AssetId>(2), 4, 4, 2, 1, 4, PixelFormat::rgb565},
+    };
+    const AssetBundle bundle(data.data(), data.size(), entries, 2);
+
+    const auto* second = bundle.find(2);
+    assert(second != nullptr);
+    assert(second->offset == 4);
+    const auto image = bundle.image(2);
+    assert(image.valid());
+    assert(image.data == data.data() + 4);
+    assert(image.data_size == 4);
+    assert(!bundle.image(99).valid());
+}
+
 }  // namespace
 
 int main()
@@ -365,6 +391,7 @@ int main()
     test_audio_player();
     test_touch_mapper();
     test_asset_streamer();
+    test_asset_bundle();
     std::puts("BRICK PC tests passed");
     return 0;
 }

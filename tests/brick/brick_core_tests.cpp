@@ -1,4 +1,6 @@
 #include <cassert>
+
+#include "brick/core/image/AssetStreamer.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -79,12 +81,37 @@ public:
         last_area = area;
         last_pixels = buffer.data;
         last_byte_count = buffer.stride_bytes * buffer.height;
+        submitted_areas.push_back(area);
+        submitted_byte_counts.push_back(last_byte_count);
         return true;
     }
 
     brick::interfaces::display::DisplayRect last_area{};
     const std::uint8_t* last_pixels = nullptr;
     std::size_t last_byte_count = 0;
+    std::vector<brick::interfaces::display::DisplayRect> submitted_areas;
+    std::vector<std::size_t> submitted_byte_counts;
+};
+
+class MemoryAssetReader final : public brick::interfaces::display::IAssetReader
+{
+public:
+    explicit MemoryAssetReader(const std::vector<std::uint8_t>& data) : data_(data) {}
+
+    bool read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset,
+              std::uint8_t* destination, std::size_t bytes) override
+    {
+        if (destination == nullptr || asset.data != data_.data() || offset + bytes > data_.size())
+            return false;
+        std::memcpy(destination, data_.data() + offset, bytes);
+        offsets.push_back(offset);
+        sizes.push_back(bytes);
+        return true;
+    }
+
+    const std::vector<std::uint8_t>& data_;
+    std::vector<std::size_t> offsets;
+    std::vector<std::size_t> sizes;
 };
 
 class MemoryFileSystem final : public brick::interfaces::storage::IFileSystem
@@ -266,6 +293,33 @@ void test_touch_mapper()
     assert(swapped_point.y == 49);
 }
 
+void test_asset_streamer()
+{
+    using brick::interfaces::display::DisplayRect;
+    using brick::interfaces::display::ImageAsset;
+    using brick::interfaces::display::PixelFormat;
+
+    std::vector<std::uint8_t> pixels(40);
+    for (std::size_t i = 0; i < pixels.size(); ++i)
+        pixels[i] = static_cast<std::uint8_t>(i);
+
+    FakeDisplay display;
+    MemoryAssetReader reader(pixels);
+    brick::core::image::AssetStreamer streamer(display, reader);
+    const ImageAsset asset{pixels.data(), 4, 5, 8, pixels.size(), PixelFormat::rgb565};
+    std::uint8_t scratch[16] = {};
+
+    assert(streamer.stream(asset, DisplayRect{10, 20, 4, 5}, scratch, sizeof(scratch)));
+    assert((reader.offsets == std::vector<std::size_t>{0, 16, 32}));
+    assert((reader.sizes == std::vector<std::size_t>{16, 16, 8}));
+    assert(display.submitted_areas.size() == 3);
+    assert(display.submitted_areas[0].y == 20 && display.submitted_areas[0].height == 2);
+    assert(display.submitted_areas[1].y == 22 && display.submitted_areas[1].height == 2);
+    assert(display.submitted_areas[2].y == 24 && display.submitted_areas[2].height == 1);
+    assert((display.submitted_byte_counts == std::vector<std::size_t>{16, 16, 8}));
+    assert(!streamer.stream(asset, DisplayRect{0, 0, 4, 5}, scratch, 7));
+}
+
 }  // namespace
 
 int main()
@@ -301,6 +355,7 @@ int main()
     test_wav_decoder();
     test_audio_player();
     test_touch_mapper();
+    test_asset_streamer();
     std::puts("BRICK PC tests passed");
     return 0;
 }

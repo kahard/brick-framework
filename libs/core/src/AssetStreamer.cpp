@@ -1,5 +1,7 @@
 #include "brick/core/image/AssetStreamer.h"
 
+#include <cstring>
+
 namespace brick::core::image
 {
 
@@ -41,6 +43,40 @@ bool AssetStreamer::stream(const brick::interfaces::display::ImageAsset& asset,
                                      destination.width, static_cast<std::int32_t>(height)}, buffer) ||
             !display_.wait_for_transfer_complete(config_.transfer_timeout_ms))
             return false;
+    }
+    return true;
+}
+
+bool AssetStreamer::stream_to_buffer(const brick::interfaces::display::ImageAsset& asset,
+                                     brick::interfaces::display::WritablePixelBuffer destination,
+                                     std::uint8_t* scratch,
+                                     std::size_t scratch_bytes) const
+{
+    const auto bytes_per_pixel = brick::interfaces::display::pixel_format_bytes(asset.format);
+    const auto row_bytes       = static_cast<std::size_t>(asset.width) * bytes_per_pixel;
+    if (!asset.valid() || !destination.valid() || scratch == nullptr ||
+        destination.width != asset.width || destination.height != asset.height ||
+        destination.format != asset.format || destination.stride_bytes < row_bytes ||
+        scratch_bytes < row_bytes || bytes_per_pixel == 0)
+        return false;
+
+    const auto stripe_height = static_cast<std::uint32_t>(scratch_bytes / row_bytes);
+    if (stripe_height == 0)
+        return false;
+
+    for (std::uint32_t y = 0; y < asset.height; y += stripe_height)
+    {
+        const auto height = (asset.height - y < stripe_height) ? asset.height - y : stripe_height;
+        const auto bytes  = static_cast<std::size_t>(height) * row_bytes;
+        const auto offset = static_cast<std::size_t>(y) * asset.stride_bytes;
+        if (offset + bytes > asset.data_size || !reader_.read(asset, offset, scratch, bytes))
+            return false;
+
+        for (std::uint32_t row = 0; row < height; ++row)
+        {
+            std::memcpy(destination.data + static_cast<std::size_t>(y + row) * destination.stride_bytes,
+                        scratch + static_cast<std::size_t>(row) * row_bytes, row_bytes);
+        }
     }
     return true;
 }

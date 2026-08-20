@@ -318,6 +318,15 @@ void test_asset_streamer()
     assert(display.submitted_areas[2].y == 24 && display.submitted_areas[2].height == 1);
     assert((display.submitted_byte_counts == std::vector<std::size_t>{16, 16, 8}));
     assert(!streamer.stream(asset, DisplayRect{0, 0, 4, 5}, scratch, 7));
+
+    std::uint8_t framebuffer_data[40] = {};
+    const brick::interfaces::display::WritablePixelBuffer framebuffer{
+        framebuffer_data, 4, 5, 8, PixelFormat::rgb565, false};
+    reader.offsets.clear();
+    reader.sizes.clear();
+    assert(streamer.stream_to_buffer(asset, framebuffer, scratch, sizeof(scratch)));
+    assert((reader.offsets == std::vector<std::size_t>{0, 16, 32}));
+    assert(std::memcmp(framebuffer_data, pixels.data(), pixels.size()) == 0);
 }
 
 }  // namespace

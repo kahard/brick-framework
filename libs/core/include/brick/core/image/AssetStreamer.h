@@ -5,6 +5,7 @@
 
 #include "brick/interfaces/display/IAssetReader.h"
 #include "brick/interfaces/display/IDisplayDevice.h"
+#include "brick/interfaces/display/WritablePixelBuffer.h"
 
 namespace brick::core::image
 {
@@ -25,6 +26,11 @@ public:
                 brick::interfaces::display::DisplayRect destination,
                 std::uint8_t* scratch,
                 std::size_t scratch_bytes) const;
+
+    bool stream_to_buffer(const brick::interfaces::display::ImageAsset& asset,
+                          brick::interfaces::display::WritablePixelBuffer destination,
+                          std::uint8_t* scratch,
+                          std::size_t scratch_bytes) const;
 
 private:
     brick::interfaces::display::IDisplayDevice& display_;

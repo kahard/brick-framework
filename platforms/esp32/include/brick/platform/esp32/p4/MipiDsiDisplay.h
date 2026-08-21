@@ -11,6 +11,7 @@
 #include "esp_ldo_regulator.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 namespace brick::platform::esp32::p4
@@ -49,10 +50,13 @@ public:
     brick::interfaces::display::PixelFormat pixel_format() const override;
     bool                                    set_rotation(brick::interfaces::display::Rotation rotation) override;
     bool                                    draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
+    bool                                    wait_for_transfer_complete(std::uint32_t timeout_ms) override;
 
 private:
     bool send_init_sequence_();
     bool apply_rotation_();
+    static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void*);
+    static bool IRAM_ATTR on_refresh_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void*);
 
     MipiDsiPanelConfig                   config_;
     brick::interfaces::display::Rotation rotation_     = brick::interfaces::display::Rotation::rotate_0;
@@ -60,6 +64,9 @@ private:
     esp_lcd_panel_io_handle_t            io_           = nullptr;
     esp_lcd_panel_handle_t               panel_        = nullptr;
     esp_ldo_channel_handle_t             mipi_dsi_ldo_ = nullptr;
+    SemaphoreHandle_t                    color_trans_done_ = nullptr;
+    SemaphoreHandle_t                    refresh_done_ = nullptr;
+    volatile bool                        color_ready_for_refresh_ = false;
     bool                                 initialized_  = false;
 
     static constexpr const char* TAG = "brick_mipi_dsi";

@@ -2,6 +2,8 @@
 
 #include <cstddef>
 
+#include "esp_log.h"
+
 namespace brick::platform::esp32
 {
 
@@ -104,7 +106,15 @@ void LvglDisplayAdapter::flush_(lv_display_t* display, const lv_area_t& area, st
         height,
     };
 
-    if (device_.submit_buffer(rectangle, buffer))
+    const bool submitted = device_.submit_buffer(rectangle, buffer);
+    static bool first_flush = true;
+    if (first_flush)
+    {
+        ESP_LOGI("brick_lvgl_adapter", "first flush area=(%d,%d)-(%d,%d) pixels=%dx%d submitted=%d", area.x1, area.y1, area.x2, area.y2, width, height,
+                 submitted ? 1 : 0);
+        first_flush = false;
+    }
+    if (submitted)
         device_.wait_for_transfer_complete(1000);
     lv_display_flush_ready(display);
 }

@@ -2,6 +2,8 @@
 
 #include <cstddef>
 
+#include "esp_log.h"
+
 namespace brick::platform::esp32
 {
 

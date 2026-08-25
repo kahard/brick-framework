@@ -71,19 +71,19 @@ bool Gsl3680Touchscreen::read(brick::interfaces::display::TouchPoint* points, st
     if (!started_ || touch_ == nullptr || points == nullptr || capacity == 0) return false;
     if (esp_lcd_touch_read_data(touch_) != ESP_OK) return false;
 
-    std::uint16_t x[5] = {}, y[5] = {}, strength[5] = {};
+    esp_lcd_touch_point_data_t data[5] = {};
     std::uint8_t point_count = 0;
-    if (!esp_lcd_touch_get_coordinates(touch_, x, y, strength, &point_count, 5)) return true;
+    if (esp_lcd_touch_get_data(touch_, data, &point_count, 5) != ESP_OK) return false;
     std::array<bool, 5> seen{};
     for (std::size_t i = 0; i < point_count && count < capacity; ++i) {
-        const auto id = static_cast<std::uint8_t>(i);
+        const auto id = data[i].track_id < active_.size() ? data[i].track_id : static_cast<std::uint8_t>(i);
         auto& point = points[count++];
         point.id = id;
-        point.x = static_cast<std::int16_t>(x[i]);
-        point.y = static_cast<std::int16_t>(y[i]);
+        point.x = static_cast<std::int16_t>(data[i].x);
+        point.y = static_cast<std::int16_t>(data[i].y);
         point.raw_x = point.x;
         point.raw_y = point.y;
-        point.pressure = static_cast<std::int16_t>(strength[i]);
+        point.pressure = static_cast<std::int16_t>(data[i].strength);
         point.state = active_[id] ? brick::interfaces::display::TouchState::moved
                                   : brick::interfaces::display::TouchState::pressed;
         seen[id] = true;

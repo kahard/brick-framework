@@ -65,6 +65,7 @@ private:
     void release_rotation_buffers_();
     void rotate_buffer_(const std::uint16_t* source);
     bool ppa_rotate_buffer_(const std::uint16_t* source);
+    bool full_frame_transfer_(const brick::interfaces::display::PixelBuffer& buffer);
 
     MipiDsiPanelConfig                   config_;
     brick::interfaces::display::Rotation rotation_     = brick::interfaces::display::Rotation::rotate_0;
@@ -82,6 +83,8 @@ private:
     std::uint16_t*                       rotation_source_ = nullptr;
     std::uint16_t*                       rotation_target_ = nullptr;
     ppa_client_handle_t                  ppa_client_ = nullptr;
+    std::uint8_t*                        dpi_frame_buffers_[2] = {};
+    std::uint8_t                         dpi_active_frame_buffer_ = 0;
 
     static constexpr const char* TAG = "brick_mipi_dsi";
 };

@@ -92,7 +92,7 @@ bool MipiDsiDisplay::begin()
     dpi_config.pixel_format                   = LCD_COLOR_PIXEL_FORMAT_RGB565;
     dpi_config.in_color_format                = LCD_COLOR_FMT_RGB565;
     dpi_config.out_color_format               = LCD_COLOR_FMT_RGB565;
-    dpi_config.num_fbs                        = 1;
+    dpi_config.num_fbs                        = 2;
     dpi_config.flags.use_dma2d                = true;
     dpi_config.video_timing.h_size            = config_.width;
     dpi_config.video_timing.v_size            = config_.height;
@@ -103,6 +103,10 @@ bool MipiDsiDisplay::begin()
     dpi_config.video_timing.vsync_back_porch  = config_.vsync_back_porch;
     dpi_config.video_timing.vsync_front_porch = config_.vsync_front_porch;
     if ((err = esp_lcd_new_panel_dpi(bus_, &dpi_config, &panel_)) != ESP_OK)
+        return false;
+    if (esp_lcd_dpi_panel_get_frame_buffer(panel_, 2, reinterpret_cast<void**>(&dpi_frame_buffers_[0]),
+                                           reinterpret_cast<void**>(&dpi_frame_buffers_[1])) != ESP_OK ||
+        dpi_frame_buffers_[0] == nullptr || dpi_frame_buffers_[1] == nullptr)
         return false;
     if (config_.reset_gpio != GPIO_NUM_NC)
     {
@@ -160,6 +164,9 @@ bool MipiDsiDisplay::draw_buffer(brick::interfaces::display::DisplayRect area, c
         return false;
     if (rotation_ != brick::interfaces::display::Rotation::rotate_0)
         return rotated_transfer_(area, buffer);
+    if (area.x == 0 && area.y == 0 && area.width == logical_width_ && area.height == logical_height_ &&
+        dpi_frame_buffers_[0] != nullptr && dpi_frame_buffers_[1] != nullptr)
+        return full_frame_transfer_(buffer);
     const auto bytes = buffer.stride_bytes * static_cast<std::size_t>(area.height);
     if (esp_ptr_external_ram(buffer.data) &&
         esp_cache_msync(const_cast<std::uint8_t*>(buffer.data), bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED) != ESP_OK)
@@ -167,6 +174,24 @@ bool MipiDsiDisplay::draw_buffer(brick::interfaces::display::DisplayRect area, c
     const auto err = esp_lcd_panel_draw_bitmap(panel_, area.x, area.y, area.x + area.width, area.y + area.height, buffer.data);
     if (err != ESP_OK)
         ESP_LOGE(TAG, "draw_bitmap area=(%d,%d)-(%d,%d) failed: %s", area.x, area.y, area.x + area.width, area.y + area.height, esp_err_to_name(err));
+    transfer_pending_ = err == ESP_OK;
+    return err == ESP_OK;
+}
+
+bool MipiDsiDisplay::full_frame_transfer_(const brick::interfaces::display::PixelBuffer& buffer)
+{
+    if (transfer_pending_ && !wait_for_transfer_complete(1000))
+        return false;
+    const auto next = static_cast<std::uint8_t>(dpi_active_frame_buffer_ ^ 1U);
+    const auto bytes = static_cast<std::size_t>(config_.width) * config_.height * sizeof(std::uint16_t);
+    std::memcpy(dpi_frame_buffers_[next], buffer.data, bytes);
+    if (esp_cache_msync(dpi_frame_buffers_[next], bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED) != ESP_OK)
+        return false;
+    const auto err = esp_lcd_panel_draw_bitmap(panel_, 0, 0, config_.width, config_.height, dpi_frame_buffers_[next]);
+    if (err != ESP_OK)
+        ESP_LOGE(TAG, "full frame page flip failed: %s", esp_err_to_name(err));
+    if (err == ESP_OK)
+        dpi_active_frame_buffer_ = next;
     transfer_pending_ = err == ESP_OK;
     return err == ESP_OK;
 }

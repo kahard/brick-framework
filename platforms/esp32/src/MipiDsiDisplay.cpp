@@ -144,6 +144,25 @@ brick::interfaces::display::PixelFormat MipiDsiDisplay::pixel_format() const
     return brick::interfaces::display::PixelFormat::rgb565;
 }
 
+brick::interfaces::display::DisplayCapabilities MipiDsiDisplay::capabilities() const
+{
+    return {
+        brick::interfaces::display::DisplayPanelType::mipi_dsi,
+        { logical_width_, logical_height_ },
+        pixel_format(),
+        static_cast<std::size_t>(config_.width) * config_.height * brick::interfaces::display::pixel_format_bytes(pixel_format()),
+        64,
+        0,
+        true,
+        true,
+        true,
+        true,
+        true,
+        2,
+        brick::interfaces::display::RenderMode::direct,
+    };
+}
+
 bool MipiDsiDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
 {
     const bool old_swapped = rotation_ == brick::interfaces::display::Rotation::rotate_90 || rotation_ == brick::interfaces::display::Rotation::rotate_270;

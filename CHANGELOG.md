@@ -2,6 +2,19 @@
 
 Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 
+## [0.2.1] - 2026-08-21
+
+### Fixed
+
+- poprawiono kolejność bajtów RGB565 podczas transmisji do ILI9341,
+- wyłączono nieobsługiwane wewnętrzne podciąganie dla wejściowych GPIO ESP32,
+- ustabilizowano obsługę dotyku XPT2046 na profilach CYD.
+
+### Tests
+
+- zweryfikowano profile CYD z PSRAM i bez PSRAM,
+- dodano testy assetów z oddzielnej partycji flash oraz benchmark pełnego framebufferu.
+
 ## [0.2.0] - 2026-08-17
 
 ### Added

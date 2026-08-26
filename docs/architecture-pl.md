@@ -734,9 +734,9 @@ brick-rules/
 ├── include/
 │   └── brick/
 │       └── rules/
-│           ├── policy.hpp
-│           ├── capabilities.hpp
-│           └── config.hpp
+│           ├── policy.h
+│           ├── capabilities.h
+│           └── config.h
 │
 ├── cmake/
 │   ├── brick-common.cmake
@@ -1057,9 +1057,9 @@ brick::rules
 Include:
 
 ```cpp
-#include <brick/core/timer.hpp>
-#include <brick/hal/gpio.hpp>
-#include <brick/drivers/sht40.hpp>
+#include <brick/core/timer.h>
+#include <brick/hal/gpio.h>
+#include <brick/drivers/sht40.h>
 ```
 
 CMake targets:
@@ -1187,11 +1187,11 @@ brick-platform-stm32/
 │   └── brick/
 │       └── platform/
 │           └── stm32/
-│               ├── gpio.hpp
-│               ├── uart.hpp
-│               ├── spi.hpp
-│               ├── i2c.hpp
-│               └── capabilities.hpp
+│               ├── gpio.h
+│               ├── uart.h
+│               ├── spi.h
+│               ├── i2c.h
+│               └── capabilities.h
 │
 ├── src/
 │   ├── common/

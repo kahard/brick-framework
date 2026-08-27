@@ -131,6 +131,12 @@ extern "C" void HAL_HCD_Disconnect_Callback(HCD_HandleTypeDef*)
         USBH_LL_Disconnect(&brick::platform::stm32::f1::Stm32UsbHost::active_->handle());
 }
 
+extern "C" void HAL_HCD_PortEnabled_Callback(HCD_HandleTypeDef*)
+{
+    if (brick::platform::stm32::f1::Stm32UsbHost::active_ != nullptr)
+        USBH_LL_PortEnabled(&brick::platform::stm32::f1::Stm32UsbHost::active_->handle());
+}
+
 extern "C" void HAL_HCD_HC_NotifyURBChange_Callback(HCD_HandleTypeDef* hhcd, uint8_t chnum, HCD_URBStateTypeDef state)
 {
     (void)chnum;

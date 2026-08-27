@@ -2,11 +2,17 @@
 
 #include "brick/interfaces/board/BoardDescriptor.h"
 #include "brick/platform/esp32/p4/Jc1060BoardConfig.h"
+#if BRICK_JC1060_ENABLE_DISPLAY
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
-#include "brick/platform/esp32/p4/SdmmcFileSystem.h"
 #include "brick/platform/esp32/p4/profiles/guition_jc1060p470c_i_w.h"
+#endif
+#if BRICK_JC1060_ENABLE_TOUCH
 #include "brick/platform/esp32/touch/Gt911Touchscreen.h"
 #include "brick/platform/esp32/p4/profiles/jc1060_gt911.h"
+#endif
+#if BRICK_JC1060_ENABLE_SDMMC
+#include "brick/platform/esp32/p4/SdmmcFileSystem.h"
+#endif
 #include "driver/gpio.h"
 
 namespace brick::platform::esp32::p4
@@ -21,7 +27,14 @@ class Jc1060Board
 {
 public:
     Jc1060Board()
-        : display_(profiles::guition_jc1060p470c_i_w()), touch_(profiles::jc1060_gt911())
+#if BRICK_JC1060_ENABLE_DISPLAY
+        : display_(profiles::guition_jc1060p470c_i_w())
+#if BRICK_JC1060_ENABLE_TOUCH
+        , touch_(profiles::jc1060_gt911())
+#endif
+#elif BRICK_JC1060_ENABLE_TOUCH
+        : touch_(profiles::jc1060_gt911())
+#endif
     {
     }
 
@@ -52,14 +65,26 @@ public:
         return ok;
     }
 
+#if BRICK_JC1060_ENABLE_DISPLAY
     MipiDsiDisplay& display() { return display_; }
+#endif
+#if BRICK_JC1060_ENABLE_TOUCH
     touch::Gt911Touchscreen& touch() { return touch_; }
+#endif
+#if BRICK_JC1060_ENABLE_SDMMC
     SdmmcFileSystem& sdmmc() { return sdmmc_; }
+#endif
 
 private:
-    MipiDsiDisplay display_;
-    touch::Gt911Touchscreen touch_;
+#if BRICK_JC1060_ENABLE_DISPLAY
+    MipiDsiDisplay display_{profiles::guition_jc1060p470c_i_w()};
+#endif
+#if BRICK_JC1060_ENABLE_TOUCH
+    touch::Gt911Touchscreen touch_{profiles::jc1060_gt911()};
+#endif
+#if BRICK_JC1060_ENABLE_SDMMC
     SdmmcFileSystem sdmmc_;
+#endif
 };
 
 }  // namespace brick::platform::esp32::p4

@@ -24,7 +24,13 @@ bool Stm32UsbHost::begin()
     power.Mode = GPIO_MODE_OUTPUT_PP;
     power.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(config_.power_port, &power);
+    // Give the external VBUS switch a defined off/on cycle. Some ST-280
+    // pendrives keep their controller in reset unless VBUS is present before
+    // the OTG host core starts probing the port.
+    HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_RESET);
+    HAL_Delay(100);
     HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_SET);
+    HAL_Delay(250);
 
     __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
     HAL_NVIC_SetPriority(OTG_FS_IRQn, 5, 0);

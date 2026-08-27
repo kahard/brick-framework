@@ -18,6 +18,11 @@ std::size_t SdmmcFile::read(void* buffer, std::size_t size, std::size_t count)
     return handle_ == nullptr ? 0 : std::fread(buffer, size, count, handle_);
 }
 
+std::size_t SdmmcFile::write(const void* buffer, std::size_t size, std::size_t count)
+{
+    return handle_ == nullptr ? 0 : std::fwrite(buffer, size, count, handle_);
+}
+
 bool SdmmcFile::seek(long offset, int origin)
 {
     return handle_ != nullptr && std::fseek(handle_, offset, origin) == 0;

@@ -25,6 +25,7 @@ public:
     void process();
     bool connected() const { return connected_; }
     bool class_active() const { return class_active_; }
+    bool port_connected() const { return (USB_OTG_FS->HPRT & USB_OTG_HPRT_PCSTS) != 0U; }
     bool storage_ready() const;
     bool read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
     bool write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);

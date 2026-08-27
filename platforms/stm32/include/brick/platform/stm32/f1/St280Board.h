@@ -26,6 +26,11 @@ struct St280Pins
 class St280Board
 {
 public:
+    St280Board()
+        : display_({}), touch_({}), eeprom_({&i2c_}), flash_({&spi_})
+    {
+    }
+
     St280Board(Ssd1963ParallelDisplayConfig display_config,
                ResistiveTouchscreenConfig touch_config,
                I2cEepromConfig eeprom_config,
@@ -49,6 +54,11 @@ public:
 
     bool begin()
     {
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+        if (!init_i2c_() || !init_spi_())
+            return false;
         return display_.begin() && touch_.begin();
     }
 
@@ -58,6 +68,58 @@ public:
     SpiNorFlash& flash() { return flash_; }
 
 private:
+    bool init_i2c_()
+    {
+        __HAL_RCC_I2C1_CLK_ENABLE();
+        GPIO_InitTypeDef pins{};
+        pins.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+        pins.Mode = GPIO_MODE_AF_OD;
+        pins.Speed = GPIO_SPEED_FREQ_HIGH;
+        HAL_GPIO_Init(GPIOB, &pins);
+        i2c_.Instance = I2C1;
+        i2c_.Init.ClockSpeed = 50000;
+        i2c_.Init.DutyCycle = I2C_DUTYCYCLE_2;
+        i2c_.Init.OwnAddress1 = 0;
+        i2c_.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+        i2c_.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+        i2c_.Init.OwnAddress2 = 0;
+        i2c_.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+        i2c_.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+        return HAL_I2C_Init(&i2c_) == HAL_OK;
+    }
+
+    bool init_spi_()
+    {
+        __HAL_RCC_SPI2_CLK_ENABLE();
+        GPIO_InitTypeDef pins{};
+        pins.Pin = GPIO_PIN_13 | GPIO_PIN_15;
+        pins.Mode = GPIO_MODE_AF_PP;
+        pins.Speed = GPIO_SPEED_FREQ_HIGH;
+        HAL_GPIO_Init(GPIOB, &pins);
+        pins.Pin = GPIO_PIN_14;
+        pins.Mode = GPIO_MODE_INPUT;
+        pins.Pull = GPIO_NOPULL;
+        HAL_GPIO_Init(GPIOB, &pins);
+        pins.Pin = GPIO_PIN_12;
+        pins.Mode = GPIO_MODE_OUTPUT_PP;
+        HAL_GPIO_Init(GPIOB, &pins);
+        GPIOB->BSRR = GPIO_PIN_12;
+        spi_.Instance = SPI2;
+        spi_.Init.Mode = SPI_MODE_MASTER;
+        spi_.Init.Direction = SPI_DIRECTION_2LINES;
+        spi_.Init.DataSize = SPI_DATASIZE_8BIT;
+        spi_.Init.CLKPolarity = SPI_POLARITY_LOW;
+        spi_.Init.CLKPhase = SPI_PHASE_1EDGE;
+        spi_.Init.NSS = SPI_NSS_SOFT;
+        spi_.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+        spi_.Init.FirstBit = SPI_FIRSTBIT_MSB;
+        spi_.Init.TIMode = SPI_TIMODE_DISABLE;
+        spi_.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+        return HAL_SPI_Init(&spi_) == HAL_OK;
+    }
+
+    I2C_HandleTypeDef i2c_{};
+    SPI_HandleTypeDef spi_{};
     Ssd1963ParallelDisplay display_;
     ResistiveTouchscreen touch_;
     I2cEeprom eeprom_;

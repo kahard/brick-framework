@@ -1,6 +1,5 @@
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
-#include "driver/gpio.h"
-#include "esp_rom_sys.h"
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
 
 namespace brick::platform::esp32
 {
@@ -34,21 +33,23 @@ bool SdmmcFileSystem::mount()
 {
     if (mounted_)
         return true;
-    // JC1060 switches the TF-card 3.3 V rail through an active-low GPIO45 gate.
-    gpio_set_direction(GPIO_NUM_45, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_NUM_45, 0);
-    esp_rom_delay_us(10000);
     sdmmc_host_t host                       = SDMMC_HOST_DEFAULT();
-    host.max_freq_khz                       = 10000;
+    host.slot                                = SDMMC_HOST_SLOT_0;
+    host.max_freq_khz                        = SDMMC_FREQ_HIGHSPEED;
+    sd_pwr_ctrl_ldo_config_t ldo_config      = { .ldo_chan_id = 4 };
+    sd_pwr_ctrl_handle_t pwr_ctrl_handle     = nullptr;
+    const esp_err_t power_result             = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
+    if (power_result != ESP_OK)
+    {
+        ESP_LOGE(TAG, "SDMMC power control failed: %s", esp_err_to_name(power_result));
+        return false;
+    }
+    host.pwr_ctrl_handle                    = pwr_ctrl_handle;
     sdmmc_slot_config_t slot                = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot.width                              = 1;
-    slot.clk                                = GPIO_NUM_43;
-    slot.cmd                                = GPIO_NUM_44;
-    slot.d0                                 = GPIO_NUM_39;
-    slot.d1                                 = GPIO_NUM_40;
-    slot.d2                                 = GPIO_NUM_41;
-    slot.d3                                 = GPIO_NUM_42;
-    slot.flags                              = SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    slot.width                              = 4;
+    slot.cd                                 = SDMMC_SLOT_NO_CD;
+    slot.wp                                 = SDMMC_SLOT_NO_WP;
+    slot.flags                              = 0;
     esp_vfs_fat_sdmmc_mount_config_t config = { .format_if_mount_failed = false, .max_files = 5, .allocation_unit_size = 16 * 1024, .disk_status_check_enable = false, .use_one_fat = false };
     const esp_err_t                  result = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &config, &card_);
     if (result != ESP_OK)

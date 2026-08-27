@@ -114,7 +114,7 @@ extern "C" void HAL_HCD_Disconnect_Callback(HCD_HandleTypeDef*)
 extern "C" void HAL_HCD_HC_NotifyURBChange_Callback(HCD_HandleTypeDef* hhcd, uint8_t chnum, HCD_URBStateTypeDef state)
 {
     if (brick::platform::stm32::f1::Stm32UsbHost::active_ != nullptr)
-        USBH_LL_NotifyURBChange(&brick::platform::stm32::f1::Stm32UsbHost::active_->handle(), chnum, static_cast<USBH_URBStateTypeDef>(state));
+        USBH_LL_NotifyURBChange(&brick::platform::stm32::f1::Stm32UsbHost::active_->handle());
     (void)hhcd;
 }
 
@@ -160,7 +160,7 @@ extern "C" USBH_StatusTypeDef USBH_LL_SubmitURB(USBH_HandleTypeDef* phost, uint8
 extern "C" USBH_URBStateTypeDef USBH_LL_GetURBState(USBH_HandleTypeDef* phost, uint8_t pipe)
 {
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
-    return hcd == nullptr ? URB_ERROR : static_cast<USBH_URBStateTypeDef>(HAL_HCD_HC_GetURBState(hcd, pipe));
+    return hcd == nullptr ? static_cast<USBH_URBStateTypeDef>(URB_ERROR) : static_cast<USBH_URBStateTypeDef>(HAL_HCD_HC_GetURBState(hcd, pipe));
 }
 extern "C" USBH_StatusTypeDef USBH_LL_DriverVBUS(USBH_HandleTypeDef*, uint8_t) { return USBH_OK; }
 extern "C" USBH_StatusTypeDef USBH_LL_SetToggle(USBH_HandleTypeDef*, uint8_t, uint8_t) { return USBH_OK; }

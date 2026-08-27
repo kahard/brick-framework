@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_hcd.h"
 #include "usbh_core.h"
 

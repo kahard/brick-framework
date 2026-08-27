@@ -30,6 +30,12 @@ std::size_t Stm32UsbFile::read(void* buffer, std::size_t size, std::size_t count
     return f_read(&file_, buffer, static_cast<UINT>(size * count), &bytes) == FR_OK ? bytes / size : 0;
 }
 
+std::size_t Stm32UsbFile::write(const void* buffer, std::size_t size, std::size_t count)
+{
+    UINT bytes = 0;
+    return f_write(&file_, buffer, static_cast<UINT>(size * count), &bytes) == FR_OK ? bytes / size : 0;
+}
+
 bool Stm32UsbFile::seek(long offset, int origin)
 {
     DWORD target = 0;

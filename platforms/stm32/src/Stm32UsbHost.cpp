@@ -42,9 +42,9 @@ bool Stm32UsbHost::begin()
         return false;
 
     active_ = this;
-    host_.pData = &hcd_;
     if (USBH_Init(&host_, user_callback_, config_.host_id) != USBH_OK)
         return false;
+    host_.pData = &hcd_;
     if (USBH_RegisterClass(&host_, USBH_MSC_CLASS) != USBH_OK)
         return false;
     return USBH_Start(&host_) == USBH_OK;
@@ -105,7 +105,7 @@ extern "C" void HAL_HCD_HC_NotifyURBChange_Callback(HCD_HandleTypeDef* hhcd, uin
 
 extern "C" USBH_StatusTypeDef USBH_LL_Init(USBH_HandleTypeDef* phost)
 {
-    phost->pData = nullptr;
+    (void)phost;
     return USBH_OK;
 }
 

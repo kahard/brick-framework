@@ -10,7 +10,7 @@ struct I2cEepromConfig
 {
     I2C_HandleTypeDef* i2c = nullptr;
     std::uint16_t device_address = 0xA2;
-    std::uint16_t capacity = 0x10000;
+    std::uint32_t capacity = 0x10000;
     std::uint16_t page_size = 128;
     std::uint32_t timeout_ms = 500;
 };

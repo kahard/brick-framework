@@ -15,6 +15,8 @@ struct St280Pins
 {
     GPIO_TypeDef* buzzer_port = GPIOB;
     std::uint16_t buzzer_pin = GPIO_PIN_8;
+    GPIO_TypeDef* backlight_port = GPIOC;
+    std::uint16_t backlight_pin = GPIO_PIN_8;
     GPIO_TypeDef* i2c_port = GPIOB;
     std::uint16_t i2c_scl_pin = GPIO_PIN_6;
     std::uint16_t i2c_sda_pin = GPIO_PIN_7;

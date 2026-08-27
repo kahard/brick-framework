@@ -8,6 +8,7 @@ bool Stm32PwmBacklight::begin()
     if (config_.timer == nullptr)
         return false;
     __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_AFIO_CLK_ENABLE();
     __HAL_RCC_TIM3_CLK_ENABLE();
     __HAL_AFIO_REMAP_TIM3_ENABLE();
     GPIO_InitTypeDef pin{};

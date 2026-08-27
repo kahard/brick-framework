@@ -5,6 +5,8 @@
 #include "brick/platform/stm32/f1/ResistiveTouchscreen.h"
 #include "brick/platform/stm32/f1/SpiNorFlash.h"
 #include "brick/platform/stm32/f1/Ssd1963ParallelDisplay.h"
+#include "brick/platform/stm32/f1/Stm32Buzzer.h"
+#include "brick/platform/stm32/f1/Stm32PwmBacklight.h"
 
 namespace brick::platform::stm32::f1
 {
@@ -27,7 +29,7 @@ class St280Board
 {
 public:
     St280Board()
-        : display_(Ssd1963ParallelDisplayConfig{}), touch_(ResistiveTouchscreenConfig{}), eeprom_(I2cEepromConfig{&i2c_}), flash_(SpiNorFlashConfig{&spi_})
+        : display_(Ssd1963ParallelDisplayConfig{}), touch_(ResistiveTouchscreenConfig{}), eeprom_(I2cEepromConfig{&i2c_}), flash_(SpiNorFlashConfig{&spi_}), buzzer_(Stm32BuzzerConfig{}), backlight_(Stm32PwmBacklightConfig{&backlight_timer_})
     {
     }
 
@@ -35,7 +37,7 @@ public:
                ResistiveTouchscreenConfig touch_config,
                I2cEepromConfig eeprom_config,
                SpiNorFlashConfig flash_config)
-        : display_(display_config), touch_(touch_config), eeprom_(eeprom_config), flash_(flash_config)
+        : display_(display_config), touch_(touch_config), eeprom_(eeprom_config), flash_(flash_config), buzzer_(Stm32BuzzerConfig{}), backlight_(Stm32PwmBacklightConfig{&backlight_timer_})
     {
     }
 
@@ -47,7 +49,8 @@ public:
                     static_cast<std::uint32_t>(Capability::touchscreen) |
                     static_cast<std::uint32_t>(Capability::eeprom) |
                     static_cast<std::uint32_t>(Capability::spi_flash) |
-                    static_cast<std::uint32_t>(Capability::buzzer)};
+                    static_cast<std::uint32_t>(Capability::buzzer) |
+                    static_cast<std::uint32_t>(Capability::backlight)};
     }
 
     static constexpr St280Pins pins() { return {}; }
@@ -59,7 +62,7 @@ public:
         __HAL_RCC_GPIOC_CLK_ENABLE();
         if (!init_i2c_() || !init_spi_())
             return false;
-        return display_.begin() && touch_.begin();
+        return buzzer_.begin() && backlight_.begin() && display_.begin() && touch_.begin();
     }
 
     Ssd1963ParallelDisplay& display() { return display_; }
@@ -68,6 +71,8 @@ public:
     SpiNorFlash& flash() { return flash_; }
     I2C_HandleTypeDef& i2c() { return i2c_; }
     SPI_HandleTypeDef& spi() { return spi_; }
+    Stm32Buzzer& buzzer() { return buzzer_; }
+    Stm32PwmBacklight& backlight() { return backlight_; }
 
 private:
     bool init_i2c_()
@@ -122,10 +127,13 @@ private:
 
     I2C_HandleTypeDef i2c_{};
     SPI_HandleTypeDef spi_{};
+    TIM_HandleTypeDef backlight_timer_{};
     Ssd1963ParallelDisplay display_;
     ResistiveTouchscreen touch_;
     I2cEeprom eeprom_;
     SpiNorFlash flash_;
+    Stm32Buzzer buzzer_;
+    Stm32PwmBacklight backlight_;
 };
 
 }  // namespace brick::platform::stm32::f1

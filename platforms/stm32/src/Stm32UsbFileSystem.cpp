@@ -2,8 +2,14 @@
 
 #include <cstring>
 
-#include "brick/platform/stm32/f1/St280BoardConfig.h"
 #include "diskio.h"
+
+#ifndef BRICK_ST280_ENABLE_USB_READ
+#define BRICK_ST280_ENABLE_USB_READ 1
+#endif
+#ifndef BRICK_ST280_ENABLE_USB_WRITE
+#define BRICK_ST280_ENABLE_USB_WRITE 1
+#endif
 
 namespace
 {

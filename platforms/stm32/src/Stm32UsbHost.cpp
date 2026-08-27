@@ -77,6 +77,10 @@ void Stm32UsbHost::process()
             USBH_RegisterClass(&host_, USBH_MSC_CLASS);
             USBH_Start(&host_);
             USBH_LL_Connect(&host_);
+            // The F105 can miss the port-enabled interrupt when the HCD is
+            // restarted while a device is already attached. Feed this event
+            // explicitly so enumeration does not remain in WAIT_ATTACHMENT.
+            USBH_LL_PortEnabled(&host_);
             connected_ = true;
         }
         else if (!port_present && previous_port_present)

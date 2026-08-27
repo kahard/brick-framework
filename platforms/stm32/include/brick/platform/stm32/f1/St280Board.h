@@ -17,6 +17,8 @@ struct St280Pins
     std::uint16_t buzzer_pin = GPIO_PIN_8;
     GPIO_TypeDef* backlight_port = GPIOC;
     std::uint16_t backlight_pin = GPIO_PIN_8;
+    GPIO_TypeDef* usb_power_port = GPIOC;
+    std::uint16_t usb_power_pin = GPIO_PIN_10;
     GPIO_TypeDef* i2c_port = GPIOB;
     std::uint16_t i2c_scl_pin = GPIO_PIN_6;
     std::uint16_t i2c_sda_pin = GPIO_PIN_7;
@@ -52,7 +54,8 @@ public:
                     static_cast<std::uint32_t>(Capability::eeprom) |
                     static_cast<std::uint32_t>(Capability::spi_flash) |
                     static_cast<std::uint32_t>(Capability::buzzer) |
-                    static_cast<std::uint32_t>(Capability::backlight)};
+                    static_cast<std::uint32_t>(Capability::backlight) |
+                    static_cast<std::uint32_t>(Capability::usb_host)};
     }
 
     static constexpr St280Pins pins() { return {}; }

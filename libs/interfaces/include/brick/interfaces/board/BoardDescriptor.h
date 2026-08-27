@@ -13,6 +13,7 @@ enum class Capability : std::uint32_t
     spi_flash = 1u << 3,
     buzzer = 1u << 4,
     backlight = 1u << 5,
+    usb_host = 1u << 6,
 };
 
 struct BoardDescriptor

@@ -1,4 +1,6 @@
 #include <cassert>
+
+#include "brick/interfaces/board/BoardDescriptor.h"
 #include <array>
 
 #include "brick/core/image/AssetBundle.h"
@@ -407,6 +409,9 @@ void test_asset_source_streamer()
 
 int main()
 {
+    constexpr auto st280 = brick::interfaces::board::BoardDescriptor{
+        "ST-280", "STM32F105VCT6", 1u << 0};
+    assert(st280.has(brick::interfaces::board::Capability::display));
     using brick::interfaces::display::DisplayCapabilities;
     using brick::interfaces::display::DisplayRect;
     using brick::interfaces::display::PixelBuffer;

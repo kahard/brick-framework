@@ -67,6 +67,8 @@ void Stm32UsbHost::process()
             reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
         if (port_present && (!connected_ || host_.gState == HOST_DEV_WAIT_FOR_ATTACHMENT))
         {
+            if (host_.gState == HOST_DEV_DISCONNECTED)
+                USBH_LL_Start(&host_);
             USBH_LL_Connect(&host_);
             connected_ = true;
         }
@@ -161,7 +163,11 @@ extern "C" USBH_StatusTypeDef USBH_LL_Start(USBH_HandleTypeDef* phost)
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
     return hcd != nullptr && HAL_HCD_Start(hcd) == HAL_OK ? USBH_OK : USBH_FAIL;
 }
-extern "C" USBH_StatusTypeDef USBH_LL_Stop(USBH_HandleTypeDef*) { return USBH_OK; }
+extern "C" USBH_StatusTypeDef USBH_LL_Stop(USBH_HandleTypeDef* phost)
+{
+    auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
+    return hcd != nullptr && HAL_HCD_Stop(hcd) == HAL_OK ? USBH_OK : USBH_FAIL;
+}
 extern "C" USBH_SpeedTypeDef USBH_LL_GetSpeed(USBH_HandleTypeDef*) { return USBH_SPEED_FULL; }
 extern "C" USBH_StatusTypeDef USBH_LL_ResetPort(USBH_HandleTypeDef* phost)
 {

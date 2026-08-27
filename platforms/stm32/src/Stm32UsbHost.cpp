@@ -109,7 +109,7 @@ void Stm32UsbHost::process()
         // first reset/descriptor exchange is lost without requiring a
         // second physical unplug/plug cycle.
         if (port_present && !class_active_ &&
-            (HAL_GetTick() - attach_tick_) > 8000U)
+            (HAL_GetTick() - attach_tick_) > 3000U)
         {
             class_active_ = false;
             HAL_HCD_Stop(&hcd_);

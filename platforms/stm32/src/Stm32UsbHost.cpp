@@ -59,7 +59,18 @@ bool Stm32UsbHost::begin()
 void Stm32UsbHost::process()
 {
     if (active_ != nullptr)
+    {
+        // On some STM32F105 revisions the HCD connect callback is not emitted
+        // reliably, although HPRT.PCSTS is already asserted. Feed the host
+        // state machine from the port status as a fallback.
+        const bool port_present = (reinterpret_cast<volatile const std::uint32_t*>(
+            reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
+        if (port_present && !connected_)
+            USBH_LL_Connect(&host_);
+        else if (!port_present && connected_)
+            USBH_LL_Disconnect(&host_);
         USBH_Process(&host_);
+    }
 }
 
 bool Stm32UsbHost::storage_ready() const

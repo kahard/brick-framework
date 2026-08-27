@@ -56,6 +56,21 @@ void Stm32UsbHost::process()
         USBH_Process(&host_);
 }
 
+bool Stm32UsbHost::storage_ready() const
+{
+    return class_active_ && USBH_MSC_IsReady(const_cast<USBH_HandleTypeDef*>(&host_)) != 0;
+}
+
+bool Stm32UsbHost::read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count)
+{
+    return storage_ready() && USBH_MSC_Read(&host_, 0, block, data, count) == USBH_OK;
+}
+
+bool Stm32UsbHost::write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count)
+{
+    return storage_ready() && USBH_MSC_Write(&host_, 0, block, data, count) == USBH_OK;
+}
+
 }  // namespace brick::platform::stm32::f1
 
 extern "C" void OTG_FS_IRQHandler()

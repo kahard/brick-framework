@@ -24,6 +24,9 @@ public:
     void process();
     bool connected() const { return connected_; }
     bool class_active() const { return class_active_; }
+    bool storage_ready() const;
+    bool read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
+    bool write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
     USBH_HandleTypeDef& handle() { return host_; }
     HCD_HandleTypeDef& hcd() { return hcd_; }
     static Stm32UsbHost* active_;

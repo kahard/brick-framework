@@ -65,6 +65,8 @@ void Stm32UsbHost::process()
         // state machine from the port status as a fallback.
         const bool port_present = (reinterpret_cast<volatile const std::uint32_t*>(
             reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
+        const bool previous_port_present = port_present_;
+        port_present_ = port_present;
         if (port_present && !connected_)
         {
             // Reinitialize the middleware on every new physical connection.
@@ -77,7 +79,7 @@ void Stm32UsbHost::process()
             USBH_LL_Connect(&host_);
             connected_ = true;
         }
-        else if (!port_present && connected_)
+        else if (!port_present && previous_port_present)
         {
             USBH_LL_Disconnect(&host_);
             // A plain middleware disconnect is not sufficient on the F105

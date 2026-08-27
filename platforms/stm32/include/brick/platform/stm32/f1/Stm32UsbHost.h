@@ -47,6 +47,7 @@ private:
     USBH_HandleTypeDef host_{};
     bool connected_ = false;
     bool class_active_ = false;
+    bool port_present_ = false;
 };
 
 }  // namespace brick::platform::stm32::f1

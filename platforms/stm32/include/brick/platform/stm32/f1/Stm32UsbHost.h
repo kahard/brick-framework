@@ -25,7 +25,13 @@ public:
     void process();
     bool connected() const { return connected_; }
     bool class_active() const { return class_active_; }
-    bool port_connected() const { return (USB_OTG_FS->HPRT & USB_OTG_HPRT_PCSTS) != 0U; }
+    bool port_connected() const
+    {
+        constexpr std::uintptr_t host_port = 0x440U;
+        const auto* register_address = reinterpret_cast<volatile const std::uint32_t*>(
+            reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + host_port);
+        return (*register_address & USB_OTG_HPRT_PCSTS) != 0U;
+    }
     bool storage_ready() const;
     bool read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
     bool write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);

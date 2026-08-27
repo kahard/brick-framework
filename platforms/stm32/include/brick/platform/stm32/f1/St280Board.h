@@ -79,6 +79,24 @@ public:
     Stm32Buzzer& buzzer() { return buzzer_; }
     Stm32PwmBacklight& backlight() { return backlight_; }
 
+    bool set_usb_power(bool enabled)
+    {
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+        GPIO_InitTypeDef pins{};
+        pins.Pin = GPIO_PIN_10;
+        pins.Mode = GPIO_MODE_OUTPUT_PP;
+        pins.Speed = GPIO_SPEED_FREQ_HIGH;
+        HAL_GPIO_Init(GPIOC, &pins);
+        if (enabled)
+            GPIOC->BSRR = GPIO_PIN_10;
+        else
+            GPIOC->BSRR = static_cast<std::uint32_t>(GPIO_PIN_10) << 16;
+        usb_power_enabled_ = enabled;
+        return true;
+    }
+
+    bool usb_power_enabled() const { return usb_power_enabled_; }
+
 private:
     bool init_i2c_()
     {
@@ -139,6 +157,7 @@ private:
     SpiNorFlash flash_;
     Stm32Buzzer buzzer_;
     Stm32PwmBacklight backlight_;
+    bool usb_power_enabled_ = false;
 };
 
 }  // namespace brick::platform::stm32::f1

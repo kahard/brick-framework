@@ -14,6 +14,7 @@ enum class Capability : std::uint32_t
     buzzer = 1u << 4,
     backlight = 1u << 5,
     usb_host = 1u << 6,
+    sd_card = 1u << 7,
 };
 
 struct BoardDescriptor

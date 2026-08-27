@@ -87,7 +87,10 @@ extern "C" void HAL_HCD_MspInit(HCD_HandleTypeDef* hhcd)
     __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
     GPIO_InitTypeDef pins{};
     pins.Pin = GPIO_PIN_11 | GPIO_PIN_12;
-    pins.Mode = GPIO_MODE_INPUT;
+    // USB OTG FS D-/D+ use the STM32 alternate-function driver. The legacy
+    // F1Boot BSP configures both lines as AF push-pull; plain GPIO input leaves
+    // the transceiver disconnected and prevents device enumeration.
+    pins.Mode = GPIO_MODE_AF_PP;
     pins.Pull = GPIO_NOPULL;
     pins.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOA, &pins);

@@ -18,6 +18,20 @@ python tools/assets/generate_lvgl_font.py `
   --bpp 4
 ```
 
+## BRICK bitmap fonts (bez LVGL)
+
+`generate_bitmap_font.py` generuje przenośny, 1-bitowy nagłówek C z tablicą
+glifów. Jest przeznaczony dla małych platform, takich jak STM32/F1, i nie
+zależy od LVGL:
+
+```powershell
+python tools/assets/generate_bitmap_font.py `
+  --font C:\path\to\Roboto-Regular.ttf `
+  --output src/generated_font.h `
+  --name brick_roboto_20 `
+  --size 20
+```
+
 For a smaller embedded asset, pass only the required ranges:
 
 ```powershell

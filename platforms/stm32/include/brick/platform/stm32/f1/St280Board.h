@@ -66,6 +66,8 @@ public:
     ResistiveTouchscreen& touch() { return touch_; }
     I2cEeprom& eeprom() { return eeprom_; }
     SpiNorFlash& flash() { return flash_; }
+    I2C_HandleTypeDef& i2c() { return i2c_; }
+    SPI_HandleTypeDef& spi() { return spi_; }
 
 private:
     bool init_i2c_()

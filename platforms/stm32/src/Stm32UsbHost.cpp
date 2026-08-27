@@ -65,7 +65,7 @@ void Stm32UsbHost::process()
         // state machine from the port status as a fallback.
         const bool port_present = (reinterpret_cast<volatile const std::uint32_t*>(
             reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
-        if (port_present && !connected_)
+        if (port_present && (!connected_ || host_.gState == HOST_DEV_WAIT_FOR_ATTACHMENT))
             USBH_LL_Connect(&host_);
         else if (!port_present && connected_)
             USBH_LL_Disconnect(&host_);

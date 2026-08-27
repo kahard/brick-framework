@@ -20,12 +20,13 @@ def render(font: ImageFont.FreeTypeFont, char: str):
     image = Image.new("1", (width, height), 0)
     ImageDraw.Draw(image).text((-left, -top), char, font=font, fill=1)
     rows = []
+    stride = (width + 7) // 8
     for y in range(height):
-        value = 0
+        row = [0] * stride
         for x in range(width):
             if image.getpixel((x, y)):
-                value |= 1 << x
-        rows.append(value)
+                row[x // 8] |= 0x80 >> (x & 7)
+        rows.append(row)
     return width, height, rows
 
 
@@ -55,7 +56,7 @@ def main() -> None:
         stride = (width + 7) // 8
         offsets.append((width, height, stride, len(data)))
         for row in rows:
-            data.extend((row >> (8 * byte)) & 0xFF for byte in range(stride))
+            data.extend(row)
     for index in range(0, len(data), 16):
         out.append("  " + ", ".join(f"0x{byte:02X}" for byte in data[index:index + 16]) + ",")
     out += ["};", "", f"static const BrickBitmapGlyph {args.name}_glyphs[] = {{"]

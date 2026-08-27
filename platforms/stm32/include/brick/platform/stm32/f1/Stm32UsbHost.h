@@ -25,6 +25,7 @@ public:
     void process();
     bool connected() const { return connected_; }
     bool class_active() const { return class_active_; }
+    HOST_StateTypeDef state() const { return host_.gState; }
     bool port_connected() const
     {
         constexpr std::uintptr_t host_port = 0x440U;

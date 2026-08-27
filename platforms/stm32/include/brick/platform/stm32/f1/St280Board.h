@@ -27,7 +27,7 @@ class St280Board
 {
 public:
     St280Board()
-        : display_({}), touch_({}), eeprom_({&i2c_}), flash_({&spi_})
+        : display_(Ssd1963ParallelDisplayConfig{}), touch_(ResistiveTouchscreenConfig{}), eeprom_(I2cEepromConfig{&i2c_}), flash_(SpiNorFlashConfig{&spi_})
     {
     }
 

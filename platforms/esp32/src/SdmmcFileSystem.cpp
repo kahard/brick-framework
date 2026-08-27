@@ -1,4 +1,6 @@
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
+#include "driver/gpio.h"
+#include "esp_rom_sys.h"
 
 namespace brick::platform::esp32
 {
@@ -32,6 +34,10 @@ bool SdmmcFileSystem::mount()
 {
     if (mounted_)
         return true;
+    // JC1060 switches the TF-card 3.3 V rail through an active-low GPIO45 gate.
+    gpio_set_direction(GPIO_NUM_45, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_45, 0);
+    esp_rom_delay_us(10000);
     sdmmc_host_t host                       = SDMMC_HOST_DEFAULT();
     host.max_freq_khz                       = 10000;
     sdmmc_slot_config_t slot                = SDMMC_SLOT_CONFIG_DEFAULT();

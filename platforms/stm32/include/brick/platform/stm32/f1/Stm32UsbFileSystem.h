@@ -31,6 +31,8 @@ public:
         : host_(host), mount_timeout_ms_(mount_timeout_ms) {}
 
     bool mount() override;
+    void unmount();
+    bool mounted() const { return mounted_; }
     std::vector<std::string> list_files(const char* path) override;
     std::unique_ptr<brick::interfaces::storage::IFile> open(const char* path, const char* mode) override;
 

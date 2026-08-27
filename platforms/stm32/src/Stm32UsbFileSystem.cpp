@@ -56,6 +56,14 @@ bool Stm32UsbFileSystem::mount()
     return true;
 }
 
+void Stm32UsbFileSystem::unmount()
+{
+    if (!mounted_)
+        return;
+    f_mount(nullptr, "", 0);
+    mounted_ = false;
+}
+
 std::vector<std::string> Stm32UsbFileSystem::list_files(const char* path)
 {
     std::vector<std::string> result;

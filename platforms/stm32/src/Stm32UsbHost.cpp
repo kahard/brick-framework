@@ -71,6 +71,8 @@ void Stm32UsbHost::process()
                 USBH_LL_Start(&host_);
             USBH_LL_Connect(&host_);
             connected_ = true;
+            if (host_.gState == HOST_DEV_WAIT_FOR_ATTACHMENT)
+                USBH_LL_PortEnabled(&host_);
         }
         else if (!port_present && connected_)
         {

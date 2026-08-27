@@ -80,7 +80,19 @@ void Stm32UsbHost::process()
         else if (!port_present && connected_)
         {
             USBH_LL_Disconnect(&host_);
+            // A plain middleware disconnect is not sufficient on the F105
+            // OTG FS core: after a removal the next attach could inherit a
+            // halted host channel. Stop and reinitialize the HCD, and cycle
+            // VBUS so the device starts from a clean electrical state.
+            USBH_Stop(&host_);
+            HAL_HCD_DeInit(&hcd_);
+            HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_RESET);
+            HAL_Delay(100);
+            HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_SET);
+            HAL_Delay(250);
+            HAL_HCD_Init(&hcd_);
             connected_ = false;
+            class_active_ = false;
         }
         USBH_Process(&host_);
     }

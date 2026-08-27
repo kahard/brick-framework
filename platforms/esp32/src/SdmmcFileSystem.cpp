@@ -1,4 +1,6 @@
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
+#include <cerrno>
+#include <cstring>
 #include "sd_pwr_ctrl_by_on_chip_ldo.h"
 
 namespace brick::platform::esp32
@@ -81,7 +83,12 @@ std::vector<std::string> SdmmcFileSystem::list_files(const char* path)
 std::unique_ptr<interfaces::storage::IFile> SdmmcFileSystem::open(const char* path, const char* mode)
 {
     std::FILE* handle = std::fopen(path, mode);
-    return handle == nullptr ? nullptr : std::make_unique<SdmmcFile>(handle);
+    if (handle == nullptr)
+    {
+        ESP_LOGE(TAG, "fopen failed path=%s mode=%s errno=%d (%s)", path, mode, errno, std::strerror(errno));
+        return nullptr;
+    }
+    return std::make_unique<SdmmcFile>(handle);
 }
 
 }  // namespace brick::platform::esp32

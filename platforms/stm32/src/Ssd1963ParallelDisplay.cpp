@@ -18,9 +18,19 @@ bool Ssd1963ParallelDisplay::begin()
     configure_output_(config_.cs_port, config_.cs_pin);
     configure_output_(config_.reset_port, config_.reset_pin);
     configure_output_(config_.display_enable_port, config_.display_enable_pin);
+    write_bus_(0);
     write_pin_(config_.rd_port, config_.rd_pin, true);
+    write_pin_(config_.rs_port, config_.rs_pin, true);
+    write_pin_(config_.wr_port, config_.wr_pin, true);
     write_pin_(config_.cs_port, config_.cs_pin, true);
+    write_pin_(config_.reset_port, config_.reset_pin, true);
+    // ST-280's legacy startup switches the panel supply gate before it sends
+    // the SSD1963 reset sequence. Keep these delays verbatim: lighting only
+    // the backlight without this transition leaves the controller blank.
+    write_pin_(config_.display_enable_port, config_.display_enable_pin, false);
+    HAL_Delay(200);
     write_pin_(config_.display_enable_port, config_.display_enable_pin, true);
+    HAL_Delay(150);
     write_pin_(config_.reset_port, config_.reset_pin, false);
     HAL_Delay(100);
     write_pin_(config_.reset_port, config_.reset_pin, true);
@@ -116,6 +126,8 @@ void Ssd1963ParallelDisplay::data_(std::uint8_t value) const
 
 bool Ssd1963ParallelDisplay::initialize_controller_()
 {
+    command_(0x01);
+    command_(0x01);
     command_(0x01);
     HAL_Delay(100);
     command_(0xE0);

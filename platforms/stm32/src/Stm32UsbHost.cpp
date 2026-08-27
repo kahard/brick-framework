@@ -67,7 +67,7 @@ void Stm32UsbHost::process()
             reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
         const bool previous_port_present = port_present_;
         port_present_ = port_present;
-        if (port_present && !connected_)
+        if (port_present && !previous_port_present)
         {
             // Reinitialize the middleware on every new physical connection.
             // This releases control/class pipes left by the previous device.
@@ -81,12 +81,13 @@ void Stm32UsbHost::process()
         }
         else if (!port_present && previous_port_present)
         {
-            USBH_LL_Disconnect(&host_);
             // A plain middleware disconnect is not sufficient on the F105
             // OTG FS core: after a removal the next attach could inherit a
             // halted host channel. Stop and reinitialize the HCD, and cycle
             // VBUS so the device starts from a clean electrical state.
-            USBH_Stop(&host_);
+            // The HAL disconnect callback may already have notified USBH, so
+            // do not call USBH_LL_Disconnect a second time here.
+            HAL_HCD_Stop(&hcd_);
             HAL_HCD_DeInit(&hcd_);
             HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_RESET);
             HAL_Delay(100);

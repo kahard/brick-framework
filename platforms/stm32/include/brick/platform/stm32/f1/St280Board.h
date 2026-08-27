@@ -1,5 +1,6 @@
 #pragma once
 
+#include "brick/platform/stm32/f1/St280BoardConfig.h"
 #include "brick/interfaces/board/BoardDescriptor.h"
 #include "brick/platform/stm32/f1/I2cEeprom.h"
 #include "brick/platform/stm32/f1/ResistiveTouchscreen.h"
@@ -49,13 +50,13 @@ public:
     {
         using brick::interfaces::board::Capability;
         return {"ST-280", "STM32F105VCT6",
-                static_cast<std::uint32_t>(Capability::display) |
-                    static_cast<std::uint32_t>(Capability::touchscreen) |
-                    static_cast<std::uint32_t>(Capability::eeprom) |
-                    static_cast<std::uint32_t>(Capability::spi_flash) |
-                    static_cast<std::uint32_t>(Capability::buzzer) |
-                    static_cast<std::uint32_t>(Capability::backlight) |
-                    static_cast<std::uint32_t>(Capability::usb_host)};
+                (BRICK_ST280_ENABLE_DISPLAY ? static_cast<std::uint32_t>(Capability::display) : 0U) |
+                    (BRICK_ST280_ENABLE_TOUCH ? static_cast<std::uint32_t>(Capability::touchscreen) : 0U) |
+                    (BRICK_ST280_ENABLE_EEPROM ? static_cast<std::uint32_t>(Capability::eeprom) : 0U) |
+                    (BRICK_ST280_ENABLE_SPI_FLASH ? static_cast<std::uint32_t>(Capability::spi_flash) : 0U) |
+                    (BRICK_ST280_ENABLE_BUZZER ? static_cast<std::uint32_t>(Capability::buzzer) : 0U) |
+                    (BRICK_ST280_ENABLE_BACKLIGHT ? static_cast<std::uint32_t>(Capability::backlight) : 0U) |
+                    (BRICK_ST280_ENABLE_USB_HOST ? static_cast<std::uint32_t>(Capability::usb_host) : 0U)};
     }
 
     static constexpr St280Pins pins() { return {}; }
@@ -65,9 +66,26 @@ public:
         __HAL_RCC_GPIOA_CLK_ENABLE();
         __HAL_RCC_GPIOB_CLK_ENABLE();
         __HAL_RCC_GPIOC_CLK_ENABLE();
-        if (!init_i2c_() || !init_spi_())
-            return false;
-        return buzzer_.begin() && backlight_.begin() && display_.begin() && touch_.begin();
+        bool ok = true;
+#if BRICK_ST280_ENABLE_EEPROM
+        ok = ok && init_i2c_();
+#endif
+#if BRICK_ST280_ENABLE_SPI_FLASH
+        ok = ok && init_spi_();
+#endif
+#if BRICK_ST280_ENABLE_BUZZER
+        ok = ok && buzzer_.begin();
+#endif
+#if BRICK_ST280_ENABLE_BACKLIGHT
+        ok = ok && backlight_.begin();
+#endif
+#if BRICK_ST280_ENABLE_DISPLAY
+        ok = ok && display_.begin();
+#endif
+#if BRICK_ST280_ENABLE_TOUCH
+        ok = ok && touch_.begin();
+#endif
+        return ok;
     }
 
     Ssd1963ParallelDisplay& display() { return display_; }

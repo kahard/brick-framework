@@ -113,8 +113,7 @@ extern "C" void HAL_HCD_Disconnect_Callback(HCD_HandleTypeDef*)
 
 extern "C" void HAL_HCD_HC_NotifyURBChange_Callback(HCD_HandleTypeDef* hhcd, uint8_t chnum, HCD_URBStateTypeDef state)
 {
-    if (brick::platform::stm32::f1::Stm32UsbHost::active_ != nullptr)
-        USBH_LL_NotifyURBChange(&brick::platform::stm32::f1::Stm32UsbHost::active_->handle());
+    (void)chnum;
     (void)hhcd;
 }
 

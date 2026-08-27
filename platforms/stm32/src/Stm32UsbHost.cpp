@@ -65,14 +65,17 @@ void Stm32UsbHost::process()
         // state machine from the port status as a fallback.
         const bool port_present = (reinterpret_cast<volatile const std::uint32_t*>(
             reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
-        if (port_present && (!connected_ || host_.gState == HOST_DEV_WAIT_FOR_ATTACHMENT))
+        if (port_present && !connected_)
         {
-            if (host_.gState == HOST_DEV_DISCONNECTED)
-                USBH_LL_Start(&host_);
+            // Reinitialize the middleware on every new physical connection.
+            // This releases control/class pipes left by the previous device.
+            class_active_ = false;
+            USBH_Init(&host_, user_callback_, config_.host_id);
+            host_.pData = &hcd_;
+            USBH_RegisterClass(&host_, USBH_MSC_CLASS);
+            USBH_Start(&host_);
             USBH_LL_Connect(&host_);
             connected_ = true;
-            if (host_.gState == HOST_DEV_WAIT_FOR_ATTACHMENT)
-                USBH_LL_PortEnabled(&host_);
         }
         else if (!port_present && connected_)
         {

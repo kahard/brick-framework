@@ -48,6 +48,7 @@ private:
     bool connected_ = false;
     bool class_active_ = false;
     bool port_present_ = false;
+    std::uint32_t attach_tick_ = 0U;
 };
 
 }  // namespace brick::platform::stm32::f1

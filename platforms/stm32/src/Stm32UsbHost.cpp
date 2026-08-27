@@ -82,6 +82,7 @@ void Stm32UsbHost::process()
             // explicitly so enumeration does not remain in WAIT_ATTACHMENT.
             USBH_LL_PortEnabled(&host_);
             connected_ = true;
+            attach_tick_ = HAL_GetTick();
         }
         else if (!port_present && previous_port_present)
         {
@@ -102,6 +103,25 @@ void Stm32UsbHost::process()
             class_active_ = false;
         }
         USBH_Process(&host_);
+
+        // If the physical port is present but MSC did not become active,
+        // retry enumeration in-place. This handles devices for which the
+        // first reset/descriptor exchange is lost without requiring a
+        // second physical unplug/plug cycle.
+        if (port_present && !class_active_ &&
+            (HAL_GetTick() - attach_tick_) > 8000U)
+        {
+            class_active_ = false;
+            HAL_HCD_Stop(&hcd_);
+            USBH_Init(&host_, user_callback_, config_.host_id);
+            host_.pData = &hcd_;
+            USBH_RegisterClass(&host_, USBH_MSC_CLASS);
+            USBH_Start(&host_);
+            USBH_LL_Connect(&host_);
+            USBH_LL_PortEnabled(&host_);
+            connected_ = true;
+            attach_tick_ = HAL_GetTick();
+        }
     }
 }
 

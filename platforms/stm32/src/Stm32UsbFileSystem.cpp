@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "brick/platform/stm32/f1/St280BoardConfig.h"
 #include "diskio.h"
 
 namespace
@@ -26,14 +27,24 @@ namespace brick::platform::stm32::f1
 
 std::size_t Stm32UsbFile::read(void* buffer, std::size_t size, std::size_t count)
 {
+#if !BRICK_ST280_ENABLE_USB_READ
+    (void)buffer; (void)size; (void)count;
+    return 0;
+#else
     UINT bytes = 0;
     return f_read(&file_, buffer, static_cast<UINT>(size * count), &bytes) == FR_OK ? bytes / size : 0;
+#endif
 }
 
 std::size_t Stm32UsbFile::write(const void* buffer, std::size_t size, std::size_t count)
 {
+#if !BRICK_ST280_ENABLE_USB_WRITE
+    (void)buffer; (void)size; (void)count;
+    return 0;
+#else
     UINT bytes = 0;
     return f_write(&file_, buffer, static_cast<UINT>(size * count), &bytes) == FR_OK ? bytes / size : 0;
+#endif
 }
 
 bool Stm32UsbFile::seek(long offset, int origin)
@@ -87,8 +98,24 @@ std::unique_ptr<brick::interfaces::storage::IFile> Stm32UsbFileSystem::open(cons
 {
     if (!mounted_) return nullptr;
     BYTE flags = FA_READ;
-    if (std::strchr(mode, 'w') != nullptr) flags = FA_WRITE | FA_CREATE_ALWAYS;
-    else if (std::strchr(mode, 'a') != nullptr) flags = FA_WRITE | FA_OPEN_ALWAYS;
+    if (std::strchr(mode, 'w') != nullptr) {
+#if BRICK_ST280_ENABLE_USB_WRITE
+        flags = FA_WRITE | FA_CREATE_ALWAYS;
+#else
+        return nullptr;
+#endif
+    }
+    else if (std::strchr(mode, 'a') != nullptr) {
+#if BRICK_ST280_ENABLE_USB_WRITE
+        flags = FA_WRITE | FA_OPEN_ALWAYS;
+#else
+        return nullptr;
+#endif
+    }
+#if !BRICK_ST280_ENABLE_USB_READ
+    if (std::strchr(mode, 'r') != nullptr)
+        return nullptr;
+#endif
     FIL file{};
     if (f_open(&file, path, flags) != FR_OK) return nullptr;
     if (std::strchr(mode, 'a') != nullptr && f_lseek(&file, f_size(&file)) != FR_OK) { f_close(&file); return nullptr; }

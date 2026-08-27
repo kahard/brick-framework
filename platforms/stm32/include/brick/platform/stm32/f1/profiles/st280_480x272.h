@@ -6,12 +6,12 @@
 namespace brick::platform::stm32::f1::profiles
 {
 
-inline Ssd1963ParallelDisplayConfig termotechnika_st9727_480x272()
+inline Ssd1963ParallelDisplayConfig st280_480x272()
 {
     return {};
 }
 
-inline Ft5x06TouchscreenConfig termotechnika_st9727_ft5x06()
+inline Ft5x06TouchscreenConfig st280_ft5x06()
 {
     return {};
 }

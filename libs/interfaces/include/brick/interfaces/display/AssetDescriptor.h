@@ -22,7 +22,7 @@ struct AssetDescriptor
 
     constexpr bool valid() const
     {
-        return id != 0 && size != 0 && width != 0 && height != 0 && stride_bytes != 0;
+        return size != 0 && width != 0 && height != 0 && stride_bytes != 0;
     }
 };
 

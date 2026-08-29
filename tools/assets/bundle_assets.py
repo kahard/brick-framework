@@ -117,8 +117,9 @@ def main() -> int:
         "namespace generated_assets {",
         "enum class Id : std::uint32_t {",
     ]
-    for index, record in enumerate(records, start=1):
+    for index, record in enumerate(records):
         lines.append(f"    {record[0]} = {index},")
+    lines.append(f"    count = {len(records)},")
     lines += [
         "};",
         "",
@@ -137,10 +138,9 @@ def main() -> int:
     lines += [
         "};",
         "inline constexpr std::size_t entry_count = sizeof(entries) / sizeof(entries[0]);",
-        "inline const brick::interfaces::display::AssetDescriptor* find(Id id) {",
-        "    for (std::size_t index = 0; index < entry_count; ++index)",
-        "        if (entries[index].id == static_cast<std::uint32_t>(id)) return &entries[index];",
-        "    return nullptr;",
+        "inline const brick::interfaces::display::AssetDescriptor* get(Id id) {",
+        "    const auto index = static_cast<std::size_t>(id);",
+        "    return index < entry_count ? &entries[index] : nullptr;",
         "}",
     ]
     if args.c_symbol is not None:

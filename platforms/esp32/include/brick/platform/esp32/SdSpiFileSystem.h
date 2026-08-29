@@ -20,9 +20,8 @@ struct SdSpiFileSystemConfig {
     gpio_num_t miso = GPIO_NUM_NC;
     spi_host_device_t host = SPI2_HOST;
     const char* mount_point = "/sdcard";
-    // 20 MHz is a conservative SPI speed supported by typical SD cards and
-    // substantially faster than the 1 MHz initialization/debug setting.
-    int max_freq_khz = 20000;
+    // 40 MHz is supported by the tested panel/card combination.
+    int max_freq_khz = 40000;
 };
 
 class SdSpiFileSystem final : public interfaces::storage::IFileSystem {

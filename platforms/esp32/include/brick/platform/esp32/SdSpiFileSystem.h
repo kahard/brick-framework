@@ -20,9 +20,8 @@ struct SdSpiFileSystemConfig {
     gpio_num_t miso = GPIO_NUM_NC;
     spi_host_device_t host = SPI2_HOST;
     const char* mount_point = "/sdcard";
-    // 30 MHz is an intermediate speed between the stable 20 MHz and
-    // unreliable 40 MHz setting.
-    int max_freq_khz = 30000;
+    // 20 MHz is stable with the tested panel/card combination.
+    int max_freq_khz = 20000;
 };
 
 class SdSpiFileSystem final : public interfaces::storage::IFileSystem {

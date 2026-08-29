@@ -113,6 +113,10 @@ def main() -> int:
         "#include <cstdint>",
         '#include "brick/core/image/AssetBundle.h"',
         "",
+    ]
+    if args.c_symbol is not None:
+        lines += [f"extern const std::uint8_t {identifier(args.c_symbol)}[];", ""]
+    lines += [
         "namespace generated_assets {",
         "enum class Id : std::uint32_t {",
     ]
@@ -146,9 +150,8 @@ def main() -> int:
         c_symbol = identifier(args.c_symbol)
         lines += [
             "",
-            f"extern const std::uint8_t {c_symbol}[];",
             "inline brick::core::image::AssetBundle bundle() {",
-            f"    return {{{c_symbol}, bundle_size, entries, entry_count}};",
+            f"    return {{::{c_symbol}, bundle_size, entries, entry_count}};",
             "}",
         ]
     lines += [

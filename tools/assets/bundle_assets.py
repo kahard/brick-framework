@@ -142,6 +142,17 @@ def main() -> int:
         "        if (entries[index].id == static_cast<std::uint32_t>(id)) return &entries[index];",
         "    return nullptr;",
         "}",
+    ]
+    if args.c_symbol is not None:
+        c_symbol = identifier(args.c_symbol)
+        lines += [
+            "",
+            f"extern const std::uint8_t {c_symbol}[];",
+            "inline brick::core::image::AssetBundle bundle() {",
+            f"    return {{{c_symbol}, bundle_size, entries, entry_count}};",
+            "}",
+        ]
+    lines += [
         "}  // namespace generated_assets",
         "",
     ]

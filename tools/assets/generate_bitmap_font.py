@@ -47,7 +47,10 @@ def main() -> None:
         "#pragma once",
         "#include <stdint.h>",
         "",
+        "#ifndef BRICK_BITMAP_GLYPH_DEFINED",
+        "#define BRICK_BITMAP_GLYPH_DEFINED",
         "struct BrickBitmapGlyph { uint16_t width; uint16_t height; uint16_t stride; const uint8_t* data; };",
+        "#endif",
         f"static const uint8_t {args.name}_data[] = {{",
     ]
     offsets = []

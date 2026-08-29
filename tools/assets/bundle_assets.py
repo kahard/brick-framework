@@ -27,10 +27,9 @@ def write_manifest(stream: TextIO, records: list[tuple[str, Path, int, int, str,
 
 def write_c_source(path: Path, symbol: str, data: bytes) -> None:
     lines = [
-        '#include "asset_bundle.h"',
-        "#include <pgmspace.h>",
+        "#include <cstdint>",
         "",
-        f"const std::uint8_t PROGMEM {symbol}[] = {{",
+        f"const std::uint8_t {symbol}[] = {{",
     ]
     for offset in range(0, len(data), 16):
         chunk = data[offset : offset + 16]

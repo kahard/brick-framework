@@ -27,6 +27,7 @@ class SdSpiFileSystem final : public interfaces::storage::IFileSystem {
 public:
     explicit SdSpiFileSystem(SdSpiFileSystemConfig config);
     bool mount() override;
+    void unmount();
     std::vector<std::string> list_files(const char* path) override;
     std::unique_ptr<interfaces::storage::IFile> open(const char* path, const char* mode) override;
 

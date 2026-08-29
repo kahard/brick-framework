@@ -12,6 +12,18 @@ constexpr char kTag[] = "brick_sd_spi";
 
 SdSpiFileSystem::SdSpiFileSystem(SdSpiFileSystemConfig config) : config_(config) {}
 
+void SdSpiFileSystem::unmount() {
+    if (mounted_) {
+        esp_vfs_fat_sdcard_unmount(config_.mount_point, card_);
+        mounted_ = false;
+        card_ = nullptr;
+    }
+    if (bus_initialized_) {
+        spi_bus_free(config_.host);
+        bus_initialized_ = false;
+    }
+}
+
 bool SdSpiFileSystem::mount() {
     if (mounted_) return true;
     spi_bus_config_t bus = {};

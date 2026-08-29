@@ -20,8 +20,8 @@ struct SdSpiFileSystemConfig {
     gpio_num_t miso = GPIO_NUM_NC;
     spi_host_device_t host = SPI2_HOST;
     const char* mount_point = "/sdcard";
-    // 40 MHz is supported by the tested panel/card combination.
-    int max_freq_khz = 40000;
+    // 20 MHz is stable with the tested panel/card combination.
+    int max_freq_khz = 20000;
 };
 
 class SdSpiFileSystem final : public interfaces::storage::IFileSystem {

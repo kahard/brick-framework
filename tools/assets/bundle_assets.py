@@ -29,7 +29,7 @@ def write_c_source(path: Path, symbol: str, data: bytes) -> None:
     lines = [
         "#include <cstdint>",
         "",
-        f"const std::uint8_t {symbol}[] = {{",
+        f"extern const std::uint8_t {symbol}[] = {{",
     ]
     for offset in range(0, len(data), 16):
         chunk = data[offset : offset + 16]

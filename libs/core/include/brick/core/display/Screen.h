@@ -17,7 +17,13 @@ public:
     class Canvas final
     {
     public:
-        Canvas(Screen& screen, brick::interfaces::display::DisplayRect area) : screen_(screen), area_(area), pixels_(new(std::nothrow) std::uint16_t[static_cast<std::size_t>(area.width) * area.height]) {}
+        Canvas(Screen& screen, brick::interfaces::display::DisplayRect area)
+            : screen_(screen), area_(area),
+              pixels_(area.width > 0 && area.height > 0
+                          ? new (std::nothrow) std::uint16_t[static_cast<std::size_t>(area.width) * static_cast<std::size_t>(area.height)]
+                          : nullptr)
+        {
+        }
 
         Canvas(const Canvas&)                = delete;
         Canvas& operator=(const Canvas&)     = delete;
@@ -62,10 +68,16 @@ public:
 
     explicit Screen(brick::interfaces::display::IDisplayDevice& device) : device_(device) {}
 
+    Canvas create_canvas(brick::interfaces::display::DisplayRect area)
+    {
+        return Canvas(*this, area);
+    }
+
+    /// Convenience overload for a full-width strip starting at the top edge.
     Canvas create_canvas(std::int32_t height)
     {
         const auto display_size = device_.size();
-        return Canvas(*this, { 0, 0, static_cast<std::int32_t>(display_size.width), height });
+        return create_canvas({ 0, 0, static_cast<std::int32_t>(display_size.width), height });
     }
 
     brick::interfaces::display::DisplaySize size() const { return device_.size(); }

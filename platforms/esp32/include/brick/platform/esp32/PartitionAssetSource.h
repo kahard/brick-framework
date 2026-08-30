@@ -13,6 +13,7 @@ class PartitionAssetSource final : public brick::interfaces::display::IAssetSour
 {
 public:
     explicit PartitionAssetSource(const char* label) : label_(label) {}
+    explicit PartitionAssetSource(const esp_partition_t* partition) : partition_(partition) {}
 
     bool begin();
     bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset,

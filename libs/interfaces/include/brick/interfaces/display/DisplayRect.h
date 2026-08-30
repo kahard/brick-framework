@@ -14,10 +14,7 @@ struct DisplayRect
 
     constexpr bool empty() const { return width <= 0 || height <= 0; }
 
-    constexpr bool contains(DisplayRect other) const
-    {
-        return other.x >= x && other.y >= y && other.x + other.width <= x + width && other.y + other.height <= y + height;
-    }
+    constexpr bool contains(DisplayRect other) const { return other.x >= x && other.y >= y && other.x + other.width <= x + width && other.y + other.height <= y + height; }
 };
 
 }  // namespace brick::interfaces::display

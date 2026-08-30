@@ -13,8 +13,8 @@ bool Stm32Buzzer::begin()
         __HAL_RCC_GPIOC_CLK_ENABLE();
 
     GPIO_InitTypeDef pins{};
-    pins.Pin = config_.pin;
-    pins.Mode = GPIO_MODE_OUTPUT_PP;
+    pins.Pin   = config_.pin;
+    pins.Mode  = GPIO_MODE_OUTPUT_PP;
     pins.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(config_.port, &pins);
     initialized_ = true;

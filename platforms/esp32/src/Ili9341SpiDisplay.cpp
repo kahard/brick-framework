@@ -76,13 +76,11 @@ bool Ili9341SpiDisplay::set_rotation(brick::interfaces::display::Rotation rotati
 bool Ili9341SpiDisplay::draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer)
 {
     constexpr std::size_t bytes_per_pixel = 2;
-    if (!started_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width || area.y + area.height > config_.height ||
-        !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width) || buffer.height != static_cast<std::uint32_t>(area.height) ||
-        buffer.format != pixel_format() || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel)
+    if (!started_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width || area.y + area.height > config_.height || !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width)
+        || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format() || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel)
         return false;
 
-    if (!set_address_window_(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y), static_cast<std::uint16_t>(area.width),
-                             static_cast<std::uint16_t>(area.height)))
+    if (!set_address_window_(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y), static_cast<std::uint16_t>(area.width), static_cast<std::uint16_t>(area.height)))
         return false;
 
     const std::size_t row_bytes = static_cast<std::size_t>(area.width) * bytes_per_pixel;
@@ -150,7 +148,7 @@ bool Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
         auto chunk = std::min(length, kChunk);
         // RGB565 assets are stored in the portable little-endian memory
         // representation. ILI9341 expects each pixel on SPI MSB first.
-        chunk &= ~std::size_t{1};
+        chunk &= ~std::size_t{ 1 };
         if (chunk == 0)
             return false;
         for (std::size_t index = 0; index < chunk; index += 2)
@@ -168,8 +166,8 @@ bool Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
 
 bool Ili9341SpiDisplay::set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height)
 {
-    const std::uint16_t x2      = x + width - 1;
-    const std::uint16_t y2      = y + height - 1;
+    const std::uint16_t x2       = x + width - 1;
+    const std::uint16_t y2       = y + height - 1;
     const std::uint8_t  column[] = { static_cast<std::uint8_t>(x >> 8), static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(x2 >> 8), static_cast<std::uint8_t>(x2) };
     const std::uint8_t  row[]    = { static_cast<std::uint8_t>(y >> 8), static_cast<std::uint8_t>(y), static_cast<std::uint8_t>(y2 >> 8), static_cast<std::uint8_t>(y2) };
     return send_command_(0x2A, column, sizeof(column)) && send_command_(0x2B, row, sizeof(row)) && send_command_(0x2C);

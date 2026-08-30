@@ -11,7 +11,7 @@ void Stm32UsbHost::user_callback_(USBH_HandleTypeDef*, uint8_t event)
 {
     if (active_ == nullptr)
         return;
-    active_->connected_ = event != HOST_USER_DISCONNECTION;
+    active_->connected_    = event != HOST_USER_DISCONNECTION;
     active_->class_active_ = event == HOST_USER_CLASS_ACTIVE;
 }
 
@@ -20,8 +20,8 @@ bool Stm32UsbHost::begin()
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
     GPIO_InitTypeDef power{};
-    power.Pin = config_.power_pin;
-    power.Mode = GPIO_MODE_OUTPUT_PP;
+    power.Pin   = config_.power_pin;
+    power.Mode  = GPIO_MODE_OUTPUT_PP;
     power.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(config_.power_port, &power);
     // Give the external VBUS switch a defined off/on cycle. Some ST-280
@@ -35,15 +35,15 @@ bool Stm32UsbHost::begin()
     __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
     HAL_NVIC_SetPriority(OTG_FS_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(OTG_FS_IRQn);
-    hcd_.Instance = USB_OTG_FS;
-    hcd_.Init.Host_channels = 8;
-    hcd_.Init.speed = HCD_SPEED_FULL;
-    hcd_.Init.dma_enable = DISABLE;
-    hcd_.Init.phy_itface = HCD_PHY_EMBEDDED;
-    hcd_.Init.Sof_enable = ENABLE;
-    hcd_.Init.low_power_enable = DISABLE;
+    hcd_.Instance                 = USB_OTG_FS;
+    hcd_.Init.Host_channels       = 8;
+    hcd_.Init.speed               = HCD_SPEED_FULL;
+    hcd_.Init.dma_enable          = DISABLE;
+    hcd_.Init.phy_itface          = HCD_PHY_EMBEDDED;
+    hcd_.Init.Sof_enable          = ENABLE;
+    hcd_.Init.low_power_enable    = DISABLE;
     hcd_.Init.vbus_sensing_enable = DISABLE;
-    hcd_.Init.use_dedicated_ep1 = DISABLE;
+    hcd_.Init.use_dedicated_ep1   = DISABLE;
     if (HAL_HCD_Init(&hcd_) != HAL_OK)
         return false;
 
@@ -63,10 +63,9 @@ void Stm32UsbHost::process()
         // On some STM32F105 revisions the HCD connect callback is not emitted
         // reliably, although HPRT.PCSTS is already asserted. Feed the host
         // state machine from the port status as a fallback.
-        const bool port_present = (reinterpret_cast<volatile const std::uint32_t*>(
-            reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
+        const bool port_present          = (reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
         const bool previous_port_present = port_present_;
-        port_present_ = port_present;
+        port_present_                    = port_present;
         if (port_present && !previous_port_present)
         {
             // Reinitialize the middleware on every new physical connection.
@@ -81,7 +80,7 @@ void Stm32UsbHost::process()
             // restarted while a device is already attached. Feed this event
             // explicitly so enumeration does not remain in WAIT_ATTACHMENT.
             USBH_LL_PortEnabled(&host_);
-            connected_ = true;
+            connected_   = true;
             attach_tick_ = HAL_GetTick();
         }
         else if (!port_present && previous_port_present)
@@ -99,7 +98,7 @@ void Stm32UsbHost::process()
             HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_SET);
             HAL_Delay(250);
             HAL_HCD_Init(&hcd_);
-            connected_ = false;
+            connected_    = false;
             class_active_ = false;
         }
         USBH_Process(&host_);
@@ -108,8 +107,7 @@ void Stm32UsbHost::process()
         // retry enumeration in-place. This handles devices for which the
         // first reset/descriptor exchange is lost without requiring a
         // second physical unplug/plug cycle.
-        if (port_present && !class_active_ &&
-            (HAL_GetTick() - attach_tick_) > 3000U)
+        if (port_present && !class_active_ && (HAL_GetTick() - attach_tick_) > 3000U)
         {
             class_active_ = false;
             HAL_HCD_Stop(&hcd_);
@@ -119,7 +117,7 @@ void Stm32UsbHost::process()
             USBH_Start(&host_);
             USBH_LL_Connect(&host_);
             USBH_LL_PortEnabled(&host_);
-            connected_ = true;
+            connected_   = true;
             attach_tick_ = HAL_GetTick();
         }
     }
@@ -159,8 +157,8 @@ extern "C" void HAL_HCD_MspInit(HCD_HandleTypeDef* hhcd)
     // USB OTG FS D-/D+ use the STM32 alternate-function driver. The legacy
     // F1Boot BSP configures both lines as AF push-pull; plain GPIO input leaves
     // the transceiver disconnected and prevents device enumeration.
-    pins.Mode = GPIO_MODE_AF_PP;
-    pins.Pull = GPIO_NOPULL;
+    pins.Mode  = GPIO_MODE_AF_PP;
+    pins.Pull  = GPIO_NOPULL;
     pins.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOA, &pins);
 }
@@ -201,7 +199,10 @@ extern "C" USBH_StatusTypeDef USBH_LL_Init(USBH_HandleTypeDef* phost)
     return USBH_OK;
 }
 
-extern "C" USBH_StatusTypeDef USBH_LL_DeInit(USBH_HandleTypeDef*) { return USBH_OK; }
+extern "C" USBH_StatusTypeDef USBH_LL_DeInit(USBH_HandleTypeDef*)
+{
+    return USBH_OK;
+}
 extern "C" USBH_StatusTypeDef USBH_LL_Start(USBH_HandleTypeDef* phost)
 {
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
@@ -212,7 +213,10 @@ extern "C" USBH_StatusTypeDef USBH_LL_Stop(USBH_HandleTypeDef* phost)
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
     return hcd != nullptr && HAL_HCD_Stop(hcd) == HAL_OK ? USBH_OK : USBH_FAIL;
 }
-extern "C" USBH_SpeedTypeDef USBH_LL_GetSpeed(USBH_HandleTypeDef*) { return USBH_SPEED_FULL; }
+extern "C" USBH_SpeedTypeDef USBH_LL_GetSpeed(USBH_HandleTypeDef*)
+{
+    return USBH_SPEED_FULL;
+}
 extern "C" USBH_StatusTypeDef USBH_LL_ResetPort(USBH_HandleTypeDef* phost)
 {
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
@@ -243,7 +247,19 @@ extern "C" USBH_URBStateTypeDef USBH_LL_GetURBState(USBH_HandleTypeDef* phost, u
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
     return hcd == nullptr ? static_cast<USBH_URBStateTypeDef>(URB_ERROR) : static_cast<USBH_URBStateTypeDef>(HAL_HCD_HC_GetURBState(hcd, pipe));
 }
-extern "C" USBH_StatusTypeDef USBH_LL_DriverVBUS(USBH_HandleTypeDef*, uint8_t) { return USBH_OK; }
-extern "C" USBH_StatusTypeDef USBH_LL_SetToggle(USBH_HandleTypeDef*, uint8_t, uint8_t) { return USBH_OK; }
-extern "C" uint8_t USBH_LL_GetToggle(USBH_HandleTypeDef*, uint8_t) { return 0; }
-extern "C" void USBH_Delay(uint32_t delay) { HAL_Delay(delay); }
+extern "C" USBH_StatusTypeDef USBH_LL_DriverVBUS(USBH_HandleTypeDef*, uint8_t)
+{
+    return USBH_OK;
+}
+extern "C" USBH_StatusTypeDef USBH_LL_SetToggle(USBH_HandleTypeDef*, uint8_t, uint8_t)
+{
+    return USBH_OK;
+}
+extern "C" uint8_t USBH_LL_GetToggle(USBH_HandleTypeDef*, uint8_t)
+{
+    return 0;
+}
+extern "C" void USBH_Delay(uint32_t delay)
+{
+    HAL_Delay(delay);
+}

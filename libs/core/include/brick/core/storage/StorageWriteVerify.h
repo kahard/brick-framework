@@ -11,8 +11,7 @@ namespace brick::core::storage
 
 // Performs one bounded write -> close -> read -> compare cycle. The helper is
 // backend-neutral and therefore works for USB MSC, SD/MMC and host filesystems.
-inline bool write_verify(brick::interfaces::storage::IFileSystem& file_system,
-                         const char* path, const std::uint8_t* pattern, std::size_t size)
+inline bool write_verify(brick::interfaces::storage::IFileSystem& file_system, const char* path, const std::uint8_t* pattern, std::size_t size)
 {
     if (path == nullptr || pattern == nullptr || size == 0U)
         return false;

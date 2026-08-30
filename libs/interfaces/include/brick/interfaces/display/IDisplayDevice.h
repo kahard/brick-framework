@@ -28,19 +28,7 @@ public:
     {
         const auto display_size = size();
         return {
-            DisplayPanelType::host,
-            display_size,
-            pixel_format(),
-            static_cast<std::size_t>(display_size.width) * display_size.height * pixel_format_bytes(pixel_format()),
-            1,
-            0,
-            false,
-            false,
-            false,
-            true,
-            false,
-            1,
-            RenderMode::partial,
+            DisplayPanelType::host, display_size, pixel_format(), static_cast<std::size_t>(display_size.width) * display_size.height * pixel_format_bytes(pixel_format()), 1, 0, false, false, false, true, false, 1, RenderMode::partial,
         };
     }
 
@@ -55,10 +43,7 @@ public:
     ///
     /// A driver may override this when it can queue the transfer. In that case
     /// the caller must wait_for_transfer_complete() before reusing buffer.data.
-    virtual bool submit_buffer(DisplayRect area, const PixelBuffer& buffer)
-    {
-        return draw_buffer(area, buffer);
-    }
+    virtual bool submit_buffer(DisplayRect area, const PixelBuffer& buffer) { return draw_buffer(area, buffer); }
 
     /// Waits until the last submitted buffer is no longer being read by the
     /// display driver. Synchronous devices are complete immediately.

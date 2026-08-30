@@ -12,8 +12,8 @@ namespace brick::platform::stm32::f1
 struct Stm32UsbHostConfig
 {
     GPIO_TypeDef* power_port = GPIOC;
-    std::uint16_t power_pin = GPIO_PIN_10;
-    std::uint8_t host_id = 0;
+    std::uint16_t power_pin  = GPIO_PIN_10;
+    std::uint8_t  host_id    = 0;
 };
 
 class Stm32UsbHost
@@ -21,34 +21,33 @@ class Stm32UsbHost
 public:
     explicit Stm32UsbHost(Stm32UsbHostConfig config = {}) : config_(config) {}
 
-    bool begin();
-    void process();
-    bool connected() const { return connected_; }
-    bool class_active() const { return class_active_; }
+    bool              begin();
+    void              process();
+    bool              connected() const { return connected_; }
+    bool              class_active() const { return class_active_; }
     HOST_StateTypeDef state() const { return host_.gState; }
-    bool port_connected() const
+    bool              port_connected() const
     {
-        constexpr std::uintptr_t host_port = 0x440U;
-        const auto* register_address = reinterpret_cast<volatile const std::uint32_t*>(
-            reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + host_port);
+        constexpr std::uintptr_t host_port        = 0x440U;
+        const auto*              register_address = reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + host_port);
         return (*register_address & USB_OTG_HPRT_PCSTS) != 0U;
     }
-    bool storage_ready() const;
-    bool read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
-    bool write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
-    USBH_HandleTypeDef& handle() { return host_; }
-    HCD_HandleTypeDef& hcd() { return hcd_; }
+    bool                 storage_ready() const;
+    bool                 read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
+    bool                 write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count);
+    USBH_HandleTypeDef&  handle() { return host_; }
+    HCD_HandleTypeDef&   hcd() { return hcd_; }
     static Stm32UsbHost* active_;
 
 private:
-    static void user_callback_(USBH_HandleTypeDef* host, uint8_t event);
+    static void        user_callback_(USBH_HandleTypeDef* host, uint8_t event);
     Stm32UsbHostConfig config_;
-    HCD_HandleTypeDef hcd_{};
+    HCD_HandleTypeDef  hcd_{};
     USBH_HandleTypeDef host_{};
-    bool connected_ = false;
-    bool class_active_ = false;
-    bool port_present_ = false;
-    std::uint32_t attach_tick_ = 0U;
+    bool               connected_    = false;
+    bool               class_active_ = false;
+    bool               port_present_ = false;
+    std::uint32_t      attach_tick_  = 0U;
 };
 
 }  // namespace brick::platform::stm32::f1

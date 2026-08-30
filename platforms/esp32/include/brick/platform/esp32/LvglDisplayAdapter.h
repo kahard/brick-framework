@@ -24,12 +24,12 @@ public:
 
 private:
     static void flush_callback_(lv_display_t* display, const lv_area_t* area, std::uint8_t* pixel_map);
-    void flush_(lv_display_t* display, const lv_area_t& area, std::uint8_t* pixel_map);
+    void        flush_(lv_display_t* display, const lv_area_t& area, std::uint8_t* pixel_map);
 
-    brick::interfaces::display::IDisplayDevice& device_;
-    brick::interfaces::display::IFrameBufferDisplay* framebuffers_ = nullptr;
-    void* framebuffer_1_ = nullptr;
-    void* framebuffer_2_ = nullptr;
+    brick::interfaces::display::IDisplayDevice&      device_;
+    brick::interfaces::display::IFrameBufferDisplay* framebuffers_  = nullptr;
+    void*                                            framebuffer_1_ = nullptr;
+    void*                                            framebuffer_2_ = nullptr;
 };
 
 }  // namespace brick::platform::esp32

@@ -14,7 +14,7 @@ LvglDisplayAdapter::LvglDisplayAdapter(brick::interfaces::display::IDisplayDevic
 lv_display_t* LvglDisplayAdapter::create(lv_display_render_mode_t render_mode, void* buffer_1, void* buffer_2, std::uint32_t buffer_size_bytes)
 {
     const auto display_size = device_.size();
-    auto*     display      = lv_display_create(display_size.width, display_size.height);
+    auto*      display      = lv_display_create(display_size.width, display_size.height);
     if (display == nullptr)
         return nullptr;
 
@@ -33,16 +33,16 @@ lv_display_t* LvglDisplayAdapter::create_framebuffer(brick::interfaces::display:
 
     brick::interfaces::display::WritablePixelBuffer buffer_1;
     brick::interfaces::display::WritablePixelBuffer buffer_2;
-    if (!framebuffers.get_frame_buffer(0, buffer_1) || !framebuffers.get_frame_buffer(1, buffer_2) || !buffer_1.valid() || !buffer_2.valid() ||
-        buffer_1.width != buffer_2.width || buffer_1.height != buffer_2.height || buffer_1.stride_bytes != buffer_2.stride_bytes)
+    if (!framebuffers.get_frame_buffer(0, buffer_1) || !framebuffers.get_frame_buffer(1, buffer_2) || !buffer_1.valid() || !buffer_2.valid() || buffer_1.width != buffer_2.width || buffer_1.height != buffer_2.height
+        || buffer_1.stride_bytes != buffer_2.stride_bytes)
         return nullptr;
 
     const auto buffer_size = static_cast<std::uint32_t>(buffer_1.stride_bytes * buffer_1.height);
-    auto* display = create(LV_DISPLAY_RENDER_MODE_DIRECT, buffer_1.data, buffer_2.data, buffer_size);
+    auto*      display     = create(LV_DISPLAY_RENDER_MODE_DIRECT, buffer_1.data, buffer_2.data, buffer_size);
     if (display == nullptr)
         return nullptr;
 
-    framebuffers_ = &framebuffers;
+    framebuffers_  = &framebuffers;
     framebuffer_1_ = buffer_1.data;
     framebuffer_2_ = buffer_2.data;
     return display;
@@ -68,14 +68,16 @@ void LvglDisplayAdapter::flush_callback_(lv_display_t* display, const lv_area_t*
 
 void LvglDisplayAdapter::flush_(lv_display_t* display, const lv_area_t& area, std::uint8_t* pixel_map)
 {
-    if (framebuffers_ != nullptr) {
+    if (framebuffers_ != nullptr)
+    {
         std::uint8_t index = 0xFF;
         if (pixel_map == framebuffer_1_)
             index = 0;
         else if (pixel_map == framebuffer_2_)
             index = 1;
 
-        if (index != 0xFF) {
+        if (index != 0xFF)
+        {
             framebuffers_->present_frame_buffer(index);
             device_.wait_for_vsync(100);
         }
@@ -92,12 +94,7 @@ void LvglDisplayAdapter::flush_(lv_display_t* display, const lv_area_t& area, st
     }
 
     const brick::interfaces::display::PixelBuffer buffer{
-        pixel_map,
-        static_cast<std::uint32_t>(width),
-        static_cast<std::uint32_t>(height),
-        static_cast<std::size_t>(width) * 2,
-        brick::interfaces::display::PixelFormat::rgb565,
-        false,
+        pixel_map, static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), static_cast<std::size_t>(width) * 2, brick::interfaces::display::PixelFormat::rgb565, false,
     };
     const brick::interfaces::display::DisplayRect rectangle{
         area.x1,

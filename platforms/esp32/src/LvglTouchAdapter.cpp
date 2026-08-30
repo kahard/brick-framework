@@ -5,8 +5,7 @@
 namespace brick::platform::esp32
 {
 
-LvglTouchAdapter::LvglTouchAdapter(brick::interfaces::display::ITouchscreen& touchscreen)
-    : touchscreen_(touchscreen)
+LvglTouchAdapter::LvglTouchAdapter(brick::interfaces::display::ITouchscreen& touchscreen) : touchscreen_(touchscreen)
 {
 }
 
@@ -31,7 +30,7 @@ void LvglTouchAdapter::read_callback_(lv_indev_t* indev, lv_indev_data_t* data)
     }
 
     std::array<brick::interfaces::display::TouchPoint, 1> points{};
-    std::size_t count = 0;
+    std::size_t                                           count = 0;
     if (!adapter->touchscreen_.read(points.data(), points.size(), count) || count == 0)
     {
         data->state = LV_INDEV_STATE_RELEASED;
@@ -39,11 +38,9 @@ void LvglTouchAdapter::read_callback_(lv_indev_t* indev, lv_indev_data_t* data)
     }
 
     const auto& point = points[0];
-    data->point.x = point.x;
-    data->point.y = point.y;
-    data->state = point.state == brick::interfaces::display::TouchState::released
-                      ? LV_INDEV_STATE_RELEASED
-                      : LV_INDEV_STATE_PRESSED;
+    data->point.x     = point.x;
+    data->point.y     = point.y;
+    data->state       = point.state == brick::interfaces::display::TouchState::released ? LV_INDEV_STATE_RELEASED : LV_INDEV_STATE_PRESSED;
 }
 
 }  // namespace brick::platform::esp32

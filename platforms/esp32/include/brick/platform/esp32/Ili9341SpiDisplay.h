@@ -40,12 +40,12 @@ class Ili9341SpiDisplay final : public brick::interfaces::display::IDisplayDevic
 public:
     explicit Ili9341SpiDisplay(Ili9341SpiDisplayConfig config);
     ~Ili9341SpiDisplay() override;
-    bool                                    begin() override;
-    brick::interfaces::display::DisplaySize size() const override;
-    brick::interfaces::display::PixelFormat pixel_format() const override;
+    bool                                            begin() override;
+    brick::interfaces::display::DisplaySize         size() const override;
+    brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool                                    set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool                                    draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
+    bool                                            set_rotation(brick::interfaces::display::Rotation rotation) override;
+    bool                                            draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
 
 private:
     bool begin_spi_();
@@ -57,12 +57,12 @@ private:
     bool set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height);
     bool initialize_panel_();
 
-    Ili9341SpiDisplayConfig      config_;
-    spi_device_handle_t          spi_device_ = nullptr;
-    bool                         spi_ready_  = false;
-    bool                         started_    = false;
+    Ili9341SpiDisplayConfig config_;
+    spi_device_handle_t     spi_device_ = nullptr;
+    bool                    spi_ready_  = false;
+    bool                    started_    = false;
     alignas(4) std::array<std::uint8_t, 4096> pixel_tx_buffer_{};
-    static constexpr const char* TAG         = "brick_ili9341_spi";
+    static constexpr const char* TAG = "brick_ili9341_spi";
 };
 
 }  // namespace brick::platform::esp32

@@ -32,13 +32,13 @@ struct DisplayCapabilities
     std::size_t      full_frame_bytes    = 0;
     std::size_t      dma_alignment_bytes = 1;
     std::size_t      max_transfer_bytes  = 0;
-    bool             dma                = false;
-    bool             vsync              = false;
-    bool             scanout_buffers    = false;
-    bool             partial_transfer   = false;
-    bool             async_transfer     = false;
-    std::uint8_t     max_buffer_count   = 1;
-    RenderMode       preferred_mode     = RenderMode::partial;
+    bool             dma                 = false;
+    bool             vsync               = false;
+    bool             scanout_buffers     = false;
+    bool             partial_transfer    = false;
+    bool             async_transfer      = false;
+    std::uint8_t     max_buffer_count    = 1;
+    RenderMode       preferred_mode      = RenderMode::partial;
 };
 
 }  // namespace brick::interfaces::display

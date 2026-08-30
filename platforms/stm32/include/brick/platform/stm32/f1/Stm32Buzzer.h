@@ -10,9 +10,9 @@ namespace brick::platform::stm32::f1
 
 struct Stm32BuzzerConfig
 {
-    GPIO_TypeDef* port = GPIOB;
-    std::uint16_t pin = GPIO_PIN_8;
-    bool active_high = true;
+    GPIO_TypeDef* port        = GPIOB;
+    std::uint16_t pin         = GPIO_PIN_8;
+    bool          active_high = true;
 };
 
 class Stm32Buzzer final : public brick::interfaces::audio::IBuzzer
@@ -26,7 +26,7 @@ public:
 
 private:
     Stm32BuzzerConfig config_;
-    bool initialized_ = false;
+    bool              initialized_ = false;
 };
 
 }  // namespace brick::platform::stm32::f1

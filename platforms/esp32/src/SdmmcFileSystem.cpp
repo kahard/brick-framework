@@ -1,7 +1,7 @@
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
 #include <cerrno>
 #include <cstring>
-#include "sd_pwr_ctrl_by_on_chip_ldo.h"
 
 namespace brick::platform::esp32
 {
@@ -35,12 +35,12 @@ bool SdmmcFileSystem::mount()
 {
     if (mounted_)
         return true;
-    sdmmc_host_t host                       = SDMMC_HOST_DEFAULT();
+    sdmmc_host_t host                        = SDMMC_HOST_DEFAULT();
     host.slot                                = SDMMC_HOST_SLOT_0;
     host.max_freq_khz                        = SDMMC_FREQ_HIGHSPEED;
     sd_pwr_ctrl_ldo_config_t ldo_config      = { .ldo_chan_id = 4 };
-    sd_pwr_ctrl_handle_t pwr_ctrl_handle     = nullptr;
-    const esp_err_t power_result             = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
+    sd_pwr_ctrl_handle_t     pwr_ctrl_handle = nullptr;
+    const esp_err_t          power_result    = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
     if (power_result != ESP_OK)
     {
         ESP_LOGE(TAG, "SDMMC power control failed: %s", esp_err_to_name(power_result));

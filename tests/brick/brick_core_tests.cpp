@@ -19,8 +19,8 @@
 #include "brick/core/input/TouchMapper.h"
 #include "brick/core/timing/PeriodicTimer.h"
 #include "brick/interfaces/display/DisplayCapabilities.h"
-#include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/display/DisplayRect.h"
+#include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/display/PixelBuffer.h"
 
 namespace
@@ -73,28 +73,28 @@ private:
 class FakeDisplay final : public brick::interfaces::display::IDisplayDevice
 {
 public:
-    bool begin() override { return true; }
+    bool                                    begin() override { return true; }
     brick::interfaces::display::DisplaySize size() const override { return { 320, 240 }; }
     brick::interfaces::display::PixelFormat pixel_format() const override { return brick::interfaces::display::PixelFormat::rgb565; }
-    bool set_rotation(brick::interfaces::display::Rotation) override { return true; }
+    bool                                    set_rotation(brick::interfaces::display::Rotation) override { return true; }
 
     bool draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override
     {
         if (!buffer.valid() || buffer.format != pixel_format() || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
             return false;
-        last_area = area;
-        last_pixels = buffer.data;
+        last_area       = area;
+        last_pixels     = buffer.data;
         last_byte_count = buffer.stride_bytes * buffer.height;
         submitted_areas.push_back(area);
         submitted_byte_counts.push_back(last_byte_count);
         return true;
     }
 
-    brick::interfaces::display::DisplayRect last_area{};
-    const std::uint8_t* last_pixels = nullptr;
-    std::size_t last_byte_count = 0;
+    brick::interfaces::display::DisplayRect              last_area{};
+    const std::uint8_t*                                  last_pixels     = nullptr;
+    std::size_t                                          last_byte_count = 0;
     std::vector<brick::interfaces::display::DisplayRect> submitted_areas;
-    std::vector<std::size_t> submitted_byte_counts;
+    std::vector<std::size_t>                             submitted_byte_counts;
 };
 
 class MemoryAssetReader final : public brick::interfaces::display::IAssetReader
@@ -102,8 +102,7 @@ class MemoryAssetReader final : public brick::interfaces::display::IAssetReader
 public:
     explicit MemoryAssetReader(const std::vector<std::uint8_t>& data) : data_(data) {}
 
-    bool read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset,
-              std::uint8_t* destination, std::size_t bytes) override
+    bool read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset, std::uint8_t* destination, std::size_t bytes) override
     {
         if (destination == nullptr || asset.data != data_.data() || offset + bytes > data_.size())
             return false;
@@ -114,8 +113,8 @@ public:
     }
 
     const std::vector<std::uint8_t>& data_;
-    std::vector<std::size_t> offsets;
-    std::vector<std::size_t> sizes;
+    std::vector<std::size_t>         offsets;
+    std::vector<std::size_t>         sizes;
 };
 
 class MemoryAssetSource final : public brick::interfaces::display::IAssetSource
@@ -123,13 +122,9 @@ class MemoryAssetSource final : public brick::interfaces::display::IAssetSource
 public:
     explicit MemoryAssetSource(const std::vector<std::uint8_t>& data) : data_(data) {}
 
-    bool read(const brick::interfaces::display::AssetDescriptor& asset,
-              std::size_t offset,
-              std::uint8_t* destination,
-              std::size_t bytes) override
+    bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination, std::size_t bytes) override
     {
-        if (destination == nullptr || offset > asset.size || bytes > asset.size - offset ||
-            asset.offset > data_.size() || bytes > data_.size() - asset.offset - offset)
+        if (destination == nullptr || offset > asset.size || bytes > asset.size - offset || asset.offset > data_.size() || bytes > data_.size() - asset.offset - offset)
             return false;
         std::memcpy(destination, data_.data() + asset.offset + offset, bytes);
         offsets.push_back(offset);
@@ -138,8 +133,8 @@ public:
     }
 
     const std::vector<std::uint8_t>& data_;
-    std::vector<std::size_t> offsets;
-    std::vector<std::size_t> sizes;
+    std::vector<std::size_t>         offsets;
+    std::vector<std::size_t>         sizes;
 };
 
 class MemoryFileSystem final : public brick::interfaces::storage::IFileSystem
@@ -331,29 +326,28 @@ void test_asset_streamer()
     for (std::size_t i = 0; i < pixels.size(); ++i)
         pixels[i] = static_cast<std::uint8_t>(i);
 
-    FakeDisplay display;
-    MemoryAssetReader reader(pixels);
+    FakeDisplay                       display;
+    MemoryAssetReader                 reader(pixels);
     brick::core::image::AssetStreamer streamer(display, reader);
-    const ImageAsset asset{pixels.data(), 4, 5, 8, pixels.size(), PixelFormat::rgb565};
-    std::uint8_t scratch[16] = {};
+    const ImageAsset                  asset{ pixels.data(), 4, 5, 8, pixels.size(), PixelFormat::rgb565 };
+    std::uint8_t                      scratch[16] = {};
 
-    assert(streamer.stream(asset, DisplayRect{10, 20, 4, 5}, scratch, sizeof(scratch)));
-    assert((reader.offsets == std::vector<std::size_t>{0, 16, 32}));
-    assert((reader.sizes == std::vector<std::size_t>{16, 16, 8}));
+    assert(streamer.stream(asset, DisplayRect{ 10, 20, 4, 5 }, scratch, sizeof(scratch)));
+    assert((reader.offsets == std::vector<std::size_t>{ 0, 16, 32 }));
+    assert((reader.sizes == std::vector<std::size_t>{ 16, 16, 8 }));
     assert(display.submitted_areas.size() == 3);
     assert(display.submitted_areas[0].y == 20 && display.submitted_areas[0].height == 2);
     assert(display.submitted_areas[1].y == 22 && display.submitted_areas[1].height == 2);
     assert(display.submitted_areas[2].y == 24 && display.submitted_areas[2].height == 1);
-    assert((display.submitted_byte_counts == std::vector<std::size_t>{16, 16, 8}));
-    assert(!streamer.stream(asset, DisplayRect{0, 0, 4, 5}, scratch, 7));
+    assert((display.submitted_byte_counts == std::vector<std::size_t>{ 16, 16, 8 }));
+    assert(!streamer.stream(asset, DisplayRect{ 0, 0, 4, 5 }, scratch, 7));
 
-    std::uint8_t framebuffer_data[40] = {};
-    const brick::interfaces::display::WritablePixelBuffer framebuffer{
-        framebuffer_data, 4, 5, 8, PixelFormat::rgb565, false};
+    std::uint8_t                                          framebuffer_data[40] = {};
+    const brick::interfaces::display::WritablePixelBuffer framebuffer{ framebuffer_data, 4, 5, 8, PixelFormat::rgb565, false };
     reader.offsets.clear();
     reader.sizes.clear();
     assert(streamer.stream_to_buffer(asset, framebuffer, scratch, sizeof(scratch)));
-    assert((reader.offsets == std::vector<std::size_t>{0, 16, 32}));
+    assert((reader.offsets == std::vector<std::size_t>{ 0, 16, 32 }));
     assert(std::memcmp(framebuffer_data, pixels.data(), pixels.size()) == 0);
 }
 
@@ -364,10 +358,10 @@ void test_asset_bundle()
     using brick::interfaces::display::AssetId;
     using brick::interfaces::display::PixelFormat;
 
-    const std::array<std::uint8_t, 8> data{1, 2, 3, 4, 5, 6, 7, 8};
-    const AssetDescriptor entries[] = {
-        {static_cast<AssetId>(1), 0, 4, 2, 1, 4, PixelFormat::rgb565},
-        {static_cast<AssetId>(2), 4, 4, 2, 1, 4, PixelFormat::rgb565},
+    const std::array<std::uint8_t, 8> data{ 1, 2, 3, 4, 5, 6, 7, 8 };
+    const AssetDescriptor             entries[] = {
+        { static_cast<AssetId>(1), 0, 4, 2, 1, 4, PixelFormat::rgb565 },
+        { static_cast<AssetId>(2), 4, 4, 2, 1, 4, PixelFormat::rgb565 },
     };
     const AssetBundle bundle(data.data(), data.size(), entries, 2);
 
@@ -387,30 +381,28 @@ void test_asset_source_streamer()
     using brick::interfaces::display::DisplayRect;
     using brick::interfaces::display::PixelFormat;
 
-    const std::vector<std::uint8_t> bundle_data{99, 98, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 97};
-    const AssetDescriptor asset{7, 2, 12, 2, 3, 4, PixelFormat::rgb565};
-    MemoryAssetSource source(bundle_data);
-    FakeDisplay display;
+    const std::vector<std::uint8_t>   bundle_data{ 99, 98, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 97 };
+    const AssetDescriptor             asset{ 7, 2, 12, 2, 3, 4, PixelFormat::rgb565 };
+    MemoryAssetSource                 source(bundle_data);
+    FakeDisplay                       display;
     brick::core::image::AssetStreamer streamer(display);
-    std::uint8_t scratch[4] = {};
+    std::uint8_t                      scratch[4] = {};
 
-    assert(streamer.stream(asset, source, DisplayRect{0, 0, 2, 3}, scratch, sizeof(scratch)));
-    assert((source.offsets == std::vector<std::size_t>{0, 4, 8}));
-    assert((source.sizes == std::vector<std::size_t>{4, 4, 4}));
+    assert(streamer.stream(asset, source, DisplayRect{ 0, 0, 2, 3 }, scratch, sizeof(scratch)));
+    assert((source.offsets == std::vector<std::size_t>{ 0, 4, 8 }));
+    assert((source.sizes == std::vector<std::size_t>{ 4, 4, 4 }));
     assert(display.submitted_byte_counts.size() == 3);
     assert(display.submitted_byte_counts[0] == 4 && display.submitted_byte_counts[2] == 4);
 
-    const AssetDescriptor out_of_bounds{8, 13, 4, 2, 1, 4, PixelFormat::rgb565};
-    assert(!streamer.stream(out_of_bounds, source, DisplayRect{0, 0, 2, 1}, scratch,
-                            sizeof(scratch)));
+    const AssetDescriptor out_of_bounds{ 8, 13, 4, 2, 1, 4, PixelFormat::rgb565 };
+    assert(!streamer.stream(out_of_bounds, source, DisplayRect{ 0, 0, 2, 1 }, scratch, sizeof(scratch)));
 }
 
 }  // namespace
 
 int main()
 {
-    constexpr auto st280 = brick::interfaces::board::BoardDescriptor{
-        "ST-280", "STM32F105VCT6", 1u << 0};
+    constexpr auto st280 = brick::interfaces::board::BoardDescriptor{ "ST-280", "STM32F105VCT6", 1u << 0 };
     assert(st280.has(brick::interfaces::board::Capability::display));
     using brick::interfaces::display::DisplayCapabilities;
     using brick::interfaces::display::DisplayRect;
@@ -423,14 +415,14 @@ int main()
     assert(empty_rect.empty());
 
     const std::uint8_t pixels[64] = {};
-    const PixelBuffer partial{ pixels, 8, 4, 20, brick::interfaces::display::PixelFormat::rgb565, true };
+    const PixelBuffer  partial{ pixels, 8, 4, 20, brick::interfaces::display::PixelFormat::rgb565, true };
     assert(partial.valid());
     assert(partial.stride_bytes > partial.width * 2);
 
     const DisplayCapabilities capabilities{};
     assert(capabilities.max_buffer_count == 1);
 
-    FakeDisplay display;
+    FakeDisplay       display;
     const PixelBuffer packed{ pixels, 8, 4, 16, brick::interfaces::display::PixelFormat::rgb565, false };
     assert(display.draw_buffer({ 12, 30, 8, 4 }, packed));
     assert(display.last_area.x == 12 && display.last_area.y == 30);

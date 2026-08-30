@@ -30,6 +30,7 @@ public:
     bool mount() override;
     void unmount();
     bool mounted() const { return mounted_; }
+    bool probe(const char* path);
     std::vector<std::string> list_files(const char* path) override;
     std::unique_ptr<interfaces::storage::IFile> open(const char* path, const char* mode) override;
 

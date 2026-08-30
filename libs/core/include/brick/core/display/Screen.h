@@ -25,22 +25,25 @@ public:
         Canvas& operator=(Canvas&&) noexcept = default;
 
         bool                                            valid() const { return pixels_ != nullptr; }
+        explicit operator bool() const { return valid(); }
         brick::interfaces::display::WritablePixelBuffer buffer()
         {
             return { reinterpret_cast<std::uint8_t*>(pixels_.get()),  static_cast<std::uint32_t>(area_.width),
                      static_cast<std::uint32_t>(area_.height),        static_cast<std::size_t>(area_.width) * sizeof(std::uint16_t),
                      brick::interfaces::display::PixelFormat::rgb565, false };
         }
-        bool clear(std::uint16_t color)
+        Canvas& clear(std::uint16_t color)
         {
             auto view = buffer();
-            return valid() && screen_.fill(view, color);
+            screen_.fill(view, color);
+            return *this;
         }
         template <typename Glyph>
-        bool text(std::int32_t x, std::int32_t y, const char* value, const char* characters, const Glyph* glyphs, std::size_t count, std::uint16_t color)
+        Canvas& text(std::int32_t x, std::int32_t y, const char* value, const char* characters, const Glyph* glyphs, std::size_t count, std::uint16_t color)
         {
             auto view = buffer();
-            return valid() && screen_.draw_text(view, x, y, value, characters, glyphs, count, color);
+            screen_.draw_text(view, x, y, value, characters, glyphs, count, color);
+            return *this;
         }
         bool present() const
         {

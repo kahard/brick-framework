@@ -10,6 +10,34 @@ SdmmcFile::SdmmcFile(std::FILE* handle) : handle_(handle)
 {
 }
 
+void SdmmcFileSystem::unmount()
+{
+    if (mounted_)
+    {
+        esp_vfs_fat_sdcard_unmount("/sdcard", card_);
+        mounted_ = false;
+        card_    = nullptr;
+    }
+    if (pwr_ctrl_handle_ != nullptr)
+    {
+        sd_pwr_ctrl_del_on_chip_ldo(pwr_ctrl_handle_);
+        pwr_ctrl_handle_ = nullptr;
+    }
+}
+
+bool SdmmcFileSystem::probe(const char* path)
+{
+    if (!mounted_ || path == nullptr)
+        return false;
+    std::FILE* file = std::fopen(path, "rb");
+    if (file == nullptr)
+        return false;
+    unsigned char byte = 0;
+    const bool    ok   = std::fread(&byte, 1, 1, file) == 1;
+    std::fclose(file);
+    return ok;
+}
+
 SdmmcFile::~SdmmcFile()
 {
     if (handle_ != nullptr)
@@ -39,14 +67,13 @@ bool SdmmcFileSystem::mount()
     host.slot                                = SDMMC_HOST_SLOT_0;
     host.max_freq_khz                        = SDMMC_FREQ_HIGHSPEED;
     sd_pwr_ctrl_ldo_config_t ldo_config      = { .ldo_chan_id = 4 };
-    sd_pwr_ctrl_handle_t     pwr_ctrl_handle = nullptr;
-    const esp_err_t          power_result    = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
+    const esp_err_t power_result             = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle_);
     if (power_result != ESP_OK)
     {
         ESP_LOGE(TAG, "SDMMC power control failed: %s", esp_err_to_name(power_result));
         return false;
     }
-    host.pwr_ctrl_handle                    = pwr_ctrl_handle;
+    host.pwr_ctrl_handle                    = pwr_ctrl_handle_;
     sdmmc_slot_config_t slot                = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width                              = 4;
     slot.cd                                 = SDMMC_SLOT_NO_CD;
@@ -56,6 +83,8 @@ bool SdmmcFileSystem::mount()
     const esp_err_t                  result = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &config, &card_);
     if (result != ESP_OK)
     {
+        sd_pwr_ctrl_del_on_chip_ldo(pwr_ctrl_handle_);
+        pwr_ctrl_handle_ = nullptr;
         ESP_LOGE(TAG, "SDMMC mount failed: %s", esp_err_to_name(result));
         return false;
     }

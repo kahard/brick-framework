@@ -63,11 +63,14 @@ bool SdmmcFileSystem::mount()
 {
     if (mounted_)
         return true;
-    sdmmc_host_t host                        = SDMMC_HOST_DEFAULT();
-    host.slot                                = SDMMC_HOST_SLOT_0;
-    host.max_freq_khz                        = SDMMC_FREQ_HIGHSPEED;
-    sd_pwr_ctrl_ldo_config_t ldo_config      = { .ldo_chan_id = 4 };
-    const esp_err_t power_result             = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle_);
+    ESP_LOGI(TAG, "SDMMC slot=%d clk=%d cmd=%d d0=%d width=%u freq=%lu kHz", config_.host_slot, config_.clk,
+             config_.cmd, config_.d0, static_cast<unsigned>(config_.bus_width),
+             static_cast<unsigned long>(config_.max_freq_khz));
+    sdmmc_host_t host                     = SDMMC_HOST_DEFAULT();
+    host.slot                             = config_.host_slot;
+    host.max_freq_khz                     = config_.max_freq_khz;
+    sd_pwr_ctrl_ldo_config_t ldo_config   = { .ldo_chan_id = 4 };
+    const esp_err_t          power_result = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle_);
     if (power_result != ESP_OK)
     {
         ESP_LOGE(TAG, "SDMMC power control failed: %s", esp_err_to_name(power_result));
@@ -75,11 +78,21 @@ bool SdmmcFileSystem::mount()
     }
     host.pwr_ctrl_handle                    = pwr_ctrl_handle_;
     sdmmc_slot_config_t slot                = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot.width                              = 4;
+    slot.clk                                = config_.clk;
+    slot.cmd                                = config_.cmd;
+    slot.d0                                 = config_.d0;
+    slot.d1                                 = config_.d1;
+    slot.d2                                 = config_.d2;
+    slot.d3                                 = config_.d3;
+    slot.width                              = config_.bus_width;
     slot.cd                                 = SDMMC_SLOT_NO_CD;
     slot.wp                                 = SDMMC_SLOT_NO_WP;
     slot.flags                              = 0;
-    esp_vfs_fat_sdmmc_mount_config_t config = { .format_if_mount_failed = false, .max_files = 5, .allocation_unit_size = 16 * 1024, .disk_status_check_enable = false, .use_one_fat = false };
+    esp_vfs_fat_sdmmc_mount_config_t config = { .format_if_mount_failed   = false,
+                                                .max_files                = 5,
+                                                .allocation_unit_size     = 16 * 1024,
+                                                .disk_status_check_enable = false,
+                                                .use_one_fat              = false };
     const esp_err_t                  result = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &config, &card_);
     if (result != ESP_OK)
     {

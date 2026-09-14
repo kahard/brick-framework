@@ -10,9 +10,8 @@ class IBacklight
 public:
     virtual ~IBacklight() = default;
 
-    virtual bool begin()                              = 0;
-    virtual bool set_enabled(bool enabled)            = 0;
-    virtual bool set_brightness(std::uint8_t percent) = 0;
+    virtual bool         set_brightness_percent(std::uint8_t percent) = 0;
+    virtual std::uint8_t brightness_percent() const                   = 0;
 };
 
 }  // namespace brick::interfaces::display

@@ -61,7 +61,8 @@ private:
     spi_device_handle_t     spi_device_ = nullptr;
     bool                    spi_ready_  = false;
     bool                    started_    = false;
-    alignas(4) std::array<std::uint8_t, 4096> pixel_tx_buffer_{};
+    static constexpr std::size_t kPixelTransferBytes = 4 * 1024;
+    alignas(4) std::array<std::array<std::uint8_t, kPixelTransferBytes>, 2> pixel_tx_buffers_{};
     static constexpr const char* TAG = "brick_ili9341_spi";
 };
 

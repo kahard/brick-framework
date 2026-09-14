@@ -52,7 +52,7 @@ brick::interfaces::display::DisplayCapabilities Ili9341SpiDisplay::capabilities(
         pixel_format(),
         static_cast<std::size_t>(config_.width) * config_.height * brick::interfaces::display::pixel_format_bytes(pixel_format()),
         4,
-        4096,
+        kPixelTransferBytes,
         true,
         false,
         false,
@@ -103,7 +103,7 @@ bool Ili9341SpiDisplay::begin_spi_()
     bus.miso_io_num      = config_.miso_gpio;
     bus.quadwp_io_num    = GPIO_NUM_NC;
     bus.quadhd_io_num    = GPIO_NUM_NC;
-    bus.max_transfer_sz  = 4096;
+    bus.max_transfer_sz  = static_cast<int>(kPixelTransferBytes);
     auto err             = spi_bus_initialize(config_.spi_host, &bus, SPI_DMA_CH_AUTO);
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
         return false;
@@ -112,7 +112,7 @@ bool Ili9341SpiDisplay::begin_spi_()
     device.clock_speed_hz                = static_cast<int>(config_.spi_clock_hz);
     device.mode                          = config_.spi_mode;
     device.spics_io_num                  = config_.cs_gpio;
-    device.queue_size                    = 1;
+    device.queue_size                    = 2;
     return spi_bus_add_device(config_.spi_host, &device, &spi_device_) == ESP_OK;
 }
 
@@ -142,10 +142,23 @@ bool Ili9341SpiDisplay::send_command_(std::uint8_t command, const std::uint8_t* 
 
 bool Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
 {
-    constexpr std::size_t kChunk = 4096;
+    constexpr std::size_t kQueueDepth = 2;
+    std::array<spi_transaction_t, kQueueDepth> transactions{};
+    std::size_t queued = 0;
+    std::size_t next_buffer = 0;
+
+    gpio_set_level(config_.dc_gpio, 1);
     while (length != 0)
     {
-        auto chunk = std::min(length, kChunk);
+        if (queued == kQueueDepth)
+        {
+            spi_transaction_t* completed = nullptr;
+            if (spi_device_get_trans_result(spi_device_, &completed, portMAX_DELAY) != ESP_OK)
+                return false;
+            --queued;
+        }
+
+        std::size_t chunk = std::min(length, kPixelTransferBytes);
         // RGB565 assets are stored in the portable little-endian memory
         // representation. ILI9341 expects each pixel on SPI MSB first.
         chunk &= ~std::size_t{ 1 };
@@ -153,13 +166,29 @@ bool Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
             return false;
         for (std::size_t index = 0; index < chunk; index += 2)
         {
-            pixel_tx_buffer_[index]     = data[index + 1];
-            pixel_tx_buffer_[index + 1] = data[index];
+            pixel_tx_buffers_[next_buffer][index]     = data[index + 1];
+            pixel_tx_buffers_[next_buffer][index + 1] = data[index];
         }
-        if (!transmit_(true, pixel_tx_buffer_.data(), chunk))
+
+        spi_transaction_t& transaction = transactions[next_buffer];
+        transaction = {};
+        transaction.length = chunk * 8;
+        transaction.tx_buffer = pixel_tx_buffers_[next_buffer].data();
+        if (spi_device_queue_trans(spi_device_, &transaction, portMAX_DELAY) != ESP_OK)
             return false;
+
         data += chunk;
         length -= chunk;
+        next_buffer = (next_buffer + 1) % kQueueDepth;
+        ++queued;
+    }
+
+    while (queued != 0)
+    {
+        spi_transaction_t* completed = nullptr;
+        if (spi_device_get_trans_result(spi_device_, &completed, portMAX_DELAY) != ESP_OK)
+            return false;
+        --queued;
     }
     return true;
 }

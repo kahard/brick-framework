@@ -60,7 +60,7 @@ bool SdSpiFileSystem::mount()
         ESP_LOGE(kTag, "SPI bus init failed: %s", esp_err_to_name(result));
         return false;
     }
-    bus_initialized_                        = true;
+    bus_initialized_                        = result == ESP_OK;
     sdmmc_host_t host                       = SDSPI_HOST_DEFAULT();
     host.slot                               = config_.host;
     host.max_freq_khz                       = config_.max_freq_khz;

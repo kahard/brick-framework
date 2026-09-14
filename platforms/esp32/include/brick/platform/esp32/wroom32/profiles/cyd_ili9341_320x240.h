@@ -18,7 +18,7 @@ inline Ili9341SpiDisplayConfig cyd_ili9341_320x240()
     config.dc_gpio        = GPIO_NUM_2;
     config.backlight_gpio = GPIO_NUM_21;
     config.spi_mode       = 0;
-    config.spi_clock_hz   = 40'000'000;
+    config.spi_clock_hz   = 80'000'000;
     config.bgr            = false;
     config.madctl         = 0x40;
     return config;

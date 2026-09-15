@@ -132,7 +132,7 @@ public:
                     if (glyph.data[row * glyph.stride + column / 8] & (0x80u >> (column & 7)))
                     {
                         const auto px = x + column;
-                        const auto py = y + row;
+                        const auto py = y + glyph.top + row;
                         if (px >= 0 && py >= 0 && px < static_cast<std::int32_t>(buffer.width) && py < static_cast<std::int32_t>(buffer.height))
                             reinterpret_cast<std::uint16_t*>(buffer.data + py * buffer.stride_bytes)[px] = color;
                     }

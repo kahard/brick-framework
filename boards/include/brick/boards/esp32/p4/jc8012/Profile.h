@@ -63,9 +63,9 @@ inline brick::platform::esp32::touch::Gsl3680Config touch_config(Rotation rotati
     return config;
 }
 
-inline brick::platform::esp32::p4::SdmmcFileSystemConfig sd_config()
+inline brick::platform::esp32::SdmmcFileSystemConfig sd_config()
 {
-    brick::platform::esp32::p4::SdmmcFileSystemConfig config;
+    brick::platform::esp32::SdmmcFileSystemConfig config;
     config.clk          = GPIO_NUM_43;
     config.cmd          = GPIO_NUM_44;
     config.d0           = GPIO_NUM_39;

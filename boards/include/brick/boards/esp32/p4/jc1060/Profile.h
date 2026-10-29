@@ -47,7 +47,7 @@ inline brick::platform::esp32::touch::Gt911Config touch_config()
     return config;
 }
 
-inline brick::platform::esp32::p4::SdmmcFileSystemConfig sd_config()
+inline brick::platform::esp32::SdmmcFileSystemConfig sd_config()
 {
     return {};
 }

@@ -79,7 +79,7 @@ public:
     brick::platform::esp32::p4::MipiDsiDisplay&      display() { return display_.get(); }
     brick::platform::esp32::touch::Gt911Touchscreen& touch() { return touch_.get(); }
     brick::interfaces::display::IBacklight&          backlight() { return backlight_.get(); }
-    brick::platform::esp32::p4::SdmmcFileSystem&     sd() { return sd_.get(); }
+    brick::platform::esp32::SdmmcFileSystem&         sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&          time() { return time_; }
     brick::interfaces::logging::ILogger&             logger() { return logger_.get(); }
 
@@ -94,7 +94,7 @@ private:
     Peripheral<Features::display, brick::platform::esp32::p4::MipiDsiDisplay>    display_;
     Peripheral<Features::backlight, brick::platform::esp32::GpioBacklight>       backlight_;
     Peripheral<Features::touch, brick::platform::esp32::touch::Gt911Touchscreen> touch_;
-    Peripheral<Features::sd, brick::platform::esp32::p4::SdmmcFileSystem>        sd_;
+    Peripheral<Features::sd, brick::platform::esp32::SdmmcFileSystem>            sd_;
 };
 
 using Jc1060Board = Jc1060BoardTemplate<>;

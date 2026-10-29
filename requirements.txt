@@ -1,0 +1,4 @@
+# Pinned host tools: clang-format for `make format`, Pillow for tools/assets.
+# Install with `make setup`.
+clang-format==17.0.6
+pillow==13.0.0

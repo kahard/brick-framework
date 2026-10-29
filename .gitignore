@@ -5,3 +5,5 @@
 *.vcxproj.user
 **/assets/generated/
 **/generated_assets.h
+.venv/
+__pycache__/

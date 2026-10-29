@@ -72,6 +72,10 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+Formatting uses clang-format 17, pinned in `requirements.txt` together with
+Pillow for the asset tools. `make setup` installs both into `.venv`; then
+`make format` / `make format-check` work the same on Windows, Linux and macOS.
+
 The tests cover timer scheduling and wraparound, BMP/WAV decoding, and the
 audio player using deterministic in-memory fakes.
 

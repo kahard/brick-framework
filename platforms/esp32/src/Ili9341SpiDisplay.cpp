@@ -19,7 +19,8 @@ bool Ili9341SpiDisplay::begin()
 {
     if (started_)
         return true;
-    if (config_.sclk_gpio == GPIO_NUM_NC || config_.mosi_gpio == GPIO_NUM_NC || config_.cs_gpio == GPIO_NUM_NC || config_.dc_gpio == GPIO_NUM_NC)
+    if (config_.sclk_gpio == GPIO_NUM_NC || config_.mosi_gpio == GPIO_NUM_NC || config_.cs_gpio == GPIO_NUM_NC
+        || config_.dc_gpio == GPIO_NUM_NC)
         return false;
     gpio_set_direction(config_.dc_gpio, GPIO_MODE_OUTPUT);
     if (config_.backlight_gpio != GPIO_NUM_NC)
@@ -50,7 +51,8 @@ brick::interfaces::display::DisplayCapabilities Ili9341SpiDisplay::capabilities(
         brick::interfaces::display::DisplayPanelType::spi,
         { config_.width, config_.height },
         pixel_format(),
-        static_cast<std::size_t>(config_.width) * config_.height * brick::interfaces::display::pixel_format_bytes(pixel_format()),
+        static_cast<std::size_t>(config_.width) * config_.height
+            * brick::interfaces::display::pixel_format_bytes(pixel_format()),
         4,
         kPixelTransferBytes,
         true,
@@ -73,14 +75,19 @@ bool Ili9341SpiDisplay::set_rotation(brick::interfaces::display::Rotation rotati
     return send_command_(0x36, { config_.madctl });
 }
 
-bool Ili9341SpiDisplay::draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer)
+bool Ili9341SpiDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
+                                    const brick::interfaces::display::PixelBuffer& buffer)
 {
     constexpr std::size_t bytes_per_pixel = 2;
-    if (!started_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width || area.y + area.height > config_.height || !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width)
-        || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format() || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel)
+    if (!started_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width
+        || area.y + area.height > config_.height || !buffer.valid()
+        || buffer.width != static_cast<std::uint32_t>(area.width)
+        || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format()
+        || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel)
         return false;
 
-    if (!set_address_window_(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y), static_cast<std::uint16_t>(area.width), static_cast<std::uint16_t>(area.height)))
+    if (!set_address_window_(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y),
+                             static_cast<std::uint16_t>(area.width), static_cast<std::uint16_t>(area.height)))
         return false;
 
     const std::size_t row_bytes = static_cast<std::size_t>(area.width) * bytes_per_pixel;
@@ -142,10 +149,10 @@ bool Ili9341SpiDisplay::send_command_(std::uint8_t command, const std::uint8_t* 
 
 bool Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
 {
-    constexpr std::size_t kQueueDepth = 2;
+    constexpr std::size_t                      kQueueDepth = 2;
     std::array<spi_transaction_t, kQueueDepth> transactions{};
-    std::size_t queued = 0;
-    std::size_t next_buffer = 0;
+    std::size_t                                queued      = 0;
+    std::size_t                                next_buffer = 0;
 
     gpio_set_level(config_.dc_gpio, 1);
     while (length != 0)
@@ -171,9 +178,9 @@ bool Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
         }
 
         spi_transaction_t& transaction = transactions[next_buffer];
-        transaction = {};
-        transaction.length = chunk * 8;
-        transaction.tx_buffer = pixel_tx_buffers_[next_buffer].data();
+        transaction                    = {};
+        transaction.length             = chunk * 8;
+        transaction.tx_buffer          = pixel_tx_buffers_[next_buffer].data();
         if (spi_device_queue_trans(spi_device_, &transaction, portMAX_DELAY) != ESP_OK)
             return false;
 
@@ -197,8 +204,10 @@ bool Ili9341SpiDisplay::set_address_window_(std::uint16_t x, std::uint16_t y, st
 {
     const std::uint16_t x2       = x + width - 1;
     const std::uint16_t y2       = y + height - 1;
-    const std::uint8_t  column[] = { static_cast<std::uint8_t>(x >> 8), static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(x2 >> 8), static_cast<std::uint8_t>(x2) };
-    const std::uint8_t  row[]    = { static_cast<std::uint8_t>(y >> 8), static_cast<std::uint8_t>(y), static_cast<std::uint8_t>(y2 >> 8), static_cast<std::uint8_t>(y2) };
+    const std::uint8_t  column[] = { static_cast<std::uint8_t>(x >> 8), static_cast<std::uint8_t>(x),
+                                     static_cast<std::uint8_t>(x2 >> 8), static_cast<std::uint8_t>(x2) };
+    const std::uint8_t  row[]    = { static_cast<std::uint8_t>(y >> 8), static_cast<std::uint8_t>(y),
+                                     static_cast<std::uint8_t>(y2 >> 8), static_cast<std::uint8_t>(y2) };
     return send_command_(0x2A, column, sizeof(column)) && send_command_(0x2B, row, sizeof(row)) && send_command_(0x2C);
 }
 
@@ -207,9 +216,15 @@ bool Ili9341SpiDisplay::initialize_panel_()
     if (!send_command_(0x01))
         return false;
     vTaskDelay(pdMS_TO_TICKS(120));
-    if (!send_command_(0x28) || !send_command_(0x3A, { 0x55 }) || !send_command_(0x36, { config_.madctl }) || !send_command_(0xC0, { 0x23 }) || !send_command_(0xC1, { 0x10 }) || !send_command_(0xC5, { 0x3E, 0x28 }) || !send_command_(0xC7, { 0x86 })
-        || !send_command_(0xB1, { 0x00, 0x18 }) || !send_command_(0xB6, { 0x08, 0x82, 0x27 }) || !send_command_(0xE0, { 0x0F, 0x31, 0x2B, 0x0C, 0x0E, 0x08, 0x4E, 0xF1, 0x37, 0x07, 0x10, 0x03, 0x0E, 0x09, 0x00 })
-        || !send_command_(0xE1, { 0x00, 0x0E, 0x14, 0x03, 0x11, 0x07, 0x31, 0xC1, 0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F }) || !send_command_(0x11))
+    if (!send_command_(0x28) || !send_command_(0x3A, { 0x55 }) || !send_command_(0x36, { config_.madctl })
+        || !send_command_(0xC0, { 0x23 }) || !send_command_(0xC1, { 0x10 }) || !send_command_(0xC5, { 0x3E, 0x28 })
+        || !send_command_(0xC7, { 0x86 }) || !send_command_(0xB1, { 0x00, 0x18 })
+        || !send_command_(0xB6, { 0x08, 0x82, 0x27 })
+        || !send_command_(0xE0,
+                          { 0x0F, 0x31, 0x2B, 0x0C, 0x0E, 0x08, 0x4E, 0xF1, 0x37, 0x07, 0x10, 0x03, 0x0E, 0x09, 0x00 })
+        || !send_command_(0xE1,
+                          { 0x00, 0x0E, 0x14, 0x03, 0x11, 0x07, 0x31, 0xC1, 0x48, 0x08, 0x0F, 0x0C, 0x31, 0x36, 0x0F })
+        || !send_command_(0x11))
         return false;
     vTaskDelay(pdMS_TO_TICKS(120));
     if (!send_command_(0x29))

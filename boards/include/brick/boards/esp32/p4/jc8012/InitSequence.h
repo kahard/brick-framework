@@ -39,4 +39,4 @@ inline constexpr std::uint8_t kInitSequence[] = {
     1,    0x00, 0x14, 0xFF,
 };
 
-} // namespace brick::boards::jc8012
+}  // namespace brick::boards::jc8012

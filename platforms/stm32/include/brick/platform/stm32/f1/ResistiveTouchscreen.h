@@ -34,8 +34,10 @@ private:
     bool         layers_connected_();
     bool         sample_position_(std::uint16_t& raw_x, std::uint16_t& raw_y);
     bool         sample_adc_(std::uint32_t channel, std::uint16_t& value);
-    void         configure_pin_(GPIO_TypeDef* port, std::uint16_t pin, std::uint32_t mode, std::uint32_t pull = GPIO_NOPULL) const;
-    std::int16_t map_(std::uint16_t value, std::uint16_t minimum, std::uint16_t maximum, std::uint16_t size, bool invert) const;
+    void         configure_pin_(GPIO_TypeDef* port, std::uint16_t pin, std::uint32_t mode,
+                                std::uint32_t pull = GPIO_NOPULL) const;
+    std::int16_t map_(std::uint16_t value, std::uint16_t minimum, std::uint16_t maximum, std::uint16_t size,
+                      bool invert) const;
 
     ResistiveTouchscreenConfig config_;
     ADC_HandleTypeDef          adc_{};

@@ -7,7 +7,8 @@ namespace brick::core::audio
 
 AudioBuffer::AudioBuffer() = default;
 
-AudioBuffer::AudioBuffer(std::vector<std::uint8_t> samples, std::uint32_t sample_rate) : samples_(std::move(samples)), sample_rate_(sample_rate)
+AudioBuffer::AudioBuffer(std::vector<std::uint8_t> samples, std::uint32_t sample_rate)
+    : samples_(std::move(samples)), sample_rate_(sample_rate)
 {
 }
 

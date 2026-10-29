@@ -3,7 +3,8 @@
 namespace brick::platform::esp32
 {
 
-PwmAudioOutput::PwmAudioOutput(int pin, int channel, int carrier_hz) : pin_(pin), channel_(static_cast<ledc_channel_t>(channel)), carrier_hz_(carrier_hz)
+PwmAudioOutput::PwmAudioOutput(int pin, int channel, int carrier_hz)
+    : pin_(pin), channel_(static_cast<ledc_channel_t>(channel)), carrier_hz_(carrier_hz)
 {
 }
 

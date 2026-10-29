@@ -29,7 +29,8 @@ bool Gsl3680Touchscreen::begin()
 {
     if (started_)
         return true;
-    if (config_.sda_gpio == GPIO_NUM_NC || config_.scl_gpio == GPIO_NUM_NC || config_.display_size.width == 0 || config_.display_size.height == 0)
+    if (config_.sda_gpio == GPIO_NUM_NC || config_.scl_gpio == GPIO_NUM_NC || config_.display_size.width == 0
+        || config_.display_size.height == 0)
         return false;
 
     i2c_master_bus_config_t bus_config      = {};
@@ -96,7 +97,8 @@ bool Gsl3680Touchscreen::read(brick::interfaces::display::TouchPoint* points, st
         point.raw_x      = point.x;
         point.raw_y      = point.y;
         point.pressure   = static_cast<std::int16_t>(data[i].strength);
-        point.state      = active_[id] ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
+        point.state      = active_[id] ? brick::interfaces::display::TouchState::moved :
+                                         brick::interfaces::display::TouchState::pressed;
         seen[id]         = true;
     }
     for (std::size_t id = 0; id < active_.size() && count < capacity; ++id)

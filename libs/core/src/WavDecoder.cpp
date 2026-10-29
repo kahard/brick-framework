@@ -16,7 +16,8 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
         return false;
 
     std::uint8_t header[12];
-    if (!read_exact(*file, header, sizeof(header)) || std::memcmp(header, "RIFF", 4) != 0 || std::memcmp(header + 8, "WAVE", 4) != 0)
+    if (!read_exact(*file, header, sizeof(header)) || std::memcmp(header, "RIFF", 4) != 0
+        || std::memcmp(header + 8, "WAVE", 4) != 0)
         return false;
 
     std::uint16_t format = 0, channels = 0, bits = 0;
@@ -68,7 +69,8 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
             break;
     }
 
-    if (!have_fmt || !have_data || format != 1 || (channels != 1 && channels != 2) || (bits != 8 && bits != 16) || sample_rate == 0 || data_size == 0)
+    if (!have_fmt || !have_data || format != 1 || (channels != 1 && channels != 2) || (bits != 8 && bits != 16)
+        || sample_rate == 0 || data_size == 0)
         return false;
 
     const std::size_t bytes_per_sample = bits / 8;
@@ -93,7 +95,8 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
                 const auto* sample = frame + channel * bytes_per_sample;
                 mixed += bits == 8 ? static_cast<int>(sample[0]) - 128 : static_cast<std::int16_t>(read_u16(sample));
             }
-            mixed                   = bits == 8 ? mixed / static_cast<int>(channels) + 128 : 128 + (mixed / static_cast<int>(channels) >> 8);
+            mixed =
+                bits == 8 ? mixed / static_cast<int>(channels) + 128 : 128 + (mixed / static_cast<int>(channels) >> 8);
             samples[output_index++] = static_cast<std::uint8_t>(std::clamp(mixed, 0, 255));
         }
         remaining -= frames;

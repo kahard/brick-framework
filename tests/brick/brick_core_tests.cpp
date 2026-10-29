@@ -75,12 +75,17 @@ class FakeDisplay final : public brick::interfaces::display::IDisplayDevice
 public:
     bool                                    begin() override { return true; }
     brick::interfaces::display::DisplaySize size() const override { return { 320, 240 }; }
-    brick::interfaces::display::PixelFormat pixel_format() const override { return brick::interfaces::display::PixelFormat::rgb565; }
-    bool                                    set_rotation(brick::interfaces::display::Rotation) override { return true; }
-
-    bool draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override
+    brick::interfaces::display::PixelFormat pixel_format() const override
     {
-        if (!buffer.valid() || buffer.format != pixel_format() || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
+        return brick::interfaces::display::PixelFormat::rgb565;
+    }
+    bool set_rotation(brick::interfaces::display::Rotation) override { return true; }
+
+    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
+                     const brick::interfaces::display::PixelBuffer& buffer) override
+    {
+        if (!buffer.valid() || buffer.format != pixel_format()
+            || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
             return false;
         last_area       = area;
         last_pixels     = buffer.data;
@@ -102,7 +107,8 @@ class MemoryAssetReader final : public brick::interfaces::display::IAssetReader
 public:
     explicit MemoryAssetReader(const std::vector<std::uint8_t>& data) : data_(data) {}
 
-    bool read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset, std::uint8_t* destination, std::size_t bytes) override
+    bool read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset, std::uint8_t* destination,
+              std::size_t bytes) override
     {
         if (destination == nullptr || asset.data != data_.data() || offset + bytes > data_.size())
             return false;
@@ -122,9 +128,11 @@ class MemoryAssetSource final : public brick::interfaces::display::IAssetSource
 public:
     explicit MemoryAssetSource(const std::vector<std::uint8_t>& data) : data_(data) {}
 
-    bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination, std::size_t bytes) override
+    bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
+              std::size_t bytes) override
     {
-        if (destination == nullptr || offset > asset.size || bytes > asset.size - offset || asset.offset > data_.size() || bytes > data_.size() - asset.offset - offset)
+        if (destination == nullptr || offset > asset.size || bytes > asset.size - offset || asset.offset > data_.size()
+            || bytes > data_.size() - asset.offset - offset)
             return false;
         std::memcpy(destination, data_.data() + asset.offset + offset, bytes);
         offsets.push_back(offset);
@@ -224,7 +232,8 @@ void test_bmp_decoder()
     MemoryFileSystem fs;
     fs.files["test.bmp"]           = make_2x2_bmp();
     std::uint8_t pixels[2 * 2 * 2] = {};
-    const bool   decoded           = brick::core::image::BmpDecoder::decode(fs, "test.bmp", pixels, { .target_width = 2, .target_height = 2 });
+    const bool   decoded =
+        brick::core::image::BmpDecoder::decode(fs, "test.bmp", pixels, { .target_width = 2, .target_height = 2 });
     assert(decoded);
 
     // RGB565, native little endian: top-left red, top-right green,
@@ -233,7 +242,8 @@ void test_bmp_decoder()
         0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF,
     };
     assert(std::memcmp(pixels, expected, sizeof(expected)) == 0);
-    assert(!brick::core::image::BmpDecoder::decode(fs, "missing.bmp", pixels, { .target_width = 2, .target_height = 2 }));
+    assert(
+        !brick::core::image::BmpDecoder::decode(fs, "missing.bmp", pixels, { .target_width = 2, .target_height = 2 }));
 }
 
 std::vector<std::uint8_t> make_pcm_wav()
@@ -343,7 +353,8 @@ void test_asset_streamer()
     assert(!streamer.stream(asset, DisplayRect{ 0, 0, 4, 5 }, scratch, 7));
 
     std::uint8_t                                          framebuffer_data[40] = {};
-    const brick::interfaces::display::WritablePixelBuffer framebuffer{ framebuffer_data, 4, 5, 8, PixelFormat::rgb565, false };
+    const brick::interfaces::display::WritablePixelBuffer framebuffer{ framebuffer_data,    4,    5, 8,
+                                                                       PixelFormat::rgb565, false };
     reader.offsets.clear();
     reader.sizes.clear();
     assert(streamer.stream_to_buffer(asset, framebuffer, scratch, sizeof(scratch)));

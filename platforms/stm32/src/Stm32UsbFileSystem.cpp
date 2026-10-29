@@ -26,11 +26,16 @@ extern "C" DSTATUS disk_status(BYTE)
 }
 extern "C" DRESULT disk_read(BYTE, BYTE* buffer, DWORD sector, UINT count)
 {
-    return g_usb_host != nullptr && g_usb_host->read_blocks(static_cast<std::uint32_t>(sector), buffer, count) ? RES_OK : RES_NOTRDY;
+    return g_usb_host != nullptr && g_usb_host->read_blocks(static_cast<std::uint32_t>(sector), buffer, count) ?
+               RES_OK :
+               RES_NOTRDY;
 }
 extern "C" DRESULT disk_write(BYTE, const BYTE* buffer, DWORD sector, UINT count)
 {
-    return g_usb_host != nullptr && g_usb_host->write_blocks(static_cast<std::uint32_t>(sector), const_cast<BYTE*>(buffer), count) ? RES_OK : RES_NOTRDY;
+    return g_usb_host != nullptr
+                   && g_usb_host->write_blocks(static_cast<std::uint32_t>(sector), const_cast<BYTE*>(buffer), count) ?
+               RES_OK :
+               RES_NOTRDY;
 }
 extern "C" DRESULT disk_ioctl(BYTE, BYTE, void*)
 {

@@ -5,11 +5,13 @@
 namespace brick::core::input
 {
 
-TouchMapper::TouchMapper(brick::interfaces::display::DisplaySize display_size, TouchCalibration calibration) : display_size_(display_size), calibration_(calibration)
+TouchMapper::TouchMapper(brick::interfaces::display::DisplaySize display_size, TouchCalibration calibration)
+    : display_size_(display_size), calibration_(calibration)
 {
 }
 
-brick::interfaces::display::TouchPoint TouchMapper::map(std::uint8_t id, std::int16_t raw_x, std::int16_t raw_y, std::int16_t pressure) const
+brick::interfaces::display::TouchPoint TouchMapper::map(std::uint8_t id, std::int16_t raw_x, std::int16_t raw_y,
+                                                        std::int16_t pressure) const
 {
     auto x     = raw_x;
     auto y     = raw_y;
@@ -36,7 +38,8 @@ brick::interfaces::display::TouchPoint TouchMapper::map(std::uint8_t id, std::in
     return point;
 }
 
-std::int16_t TouchMapper::normalize(std::int16_t value, std::int16_t minimum, std::int16_t maximum, bool inverted, std::uint16_t output_size)
+std::int16_t TouchMapper::normalize(std::int16_t value, std::int16_t minimum, std::int16_t maximum, bool inverted,
+                                    std::uint16_t output_size)
 {
     if (output_size == 0 || maximum <= minimum)
     {

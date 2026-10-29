@@ -71,7 +71,7 @@ bool SdSpiFileSystem::mount()
     mount_config.format_if_mount_failed     = false;
     mount_config.max_files                  = 5;
     mount_config.allocation_unit_size       = 16 * 1024;
-    result                                  = esp_vfs_fat_sdspi_mount(config_.mount_point, &host, &device, &mount_config, &card_);
+    result = esp_vfs_fat_sdspi_mount(config_.mount_point, &host, &device, &mount_config, &card_);
     if (result != ESP_OK)
     {
         ESP_LOGE(kTag, "SD mount failed: %s", esp_err_to_name(result));

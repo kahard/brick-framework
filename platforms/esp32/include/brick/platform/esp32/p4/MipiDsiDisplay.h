@@ -51,16 +51,18 @@ public:
     brick::interfaces::display::DisplaySize         size() const override;
     brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool                                            set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool                                            draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
-    bool                                            wait_for_transfer_complete(std::uint32_t timeout_ms) override;
+    bool set_rotation(brick::interfaces::display::Rotation rotation) override;
+    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
+                     const brick::interfaces::display::PixelBuffer& buffer) override;
+    bool wait_for_transfer_complete(std::uint32_t timeout_ms) override;
 
 private:
     bool                  send_init_sequence_();
     bool                  apply_rotation_();
     static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void*);
     static bool IRAM_ATTR on_refresh_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void*);
-    bool                  rotated_transfer_(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer);
+    bool                  rotated_transfer_(brick::interfaces::display::DisplayRect        area,
+                                            const brick::interfaces::display::PixelBuffer& buffer);
     bool                  ensure_rotation_buffers_();
     void                  release_rotation_buffers_();
     void                  rotate_buffer_(const std::uint16_t* source);

@@ -71,9 +71,9 @@ private:
     brick::platform::esp8266::ArduinoTime time_;
     brick::boards::common::Logger<Features::logging, brick::platform::esp8266::ArduinoSerialLogger,
                                   brick::platform::esp8266::NullLogger>
-                                                                               logger_;
-    Peripheral<Features::display, brick::platform::esp8266::St7789TftDisplay>    display_;
-    Peripheral<Features::button, brick::platform::esp8266::GpioButton>           button_;
+                                                                              logger_;
+    Peripheral<Features::display, brick::platform::esp8266::St7789TftDisplay> display_;
+    Peripheral<Features::button, brick::platform::esp8266::GpioButton>        button_;
 };
 
 using Esp12fSt7789Board = Esp12fSt7789BoardTemplate<>;

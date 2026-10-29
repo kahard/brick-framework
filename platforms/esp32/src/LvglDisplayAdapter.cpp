@@ -11,7 +11,8 @@ LvglDisplayAdapter::LvglDisplayAdapter(brick::interfaces::display::IDisplayDevic
 {
 }
 
-lv_display_t* LvglDisplayAdapter::create(lv_display_render_mode_t render_mode, void* buffer_1, void* buffer_2, std::uint32_t buffer_size_bytes)
+lv_display_t* LvglDisplayAdapter::create(lv_display_render_mode_t render_mode, void* buffer_1, void* buffer_2,
+                                         std::uint32_t buffer_size_bytes)
 {
     const auto display_size = device_.size();
     auto*      display      = lv_display_create(display_size.width, display_size.height);
@@ -33,7 +34,8 @@ lv_display_t* LvglDisplayAdapter::create_framebuffer(brick::interfaces::display:
 
     brick::interfaces::display::WritablePixelBuffer buffer_1;
     brick::interfaces::display::WritablePixelBuffer buffer_2;
-    if (!framebuffers.get_frame_buffer(0, buffer_1) || !framebuffers.get_frame_buffer(1, buffer_2) || !buffer_1.valid() || !buffer_2.valid() || buffer_1.width != buffer_2.width || buffer_1.height != buffer_2.height
+    if (!framebuffers.get_frame_buffer(0, buffer_1) || !framebuffers.get_frame_buffer(1, buffer_2) || !buffer_1.valid()
+        || !buffer_2.valid() || buffer_1.width != buffer_2.width || buffer_1.height != buffer_2.height
         || buffer_1.stride_bytes != buffer_2.stride_bytes)
         return nullptr;
 
@@ -94,7 +96,12 @@ void LvglDisplayAdapter::flush_(lv_display_t* display, const lv_area_t& area, st
     }
 
     const brick::interfaces::display::PixelBuffer buffer{
-        pixel_map, static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), static_cast<std::size_t>(width) * 2, brick::interfaces::display::PixelFormat::rgb565, false,
+        pixel_map,
+        static_cast<std::uint32_t>(width),
+        static_cast<std::uint32_t>(height),
+        static_cast<std::size_t>(width) * 2,
+        brick::interfaces::display::PixelFormat::rgb565,
+        false,
     };
     const brick::interfaces::display::DisplayRect rectangle{
         area.x1,

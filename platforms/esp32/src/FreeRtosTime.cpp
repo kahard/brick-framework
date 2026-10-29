@@ -1,8 +1,8 @@
 #include "brick/platform/esp32/FreeRtosTime.h"
 
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_timer.h"
 
 namespace brick::platform::esp32
 {

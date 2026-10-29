@@ -93,9 +93,9 @@ private:
     brick::boards::common::Logger<Features::logging, brick::platform::esp32::EspIdfLogger,
                                   brick::platform::esp32::NullLogger>
                                                                                  logger_;
-    Peripheral<Features::display, brick::platform::esp32::s3::St7701sRgbDisplay>   display_;
-    Peripheral<Features::touch, brick::platform::esp32::touch::Gt911Touchscreen>   touch_;
-    Peripheral<Features::sd, brick::platform::esp32::SdSpiFileSystem>              sd_;
+    Peripheral<Features::display, brick::platform::esp32::s3::St7701sRgbDisplay> display_;
+    Peripheral<Features::touch, brick::platform::esp32::touch::Gt911Touchscreen> touch_;
+    Peripheral<Features::sd, brick::platform::esp32::SdSpiFileSystem>            sd_;
 };
 
 using Panel480Board = Panel480BoardTemplate<>;

@@ -1,6 +1,6 @@
 #include "brick/platform/esp32/EspIdfLogger.h"
-#include <cstdio>
 #include "esp_log.h"
+#include <cstdio>
 namespace brick::platform::esp32
 {
 void EspIdfLogger::write(brick::interfaces::logging::Level level, const char* tag, const char* format, va_list args)

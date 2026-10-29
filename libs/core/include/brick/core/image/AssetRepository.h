@@ -9,12 +9,14 @@ namespace brick::core::image
 class AssetRepository final
 {
 public:
-    AssetRepository(brick::interfaces::display::IAssetSource* flash = nullptr, brick::interfaces::display::IAssetSource* psram = nullptr, brick::interfaces::display::IAssetSource* usb_or_sd = nullptr)
+    AssetRepository(brick::interfaces::display::IAssetSource* flash     = nullptr,
+                    brick::interfaces::display::IAssetSource* psram     = nullptr,
+                    brick::interfaces::display::IAssetSource* usb_or_sd = nullptr)
         : flash_(flash), psram_(psram), usb_or_sd_(usb_or_sd)
     {
     }
 
-    void                                     set_storage(brick::interfaces::display::AssetStorage storage) { storage_ = storage; }
+    void set_storage(brick::interfaces::display::AssetStorage storage) { storage_ = storage; }
     brick::interfaces::display::AssetStorage storage() const { return storage_; }
 
     brick::interfaces::display::IAssetSource* source() const

@@ -57,7 +57,8 @@ struct St7701sRgbPanelConfig
     bool                mirror_y           = false;
 };
 
-class St7701sRgbDisplay final : public brick::interfaces::display::IDisplayDevice, public brick::interfaces::display::IFrameBufferDisplay
+class St7701sRgbDisplay final : public brick::interfaces::display::IDisplayDevice,
+                                public brick::interfaces::display::IFrameBufferDisplay
 {
 public:
     explicit St7701sRgbDisplay(St7701sRgbPanelConfig config);
@@ -67,17 +68,20 @@ public:
     brick::interfaces::display::DisplaySize         size() const override;
     brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool                                            set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool                                            draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
-    bool                                            wait_for_transfer_complete(std::uint32_t timeout_ms) override;
-    bool                                            wait_for_vsync(std::uint32_t timeout_ms) override;
-    std::uint8_t                                    frame_buffer_count() const override;
-    bool                                            get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
-    bool                                            present_frame_buffer(std::uint8_t index) override;
+    bool         set_rotation(brick::interfaces::display::Rotation rotation) override;
+    bool         draw_buffer(brick::interfaces::display::DisplayRect        area,
+                             const brick::interfaces::display::PixelBuffer& buffer) override;
+    bool         wait_for_transfer_complete(std::uint32_t timeout_ms) override;
+    bool         wait_for_vsync(std::uint32_t timeout_ms) override;
+    std::uint8_t frame_buffer_count() const override;
+    bool         get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
+    bool         present_frame_buffer(std::uint8_t index) override;
 
 private:
-    static bool IRAM_ATTR on_vsync_(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t* event_data, void* user_ctx);
-    static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t* event_data, void* user_ctx);
+    static bool IRAM_ATTR on_vsync_(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t* event_data,
+                                    void* user_ctx);
+    static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t                panel,
+                                               const esp_lcd_rgb_panel_event_data_t* event_data, void* user_ctx);
     bool                  begin_spi_();
     bool                  write_9bit_(std::uint16_t value);
     bool                  send_command_(std::uint8_t command, const std::uint8_t* data, std::size_t length);

@@ -66,7 +66,10 @@ void Stm32UsbHost::process()
         // On some STM32F105 revisions the HCD connect callback is not emitted
         // reliably, although HPRT.PCSTS is already asserted. Feed the host
         // state machine from the port status as a fallback.
-        const bool port_present          = (reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0] & USB_OTG_HPRT_PCSTS) != 0U;
+        const bool port_present =
+            (reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0]
+             & USB_OTG_HPRT_PCSTS)
+            != 0U;
         const bool previous_port_present = port_present_;
         port_present_                    = port_present;
         if (port_present && !previous_port_present)
@@ -230,7 +233,8 @@ extern "C" uint32_t USBH_LL_GetLastXferSize(USBH_HandleTypeDef* phost, uint8_t p
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
     return hcd == nullptr ? 0u : HAL_HCD_HC_GetXferCount(hcd, pipe);
 }
-extern "C" USBH_StatusTypeDef USBH_LL_OpenPipe(USBH_HandleTypeDef* phost, uint8_t pipe, uint8_t epnum, uint8_t dev, uint8_t speed, uint8_t type, uint16_t mps)
+extern "C" USBH_StatusTypeDef USBH_LL_OpenPipe(USBH_HandleTypeDef* phost, uint8_t pipe, uint8_t epnum, uint8_t dev,
+                                               uint8_t speed, uint8_t type, uint16_t mps)
 {
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
     return hcd != nullptr && HAL_HCD_HC_Init(hcd, pipe, epnum, dev, speed, type, mps) == HAL_OK ? USBH_OK : USBH_FAIL;
@@ -240,15 +244,19 @@ extern "C" USBH_StatusTypeDef USBH_LL_ClosePipe(USBH_HandleTypeDef* phost, uint8
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
     return hcd != nullptr && HAL_HCD_HC_Halt(hcd, pipe) == HAL_OK ? USBH_OK : USBH_FAIL;
 }
-extern "C" USBH_StatusTypeDef USBH_LL_SubmitURB(USBH_HandleTypeDef* phost, uint8_t pipe, uint8_t direction, uint8_t type, uint8_t token, uint8_t* buf, uint16_t len, uint8_t ping)
+extern "C" USBH_StatusTypeDef USBH_LL_SubmitURB(USBH_HandleTypeDef* phost, uint8_t pipe, uint8_t direction,
+                                                uint8_t type, uint8_t token, uint8_t* buf, uint16_t len, uint8_t ping)
 {
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
-    return hcd != nullptr && HAL_HCD_HC_SubmitRequest(hcd, pipe, direction, type, token, buf, len, ping) == HAL_OK ? USBH_OK : USBH_FAIL;
+    return hcd != nullptr && HAL_HCD_HC_SubmitRequest(hcd, pipe, direction, type, token, buf, len, ping) == HAL_OK ?
+               USBH_OK :
+               USBH_FAIL;
 }
 extern "C" USBH_URBStateTypeDef USBH_LL_GetURBState(USBH_HandleTypeDef* phost, uint8_t pipe)
 {
     auto* hcd = static_cast<HCD_HandleTypeDef*>(phost->pData);
-    return hcd == nullptr ? static_cast<USBH_URBStateTypeDef>(URB_ERROR) : static_cast<USBH_URBStateTypeDef>(HAL_HCD_HC_GetURBState(hcd, pipe));
+    return hcd == nullptr ? static_cast<USBH_URBStateTypeDef>(URB_ERROR) :
+                            static_cast<USBH_URBStateTypeDef>(HAL_HCD_HC_GetURBState(hcd, pipe));
 }
 extern "C" USBH_StatusTypeDef USBH_LL_DriverVBUS(USBH_HandleTypeDef*, uint8_t)
 {

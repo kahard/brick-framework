@@ -102,10 +102,10 @@ public:
         else
             return touch_.get();
     }
-    brick::interfaces::display::IBacklight&             backlight() { return backlight_.get(); }
+    brick::interfaces::display::IBacklight&              backlight() { return backlight_.get(); }
     brick::platform::esp32::wroom32::CydSdSpiFileSystem& sd() { return sd_.get(); }
-    brick::interfaces::time::ITimeProvider&             time() { return time_; }
-    brick::interfaces::logging::ILogger&                logger() { return logger_.get(); }
+    brick::interfaces::time::ITimeProvider&              time() { return time_; }
+    brick::interfaces::logging::ILogger&                 logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
@@ -114,13 +114,13 @@ private:
     brick::platform::esp32::FreeRtosTime time_;
     brick::boards::common::Logger<Features::logging, brick::platform::esp32::EspIdfLogger,
                                   brick::platform::esp32::NullLogger>
-                                                                                          logger_;
-    Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSpi3PinMux>                 spi3_pin_mux_;
-    Peripheral<Features::display, brick::platform::esp32::Ili9341SpiDisplay>                display_;
-    Peripheral<Features::backlight, brick::platform::esp32::PwmBacklight>                   backlight_;
-    Peripheral<Features::touch, brick::platform::esp32::touch::Xpt2046Touchscreen>          touch_;
+                                                                                                 logger_;
+    Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSpi3PinMux>                     spi3_pin_mux_;
+    Peripheral<Features::display, brick::platform::esp32::Ili9341SpiDisplay>                     display_;
+    Peripheral<Features::backlight, brick::platform::esp32::PwmBacklight>                        backlight_;
+    Peripheral<Features::touch, brick::platform::esp32::touch::Xpt2046Touchscreen>               touch_;
     Peripheral<Features::touch && Features::sd, brick::platform::esp32::wroom32::CydTouchscreen> muxed_touch_;
-    Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSdSpiFileSystem>           sd_;
+    Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSdSpiFileSystem>                sd_;
 };
 
 using CydBoard = CydBoardTemplate<>;

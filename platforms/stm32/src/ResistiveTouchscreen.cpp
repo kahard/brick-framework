@@ -33,7 +33,8 @@ bool ResistiveTouchscreen::begin()
     return HAL_ADCEx_Calibration_Start(&adc_) == HAL_OK;
 }
 
-bool ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count)
+bool ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity,
+                                std::size_t& count)
 {
     count = 0;
     if (points == nullptr || capacity == 0)
@@ -53,13 +54,14 @@ bool ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, 
     std::uint16_t raw_y = 0;
     if (!sample_position_(raw_x, raw_y))
         return false;
-    auto& point  = points[0];
-    point.id     = 0;
-    point.raw_x  = raw_x;
-    point.raw_y  = raw_y;
-    point.x      = map_(raw_x, config_.raw_x_min, config_.raw_x_max, config_.width, config_.invert_x);
-    point.y      = map_(raw_y, config_.raw_y_min, config_.raw_y_max, config_.height, config_.invert_y);
-    point.state  = was_pressed_ ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
+    auto& point = points[0];
+    point.id    = 0;
+    point.raw_x = raw_x;
+    point.raw_y = raw_y;
+    point.x     = map_(raw_x, config_.raw_x_min, config_.raw_x_max, config_.width, config_.invert_x);
+    point.y     = map_(raw_y, config_.raw_y_min, config_.raw_y_max, config_.height, config_.invert_y);
+    point.state =
+        was_pressed_ ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
     was_pressed_ = true;
     count        = 1;
     return true;
@@ -112,7 +114,8 @@ bool ResistiveTouchscreen::sample_adc_(std::uint32_t channel, std::uint16_t& val
     return ready;
 }
 
-void ResistiveTouchscreen::configure_pin_(GPIO_TypeDef* port, std::uint16_t pin, std::uint32_t mode, std::uint32_t pull) const
+void ResistiveTouchscreen::configure_pin_(GPIO_TypeDef* port, std::uint16_t pin, std::uint32_t mode,
+                                          std::uint32_t pull) const
 {
     GPIO_InitTypeDef init{};
     init.Pin   = pin;
@@ -122,7 +125,8 @@ void ResistiveTouchscreen::configure_pin_(GPIO_TypeDef* port, std::uint16_t pin,
     HAL_GPIO_Init(port, &init);
 }
 
-std::int16_t ResistiveTouchscreen::map_(std::uint16_t value, std::uint16_t minimum, std::uint16_t maximum, std::uint16_t size, bool invert) const
+std::int16_t ResistiveTouchscreen::map_(std::uint16_t value, std::uint16_t minimum, std::uint16_t maximum,
+                                        std::uint16_t size, bool invert) const
 {
     std::int32_t mapped = (static_cast<std::int32_t>(value) - minimum) * size / (maximum - minimum);
     if (mapped < 0)

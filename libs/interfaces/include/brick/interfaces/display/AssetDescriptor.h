@@ -28,7 +28,8 @@ class IAssetSource
 public:
     virtual ~IAssetSource() = default;
 
-    virtual bool read(const AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination, std::size_t bytes) = 0;
+    virtual bool read(const AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
+                      std::size_t bytes) = 0;
 };
 
 }  // namespace brick::interfaces::display

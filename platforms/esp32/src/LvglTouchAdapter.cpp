@@ -40,7 +40,8 @@ void LvglTouchAdapter::read_callback_(lv_indev_t* indev, lv_indev_data_t* data)
     const auto& point = points[0];
     data->point.x     = point.x;
     data->point.y     = point.y;
-    data->state       = point.state == brick::interfaces::display::TouchState::released ? LV_INDEV_STATE_RELEASED : LV_INDEV_STATE_PRESSED;
+    data->state       = point.state == brick::interfaces::display::TouchState::released ? LV_INDEV_STATE_RELEASED :
+                                                                                          LV_INDEV_STATE_PRESSED;
 }
 
 }  // namespace brick::platform::esp32

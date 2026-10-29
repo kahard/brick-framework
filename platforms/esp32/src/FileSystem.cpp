@@ -12,7 +12,9 @@ bool FileSystem::mount()
     sdspi_device_config_t slot_cfg       = SDSPI_DEVICE_CONFIG_DEFAULT();
     slot_cfg.host_id                     = SPI2_HOST;
     slot_cfg.gpio_cs                     = GPIO_NUM_42;
-    esp_vfs_fat_mount_config_t mount_cfg = { .format_if_mount_failed = false, .max_files = 5, .allocation_unit_size = 16 * 1024 };
+    esp_vfs_fat_mount_config_t mount_cfg = { .format_if_mount_failed = false,
+                                             .max_files              = 5,
+                                             .allocation_unit_size   = 16 * 1024 };
     const esp_err_t            result    = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_cfg, &mount_cfg, &card_);
     if (result != ESP_OK)
     {

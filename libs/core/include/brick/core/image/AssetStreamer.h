@@ -19,16 +19,25 @@ struct AssetStreamerConfig
 class AssetStreamer final
 {
 public:
-    AssetStreamer(brick::interfaces::display::IDisplayDevice& display, brick::interfaces::display::IAssetReader& reader, AssetStreamerConfig config = {});
+    AssetStreamer(brick::interfaces::display::IDisplayDevice& display, brick::interfaces::display::IAssetReader& reader,
+                  AssetStreamerConfig config = {});
     AssetStreamer(brick::interfaces::display::IDisplayDevice& display, AssetStreamerConfig config = {});
 
-    bool stream(const brick::interfaces::display::ImageAsset& asset, brick::interfaces::display::DisplayRect destination, std::uint8_t* scratch, std::size_t scratch_bytes) const;
+    bool stream(const brick::interfaces::display::ImageAsset& asset,
+                brick::interfaces::display::DisplayRect destination, std::uint8_t* scratch,
+                std::size_t scratch_bytes) const;
 
-    bool stream_to_buffer(const brick::interfaces::display::ImageAsset& asset, brick::interfaces::display::WritablePixelBuffer destination, std::uint8_t* scratch, std::size_t scratch_bytes) const;
+    bool stream_to_buffer(const brick::interfaces::display::ImageAsset&   asset,
+                          brick::interfaces::display::WritablePixelBuffer destination, std::uint8_t* scratch,
+                          std::size_t scratch_bytes) const;
 
-    bool stream(const brick::interfaces::display::AssetDescriptor& asset, brick::interfaces::display::IAssetSource& source, brick::interfaces::display::DisplayRect destination, std::uint8_t* scratch, std::size_t scratch_bytes) const;
+    bool stream(const brick::interfaces::display::AssetDescriptor& asset,
+                brick::interfaces::display::IAssetSource& source, brick::interfaces::display::DisplayRect destination,
+                std::uint8_t* scratch, std::size_t scratch_bytes) const;
 
-    bool stream_to_buffer(const brick::interfaces::display::AssetDescriptor& asset, brick::interfaces::display::IAssetSource& source, brick::interfaces::display::WritablePixelBuffer destination, std::uint8_t* scratch,
+    bool stream_to_buffer(const brick::interfaces::display::AssetDescriptor& asset,
+                          brick::interfaces::display::IAssetSource&          source,
+                          brick::interfaces::display::WritablePixelBuffer destination, std::uint8_t* scratch,
                           std::size_t scratch_bytes) const;
 
 private:

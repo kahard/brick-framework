@@ -28,7 +28,10 @@ private:
 class Stm32UsbFileSystem final : public brick::interfaces::storage::IFileSystem
 {
 public:
-    explicit Stm32UsbFileSystem(Stm32UsbHost& host, std::uint32_t mount_timeout_ms = 10000) : host_(host), mount_timeout_ms_(mount_timeout_ms) {}
+    explicit Stm32UsbFileSystem(Stm32UsbHost& host, std::uint32_t mount_timeout_ms = 10000)
+        : host_(host), mount_timeout_ms_(mount_timeout_ms)
+    {
+    }
 
     bool                                               mount() override;
     void                                               unmount();

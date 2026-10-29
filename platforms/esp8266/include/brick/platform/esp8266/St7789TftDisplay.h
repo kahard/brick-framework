@@ -30,8 +30,9 @@ public:
     brick::interfaces::display::DisplaySize         size() const override;
     brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool                                            set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool                                            draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer) override;
+    bool set_rotation(brick::interfaces::display::Rotation rotation) override;
+    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
+                     const brick::interfaces::display::PixelBuffer& buffer) override;
 
 private:
     St7789TftDisplayConfig config_;

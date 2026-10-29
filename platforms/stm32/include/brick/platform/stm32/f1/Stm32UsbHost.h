@@ -28,8 +28,9 @@ public:
     HOST_StateTypeDef state() const { return host_.gState; }
     bool              port_connected() const
     {
-        constexpr std::uintptr_t host_port        = 0x440U;
-        const auto*              register_address = reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + host_port);
+        constexpr std::uintptr_t host_port = 0x440U;
+        const auto*              register_address =
+            reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + host_port);
         return (*register_address & USB_OTG_HPRT_PCSTS) != 0U;
     }
     bool                 storage_ready() const;

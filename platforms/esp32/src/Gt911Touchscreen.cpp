@@ -11,7 +11,8 @@ bool Gt911Touchscreen::begin()
 {
     if (started_)
         return true;
-    if (config_.sda_gpio == GPIO_NUM_NC || config_.scl_gpio == GPIO_NUM_NC || config_.display_size.width == 0 || config_.display_size.height == 0)
+    if (config_.sda_gpio == GPIO_NUM_NC || config_.scl_gpio == GPIO_NUM_NC || config_.display_size.width == 0
+        || config_.display_size.height == 0)
         return false;
     if (config_.reset_gpio != GPIO_NUM_NC)
     {
@@ -41,7 +42,8 @@ bool Gt911Touchscreen::begin()
         if (!probe_())
             return false;
     }
-    if (config_.read_calibration_from_controller && (config_.calibration.raw_x_max == 0 || config_.calibration.raw_y_max == 0) && !read_calibration_())
+    if (config_.read_calibration_from_controller
+        && (config_.calibration.raw_x_max == 0 || config_.calibration.raw_y_max == 0) && !read_calibration_())
         return false;
     mapper_  = brick::core::input::TouchMapper(config_.display_size, config_.calibration);
     started_ = true;
@@ -70,8 +72,11 @@ bool Gt911Touchscreen::read(brick::interfaces::display::TouchPoint* points, std:
         const auto  id   = data[0] & 0x0F;
         if (id >= kMaxTouches)
             continue;
-        auto point      = mapper_.map(id, static_cast<std::int16_t>(data[1] | (data[2] << 8)), static_cast<std::int16_t>(data[3] | (data[4] << 8)), static_cast<std::int16_t>(data[5] | (data[6] << 8)));
-        point.state     = active_[id] ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
+        auto point      = mapper_.map(id, static_cast<std::int16_t>(data[1] | (data[2] << 8)),
+                                      static_cast<std::int16_t>(data[3] | (data[4] << 8)),
+                                      static_cast<std::int16_t>(data[5] | (data[6] << 8)));
+        point.state     = active_[id] ? brick::interfaces::display::TouchState::moved :
+                                        brick::interfaces::display::TouchState::pressed;
         points[count++] = point;
         seen[id]        = true;
     }
@@ -117,7 +122,8 @@ bool Gt911Touchscreen::write_register_(std::uint16_t reg, std::uint8_t value)
 bool Gt911Touchscreen::read_register_(std::uint16_t reg, std::uint8_t* data, std::size_t length)
 {
     const std::uint8_t address[] = { static_cast<std::uint8_t>(reg >> 8), static_cast<std::uint8_t>(reg) };
-    return i2c_master_write_read_device(config_.port, config_.address, address, sizeof(address), data, length, kTimeout) == ESP_OK;
+    return i2c_master_write_read_device(config_.port, config_.address, address, sizeof(address), data, length, kTimeout)
+           == ESP_OK;
 }
 
 }  // namespace brick::platform::esp32::touch

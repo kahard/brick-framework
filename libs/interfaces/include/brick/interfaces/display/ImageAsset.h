@@ -17,7 +17,10 @@ struct ImageAsset
     std::size_t         data_size    = 0;
     PixelFormat         format       = PixelFormat::rgb565;
 
-    constexpr bool valid() const { return data != nullptr && width != 0 && height != 0 && stride_bytes != 0 && data_size != 0; }
+    constexpr bool valid() const
+    {
+        return data != nullptr && width != 0 && height != 0 && stride_bytes != 0 && data_size != 0;
+    }
 };
 
 }  // namespace brick::interfaces::display

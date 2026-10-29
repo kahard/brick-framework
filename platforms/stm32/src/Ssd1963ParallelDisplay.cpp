@@ -11,8 +11,8 @@ bool Ssd1963ParallelDisplay::begin()
 {
     if (started_)
         return true;
-    if (config_.data_port == nullptr || config_.data_mask == 0 || config_.rs_port == nullptr || config_.wr_port == nullptr
-        || config_.cs_port == nullptr)
+    if (config_.data_port == nullptr || config_.data_mask == 0 || config_.rs_port == nullptr
+        || config_.wr_port == nullptr || config_.cs_port == nullptr)
         return false;
     configure_output_(config_.data_port, config_.data_mask);
     configure_output_(config_.rs_port, config_.rs_pin);
@@ -53,7 +53,19 @@ brick::interfaces::display::PixelFormat Ssd1963ParallelDisplay::pixel_format() c
 
 brick::interfaces::display::DisplayCapabilities Ssd1963ParallelDisplay::capabilities() const
 {
-    return { brick::interfaces::display::DisplayPanelType::host, size(), pixel_format(), 0, 1, 0, false, false, false, true, false, 1, brick::interfaces::display::RenderMode::partial };
+    return { brick::interfaces::display::DisplayPanelType::host,
+             size(),
+             pixel_format(),
+             0,
+             1,
+             0,
+             false,
+             false,
+             false,
+             true,
+             false,
+             1,
+             brick::interfaces::display::RenderMode::partial };
 }
 
 bool Ssd1963ParallelDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
@@ -65,17 +77,23 @@ bool Ssd1963ParallelDisplay::set_rotation(brick::interfaces::display::Rotation r
     return true;
 }
 
-bool Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer)
+bool Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
+                                         const brick::interfaces::display::PixelBuffer& buffer)
 {
     constexpr std::size_t bytes_per_pixel = 2;
-    if (!started_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width || area.y + area.height > config_.height || !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width)
-        || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format() || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel || !set_window_(area.x, area.y, area.width, area.height))
+    if (!started_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width
+        || area.y + area.height > config_.height || !buffer.valid()
+        || buffer.width != static_cast<std::uint32_t>(area.width)
+        || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format()
+        || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel
+        || !set_window_(area.x, area.y, area.width, area.height))
         return false;
 
     command_(0x2C);
     for (std::uint32_t row = 0; row < buffer.height; ++row)
     {
-        const auto* pixels = reinterpret_cast<const std::uint16_t*>(buffer.data + static_cast<std::size_t>(row) * buffer.stride_bytes);
+        const auto* pixels =
+            reinterpret_cast<const std::uint16_t*>(buffer.data + static_cast<std::size_t>(row) * buffer.stride_bytes);
         for (std::uint32_t column = 0; column < buffer.width; ++column)
         {
             const auto value = pixels[column];
@@ -107,7 +125,8 @@ void Ssd1963ParallelDisplay::write_pin_(GPIO_TypeDef* port, std::uint16_t pin, b
 }
 void Ssd1963ParallelDisplay::write_bus_(std::uint8_t value) const
 {
-    config_.data_port->BSRR = (static_cast<std::uint32_t>(config_.data_mask & ~value) << 16) | (value & config_.data_mask);
+    config_.data_port->BSRR =
+        (static_cast<std::uint32_t>(config_.data_mask & ~value) << 16) | (value & config_.data_mask);
 }
 void Ssd1963ParallelDisplay::pulse_write_() const
 {
@@ -179,7 +198,8 @@ bool Ssd1963ParallelDisplay::initialize_controller_()
     return set_window_(0, 0, config_.width, config_.height) && (command_(0x29), true);
 }
 
-bool Ssd1963ParallelDisplay::set_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height) const
+bool Ssd1963ParallelDisplay::set_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width,
+                                         std::uint16_t height) const
 {
     if (width == 0 || height == 0)
         return false;

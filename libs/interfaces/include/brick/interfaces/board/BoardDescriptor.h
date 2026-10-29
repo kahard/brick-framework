@@ -23,7 +23,10 @@ struct BoardDescriptor
     const char*   mcu          = nullptr;
     std::uint32_t capabilities = 0;
 
-    constexpr bool has(Capability capability) const { return (capabilities & static_cast<std::uint32_t>(capability)) != 0; }
+    constexpr bool has(Capability capability) const
+    {
+        return (capabilities & static_cast<std::uint32_t>(capability)) != 0;
+    }
 };
 
 }  // namespace brick::interfaces::board

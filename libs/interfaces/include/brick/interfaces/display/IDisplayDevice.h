@@ -28,7 +28,19 @@ public:
     {
         const auto display_size = size();
         return {
-            DisplayPanelType::host, display_size, pixel_format(), static_cast<std::size_t>(display_size.width) * display_size.height * pixel_format_bytes(pixel_format()), 1, 0, false, false, false, true, false, 1, RenderMode::partial,
+            DisplayPanelType::host,
+            display_size,
+            pixel_format(),
+            static_cast<std::size_t>(display_size.width) * display_size.height * pixel_format_bytes(pixel_format()),
+            1,
+            0,
+            false,
+            false,
+            false,
+            true,
+            false,
+            1,
+            RenderMode::partial,
         };
     }
 

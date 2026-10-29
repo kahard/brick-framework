@@ -19,7 +19,8 @@ bool Xpt2046Touchscreen::begin()
 {
     if (started_)
         return true;
-    if (config_.sclk_gpio == GPIO_NUM_NC || config_.mosi_gpio == GPIO_NUM_NC || config_.miso_gpio == GPIO_NUM_NC || config_.cs_gpio == GPIO_NUM_NC || config_.display_size.width == 0 || config_.display_size.height == 0)
+    if (config_.sclk_gpio == GPIO_NUM_NC || config_.mosi_gpio == GPIO_NUM_NC || config_.miso_gpio == GPIO_NUM_NC
+        || config_.cs_gpio == GPIO_NUM_NC || config_.display_size.width == 0 || config_.display_size.height == 0)
         return false;
     if (config_.interrupt_gpio != GPIO_NUM_NC)
     {
@@ -76,8 +77,10 @@ bool Xpt2046Touchscreen::read(brick::interfaces::display::TouchPoint* points, st
         return false;
     if (pressure < config_.threshold)
         return true;
-    auto point  = mapper_.map(0, static_cast<std::int16_t>(raw_x), static_cast<std::int16_t>(raw_y), static_cast<std::int16_t>(pressure));
-    point.state = active_ ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
+    auto point = mapper_.map(0, static_cast<std::int16_t>(raw_x), static_cast<std::int16_t>(raw_y),
+                             static_cast<std::int16_t>(pressure));
+    point.state =
+        active_ ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
     points[0]   = point;
     last_point_ = point;
     active_     = true;

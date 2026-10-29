@@ -18,7 +18,8 @@ struct BmpDecodeOptions
 class BmpDecoder
 {
 public:
-    static bool decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* destination, const BmpDecodeOptions& options);
+    static bool decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* destination,
+                       const BmpDecodeOptions& options);
 
 private:
     static std::uint16_t read_u16(const std::uint8_t* value);

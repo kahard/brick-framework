@@ -7,7 +7,8 @@
 namespace brick::platform::esp8266
 {
 
-void ArduinoSerialLogger::write(brick::interfaces::logging::Level level, const char* tag, const char* format, va_list args)
+void ArduinoSerialLogger::write(brick::interfaces::logging::Level level, const char* tag, const char* format,
+                                va_list args)
 {
     if (static_cast<int>(level) < minimum_level_)
         return;

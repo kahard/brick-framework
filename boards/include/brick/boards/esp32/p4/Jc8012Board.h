@@ -94,10 +94,10 @@ private:
     brick::boards::common::Logger<Features::logging, brick::platform::esp32::EspIdfLogger,
                                   brick::platform::esp32::NullLogger>
                                                                                    logger_;
-    Peripheral<Features::display, brick::platform::esp32::p4::MipiDsiDisplay>        display_;
-    Peripheral<Features::backlight, brick::platform::esp32::GpioBacklight>           backlight_;
-    Peripheral<Features::touch, brick::platform::esp32::touch::Gsl3680Touchscreen>   touch_;
-    Peripheral<Features::sd, brick::platform::esp32::p4::SdmmcFileSystem>            sd_;
+    Peripheral<Features::display, brick::platform::esp32::p4::MipiDsiDisplay>      display_;
+    Peripheral<Features::backlight, brick::platform::esp32::GpioBacklight>         backlight_;
+    Peripheral<Features::touch, brick::platform::esp32::touch::Gsl3680Touchscreen> touch_;
+    Peripheral<Features::sd, brick::platform::esp32::p4::SdmmcFileSystem>          sd_;
 };
 
 using Jc8012Board = Jc8012BoardTemplate<>;

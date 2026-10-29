@@ -12,7 +12,8 @@ namespace brick::core::image
 class AssetBundle final
 {
 public:
-    AssetBundle(const std::uint8_t* data, std::size_t data_size, const brick::interfaces::display::AssetDescriptor* entries, std::size_t entry_count);
+    AssetBundle(const std::uint8_t* data, std::size_t data_size,
+                const brick::interfaces::display::AssetDescriptor* entries, std::size_t entry_count);
 
     const brick::interfaces::display::AssetDescriptor* find(brick::interfaces::display::AssetId id) const;
 

@@ -402,8 +402,8 @@ void test_asset_source_streamer()
 
 int main()
 {
-    constexpr auto st280 = brick::interfaces::board::BoardDescriptor{ "ST-280", "STM32F105VCT6", 1u << 0 };
-    assert(st280.has(brick::interfaces::board::Capability::display));
+    constexpr auto board = brick::interfaces::board::BoardDescriptor{ "Test board", "STM32F105VCT6", 1u << 0 };
+    assert(board.has(brick::interfaces::board::Capability::display));
     using brick::interfaces::display::DisplayCapabilities;
     using brick::interfaces::display::DisplayRect;
     using brick::interfaces::display::PixelBuffer;

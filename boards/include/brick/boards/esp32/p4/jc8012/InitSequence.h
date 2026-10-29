@@ -1,13 +1,13 @@
 #pragma once
 
-#include "brick/platform/esp32/p4/MipiDsiDisplay.h"
+#include <cstdint>
 
-namespace brick::platform::esp32::p4::jc8012::detail
+namespace brick::boards::jc8012
 {
 
 // Guition JC8012P4A1C 10-inch panel: JD9365, physical portrait 800x1280.
 // Sequence format: command, argument_count, arguments...; delay is command, 0xFF, milliseconds.
-inline constexpr std::uint8_t jd9365_800x1280_init_sequence[] = {
+inline constexpr std::uint8_t kInitSequence[] = {
     0xE0, 1,    0x00, 0xE1, 1, 0x93, 0xE2, 1, 0x65, 0xE3, 1, 0xF8, 0x80, 1, 0x01, 0xE0, 1, 0x01, 0x00, 1,    0x00,
     0x01, 1,    0x39, 0x03, 1, 0x10, 0x04, 1, 0x41, 0x0C, 1, 0x74, 0x17, 1, 0x00, 0x18, 1, 0xD7, 0x19, 1,    0x00,
     0x1A, 1,    0x00, 0x1B, 1, 0xD7, 0x1C, 1, 0x00, 0x24, 1, 0xFE, 0x35, 1, 0x26, 0x37, 1, 0x69, 0x38, 1,    0x05,
@@ -39,28 +39,4 @@ inline constexpr std::uint8_t jd9365_800x1280_init_sequence[] = {
     1,    0x00, 0x14, 0xFF,
 };
 
-inline MipiDsiPanelConfig
-jd9365_800x1280(brick::interfaces::display::Rotation rotation = brick::interfaces::display::Rotation::rotate_0)
-{
-    MipiDsiPanelConfig config;
-    config.width = 800;
-    config.height = 1280;
-    config.data_lanes = 2;
-    config.lane_bit_rate_mbps = 1500.0f;
-    config.pixel_clock_mhz = 60.0f;
-    config.hsync_pulse_width = 20;
-    config.hsync_back_porch = 20;
-    config.hsync_front_porch = 40;
-    config.vsync_pulse_width = 4;
-    config.vsync_back_porch = 8;
-    config.vsync_front_porch = 20;
-    config.reset_gpio = GPIO_NUM_27;
-    config.mipi_dsi_ldo_channel = 3;
-    config.mipi_dsi_ldo_voltage_mv = 2500;
-    config.default_rotation = rotation;
-    config.init_sequence = jd9365_800x1280_init_sequence;
-    config.init_sequence_size = sizeof(jd9365_800x1280_init_sequence);
-    return config;
-}
-
-} // namespace brick::platform::esp32::p4::jc8012::detail
+} // namespace brick::boards::jc8012

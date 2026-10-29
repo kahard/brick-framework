@@ -1,8 +1,7 @@
 # BRICK STM32/F1 platform
 
 Generic STM32/F1 adapters for BRICK. Concrete panel wiring and board
-profiles live in separate board repositories (for example, the private
-`brick-boards-private` repository contains ST-280).
+profiles are supplied by the application or a separate board package.
 
 The drivers deliberately keep the board wiring in a profile.  The display
 adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963

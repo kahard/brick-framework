@@ -9,8 +9,11 @@ Ssd1963ParallelDisplay::Ssd1963ParallelDisplay(Ssd1963ParallelDisplayConfig conf
 
 bool Ssd1963ParallelDisplay::begin()
 {
-    if (started_ || config_.data_port == nullptr || config_.data_mask == 0)
-        return started_;
+    if (started_)
+        return true;
+    if (config_.data_port == nullptr || config_.data_mask == 0 || config_.rs_port == nullptr || config_.wr_port == nullptr
+        || config_.cs_port == nullptr)
+        return false;
     configure_output_(config_.data_port, config_.data_mask);
     configure_output_(config_.rs_port, config_.rs_pin);
     configure_output_(config_.wr_port, config_.wr_pin);
@@ -24,9 +27,9 @@ bool Ssd1963ParallelDisplay::begin()
     write_pin_(config_.wr_port, config_.wr_pin, true);
     write_pin_(config_.cs_port, config_.cs_pin, true);
     write_pin_(config_.reset_port, config_.reset_pin, true);
-    // ST-280's legacy startup switches the panel supply gate before it sends
-    // the SSD1963 reset sequence. Keep these delays verbatim: lighting only
-    // the backlight without this transition leaves the controller blank.
+    // Cycle the optional panel supply gate before the SSD1963 reset sequence.
+    // Keep these delays: on tested panels lighting only the backlight without
+    // this transition leaves the controller blank.
     write_pin_(config_.display_enable_port, config_.display_enable_pin, false);
     HAL_Delay(200);
     write_pin_(config_.display_enable_port, config_.display_enable_pin, true);
@@ -86,6 +89,8 @@ bool Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRect
 
 void Ssd1963ParallelDisplay::configure_output_(GPIO_TypeDef* port, std::uint16_t pins) const
 {
+    if (port == nullptr)
+        return;
     GPIO_InitTypeDef init{};
     init.Pin   = pins;
     init.Mode  = GPIO_MODE_OUTPUT_PP;
@@ -96,6 +101,8 @@ void Ssd1963ParallelDisplay::configure_output_(GPIO_TypeDef* port, std::uint16_t
 
 void Ssd1963ParallelDisplay::write_pin_(GPIO_TypeDef* port, std::uint16_t pin, bool high) const
 {
+    if (port == nullptr)
+        return;
     port->BSRR = high ? pin : static_cast<std::uint32_t>(pin) << 16;
 }
 void Ssd1963ParallelDisplay::write_bus_(std::uint8_t value) const

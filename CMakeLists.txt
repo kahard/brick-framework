@@ -38,6 +38,12 @@ target_include_directories(brick_platform_stm32 INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/platforms/stm32/include")
 target_link_libraries(brick_platform_stm32 INTERFACE BRICK::Core)
 
+add_library(brick_boards INTERFACE)
+add_library(BRICK::Boards ALIAS brick_boards)
+target_include_directories(brick_boards INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/boards/include")
+target_link_libraries(brick_boards INTERFACE BRICK::Interfaces)
+
 if(BRICK_BUILD_TESTS)
   enable_testing()
   add_executable(brick_core_tests tests/brick/brick_core_tests.cpp)

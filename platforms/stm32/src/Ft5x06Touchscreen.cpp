@@ -62,10 +62,14 @@ bool Ft5x06Touchscreen::read(brick::interfaces::display::TouchPoint* points, std
 
 void Ft5x06Touchscreen::write_pin_(GPIO_TypeDef* port, std::uint16_t pin, bool high) const
 {
+    if (port == nullptr)
+        return;
     port->BSRR = high ? pin : static_cast<std::uint32_t>(pin) << 16;
 }
 void Ft5x06Touchscreen::configure_pin_(GPIO_TypeDef* port, std::uint16_t pin, std::uint32_t mode) const
 {
+    if (port == nullptr)
+        return;
     GPIO_InitTypeDef init{};
     init.Pin   = pin;
     init.Mode  = mode;

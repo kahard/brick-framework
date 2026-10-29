@@ -1,113 +1,82 @@
 #pragma once
 
-#include <cstdint>
-#include <type_traits>
-
-#include "brick/boards/esp32/detail/Logger.h"
-#include "brick/boards/esp32/detail/Peripheral.h"
-#include "brick/interfaces/board/BoardDescriptor.h"
+#include "brick/boards/common/Capabilities.h"
+#include "brick/boards/common/Logger.h"
+#include "brick/boards/common/Peripheral.h"
+#include "brick/boards/esp32/wroom32/cyd/Profile.h"
 #include "brick/interfaces/board/IBoard.h"
+#include "brick/platform/esp32/EspIdfLogger.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
+#include "brick/platform/esp32/Ili9341SpiDisplay.h"
 #include "brick/platform/esp32/PwmBacklight.h"
 #include "brick/platform/esp32/touch/Xpt2046Touchscreen.h"
 #include "brick/platform/esp32/wroom32/CydSdSpiFileSystem.h"
+#include "brick/platform/esp32/wroom32/CydSpi3PinMux.h"
 #include "brick/platform/esp32/wroom32/CydTouchscreen.h"
-#include "brick/platform/esp32/wroom32/profiles/cyd_ili9341_320x240.h"
-#include "brick/platform/esp32/wroom32/profiles/cyd_sd_spi.h"
-#include "brick/platform/esp32/wroom32/profiles/cyd_xpt2046.h"
 
-namespace brick::platform::esp32
+namespace brick::boards
 {
 
+/// Peripherals compiled into a CYD board. Derive from this struct and
+/// override only the flags a project needs to change.
 struct CydDefaultFeatures
 {
-    static constexpr bool display = true;
-    static constexpr bool touch = true;
-    static constexpr bool backlight = true;
-    static constexpr bool sd = false;
+    static constexpr bool display        = true;
+    static constexpr bool touch          = true;
+    static constexpr bool backlight      = true;
+    static constexpr bool sd             = false;
     static constexpr bool requires_psram = false;
-    static constexpr bool logging = true;
-    static constexpr int log_level = 0;
+    static constexpr bool logging        = true;
+    static constexpr int  log_level      = 0;
 };
 
-namespace cyd_detail
+/// ESP32-2432S028R "Cheap Yellow Display". begin() starts the display,
+/// backlight and touch; the SD card is mounted on demand through sd(). With
+/// the SD card enabled, touch() transparently switches the shared SPI3 pins.
+template <typename Features = CydDefaultFeatures>
+class CydBoardTemplate final : public brick::interfaces::board::IBoard
 {
-
-template <typename Features, typename = void> struct SdEnabled : std::false_type
-{
-};
-
-template <typename Features>
-struct SdEnabled<Features, std::void_t<decltype(Features::sd)>> : std::bool_constant<Features::sd>
-{
-};
-
-template <typename Features> inline constexpr bool sd_enabled_v = SdEnabled<Features>::value;
-
-template <typename Features, typename = void> struct PsramRequired : std::false_type
-{
-};
-
-template <typename Features>
-struct PsramRequired<Features, std::void_t<decltype(Features::requires_psram)>>
-    : std::bool_constant<Features::requires_psram>
-{
-};
-
-template <typename Features> inline constexpr bool psram_required_v = PsramRequired<Features>::value;
-
-} // namespace cyd_detail
-
-template <typename Features = CydDefaultFeatures> class CydBoardTemplate final : public brick::interfaces::board::IBoard
-{
-  public:
-    static constexpr bool kSdEnabled = cyd_detail::sd_enabled_v<Features>;
-    static constexpr bool kRequiresPsram = cyd_detail::psram_required_v<Features>;
-
+public:
 #if defined(CONFIG_SPIRAM)
-    static_assert(!kRequiresPsram || CONFIG_SPIRAM,
+    static_assert(!Features::requires_psram || CONFIG_SPIRAM,
                   "Features::requires_psram needs CONFIG_SPIRAM enabled in sdkconfig.defaults");
 #else
-    static_assert(!kRequiresPsram, "Features::requires_psram needs CONFIG_SPIRAM enabled in sdkconfig.defaults");
+    static_assert(!Features::requires_psram,
+                  "Features::requires_psram needs CONFIG_SPIRAM enabled in sdkconfig.defaults");
 #endif
+
     CydBoardTemplate() : logger_(Features::log_level)
     {
-        if constexpr (Features::display)
-            display_.emplace(profiles::cyd_ili9341_320x240());
-        if constexpr (Features::backlight)
-            backlight_.emplace(GPIO_NUM_21);
-        if constexpr (Features::touch)
-            touch_.emplace(profiles::cyd_xpt2046());
-        if constexpr (kSdEnabled)
+        display_.emplace(cyd::display_config());
+        backlight_.emplace(cyd::kBacklightGpio);
+        touch_.emplace(cyd::touch_config());
+        if constexpr (Features::sd)
         {
-            spi3_pin_mux_.emplace(profiles::cyd_spi3_pin_mux());
+            spi3_pin_mux_.emplace(cyd::spi3_pin_mux_config());
             if constexpr (Features::touch)
                 muxed_touch_.emplace(touch_.get(), spi3_pin_mux_.get());
-            sd_.emplace(profiles::cyd_sd_spi(), spi3_pin_mux_.get());
+            sd_.emplace(cyd::sd_config(), spi3_pin_mux_.get());
         }
     }
 
     static constexpr brick::interfaces::board::BoardDescriptor descriptor_static()
     {
+        using brick::boards::common::capability_if;
         using brick::interfaces::board::Capability;
-        return {"CYD 2.8-inch", "ESP32-WROOM",
-                (Features::display ? static_cast<std::uint32_t>(Capability::display) : 0U) |
-                    (Features::touch ? static_cast<std::uint32_t>(Capability::touchscreen) : 0U) |
-                    (Features::backlight ? static_cast<std::uint32_t>(Capability::backlight) : 0U) |
-                    (kSdEnabled ? static_cast<std::uint32_t>(Capability::sd_card) : 0U)};
+        return { "CYD 2.8-inch", "ESP32-WROOM",
+                 capability_if(Features::display, Capability::display)
+                     | capability_if(Features::touch, Capability::touchscreen)
+                     | capability_if(Features::backlight, Capability::backlight)
+                     | capability_if(Features::sd, Capability::sd_card) };
     }
 
     brick::interfaces::board::BoardDescriptor descriptor() const override { return descriptor_static(); }
 
     bool begin() override
     {
-        bool ok = true;
-        if constexpr (Features::display)
-            ok = display_.begin() && ok;
-        if constexpr (Features::backlight)
-            ok = backlight_.begin() && ok;
-        if constexpr (Features::touch)
-            ok = touch_.begin() && ok;
+        bool ok = display_.begin();
+        ok      = backlight_.begin() && ok;
+        ok      = touch_.begin() && ok;
         return ok;
     }
 
@@ -121,45 +90,39 @@ template <typename Features = CydDefaultFeatures> class CydBoardTemplate final :
     brick::interfaces::display::ITouchscreen* touchscreen() override
     {
         if constexpr (Features::touch)
-        {
-            if constexpr (kSdEnabled)
-                return &muxed_touch_.get();
-            return &touch_.get();
-        }
+            return &touch();
         return nullptr;
     }
 
-    Ili9341SpiDisplay& display() { return display_.get(); }
-    brick::interfaces::display::ITouchscreen& touch()
+    brick::platform::esp32::Ili9341SpiDisplay& display() { return display_.get(); }
+    brick::interfaces::display::ITouchscreen&  touch()
     {
-        if constexpr (kSdEnabled)
+        if constexpr (Features::sd)
             return muxed_touch_.get();
-        return touch_.get();
+        else
+            return touch_.get();
     }
-    brick::interfaces::display::IBacklight& backlight()
-    {
-        static_assert(Features::backlight, "Enable Features::backlight before accessing the CYD backlight");
-        return backlight_.get();
-    }
-    wroom32::CydSdSpiFileSystem& sd()
-    {
-        static_assert(kSdEnabled, "Enable Features::sd before accessing the CYD SD card");
-        return sd_.get();
-    }
-    brick::interfaces::time::ITimeProvider& time() { return time_; }
-    brick::interfaces::logging::ILogger& logger() { return logger_.get(); }
+    brick::interfaces::display::IBacklight&             backlight() { return backlight_.get(); }
+    brick::platform::esp32::wroom32::CydSdSpiFileSystem& sd() { return sd_.get(); }
+    brick::interfaces::time::ITimeProvider&             time() { return time_; }
+    brick::interfaces::logging::ILogger&                logger() { return logger_.get(); }
 
-  private:
-    FreeRtosTime time_;
-    brick::boards::esp32::detail::Logger<Features::logging> logger_;
-    brick::boards::esp32::detail::Peripheral<kSdEnabled, wroom32::CydSpi3PinMux> spi3_pin_mux_;
-    brick::boards::esp32::detail::Peripheral<Features::display, Ili9341SpiDisplay> display_;
-    brick::boards::esp32::detail::Peripheral<Features::backlight, PwmBacklight> backlight_;
-    brick::boards::esp32::detail::Peripheral<Features::touch, touch::Xpt2046Touchscreen> touch_;
-    brick::boards::esp32::detail::Peripheral<Features::touch && kSdEnabled, wroom32::CydTouchscreen> muxed_touch_;
-    brick::boards::esp32::detail::Peripheral<kSdEnabled, wroom32::CydSdSpiFileSystem> sd_;
+private:
+    template <bool Enabled, typename T>
+    using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
+
+    brick::platform::esp32::FreeRtosTime time_;
+    brick::boards::common::Logger<Features::logging, brick::platform::esp32::EspIdfLogger,
+                                  brick::platform::esp32::NullLogger>
+                                                                                          logger_;
+    Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSpi3PinMux>                 spi3_pin_mux_;
+    Peripheral<Features::display, brick::platform::esp32::Ili9341SpiDisplay>                display_;
+    Peripheral<Features::backlight, brick::platform::esp32::PwmBacklight>                   backlight_;
+    Peripheral<Features::touch, brick::platform::esp32::touch::Xpt2046Touchscreen>          touch_;
+    Peripheral<Features::touch && Features::sd, brick::platform::esp32::wroom32::CydTouchscreen> muxed_touch_;
+    Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSdSpiFileSystem>           sd_;
 };
 
 using CydBoard = CydBoardTemplate<>;
 
-} // namespace brick::platform::esp32
+}  // namespace brick::boards

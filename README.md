@@ -24,8 +24,10 @@ brick-framework/
 │   └── rules/         coding policies and static-analysis rules
 ├── platforms/
 │   ├── esp32/         ESP-IDF and ESP32 adapters
+│   ├── esp8266/       Arduino ESP8266 adapters
 │   ├── pc/            PC implementations and test support
 │   └── stm32/         STM32 adapters
+├── boards/            ready-made board packages (wiring profiles + IBoard)
 ├── tests/             PC regression tests
 ├── examples/          links to hardware examples in brick-test-apps
 └── cmake/             shared build configuration
@@ -44,10 +46,18 @@ The initial implementation includes:
 - ESP32 PWM audio output,
 - portable display, touchscreen, and backlight interfaces,
 - touch calibration and coordinate mapping,
-- an ESP-IDF MIPI-DSI adapter with a JC1060 1024x600 profile.
+- an ESP-IDF MIPI-DSI adapter,
+- board packages for JC1060, JC8012, ESP32-S3 480x480 panel, CYD and
+  ESP-12F ST7789 boards.
 
 Core code depends on interfaces, not on ESP-IDF or LVGL. Platform adapters are
 kept in `platforms/` and are included only by applications that need them.
+
+Board packages in `boards/include/brick/boards/` combine platform adapters with
+concrete pin and panel profiles. Each board is a `<Name>BoardTemplate<Features>`
+class with a `<Name>Board` alias for the default feature set; the wiring lives
+in a sibling `<name>/Profile.h`. Add `boards/include` to the include path (or
+link `BRICK::Boards` in CMake) to use them.
 
 Complete hardware examples and smoke-test applications are maintained
 separately in [`brick-test-apps`](https://github.com/kahard/brick-test-apps).

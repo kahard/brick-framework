@@ -1,11 +1,16 @@
 #pragma once
 
+#include "brick/platform/esp32/SdSpiFileSystem.h"
 #include "brick/platform/esp32/s3/St7701sRgbDisplay.h"
+#include "brick/platform/esp32/touch/Gt911Touchscreen.h"
+#include "driver/gpio.h"
 
-namespace brick::platform::esp32::s3::profiles
+// 4-inch 480x480 ESP32-S3 panel: ST7701S RGB display configured over 3-wire
+// SPI, GT911 touch and an SPI SD card slot sharing the display SPI pins.
+namespace brick::boards::panel480
 {
 
-inline St7701sRgbPanelConfig st7701s_480x480()
+inline brick::platform::esp32::s3::St7701sRgbPanelConfig display_config()
 {
     static constexpr std::uint8_t sequence[] = {
         0x06, 0xFF, 0xFF, 0x05, 0x77, 0x01, 0x00, 0x00, 0x10, 0xC0, 0x02, 0x3B, 0x00, 0xC1, 0x02, 0x0D, 0x02, 0xC2, 0x02, 0x31, 0x05, 0xCD, 0x01, 0x08, 0xB0, 0x10, 0x00, 0x11, 0x18, 0x0E, 0x11, 0x06, 0x07, 0x08, 0x07, 0x22, 0x04,
@@ -16,7 +21,7 @@ inline St7701sRgbPanelConfig st7701s_480x480()
         0xA0, 0xEB, 0x07, 0x02, 0x00, 0xE4, 0xE4, 0x88, 0x00, 0x40, 0xEC, 0x02, 0x3C, 0x00, 0xED, 0x10, 0xAB, 0x89, 0x76, 0x54, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x20, 0x45, 0x67, 0x98, 0xBA, 0xFF, 0x05, 0x77, 0x01, 0x00,
         0x00, 0x13, 0xE5, 0x01, 0xE4, 0x3A, 0x01, 0x60, 0xFF, 0x05, 0x77, 0x01, 0x00, 0x00, 0x10, 0xCD, 0x01, 0x00, 0xC7, 0x01, 0x00, 0x36, 0x01, 0x00, 0x20, 0x00, 0x11, 0x00, 0x78, 0xFF, 0x29, 0x00, 0x14, 0xFF,
     };
-    St7701sRgbPanelConfig config{};
+    brick::platform::esp32::s3::St7701sRgbPanelConfig config{};
     config.width              = 480;
     config.height             = 480;
     config.pixel_clock_hz     = 12'000'000;
@@ -41,4 +46,34 @@ inline St7701sRgbPanelConfig st7701s_480x480()
     return config;
 }
 
-}  // namespace brick::platform::esp32::s3::profiles
+/// Display configuration with two PSRAM frame buffers for tear-free
+/// full-frame rendering.
+inline brick::platform::esp32::s3::St7701sRgbPanelConfig double_buffered_display_config()
+{
+    brick::platform::esp32::s3::St7701sRgbPanelConfig config = display_config();
+    config.frame_buffer_count                                = 2;
+    return config;
+}
+
+inline brick::platform::esp32::touch::Gt911Config touch_config()
+{
+    brick::platform::esp32::touch::Gt911Config config{};
+    config.port         = I2C_NUM_0;
+    config.sda_gpio     = GPIO_NUM_19;
+    config.scl_gpio     = GPIO_NUM_45;
+    config.clock_hz     = 100'000;
+    config.display_size = { 480, 480 };
+    return config;
+}
+
+inline brick::platform::esp32::SdSpiFileSystemConfig sd_config()
+{
+    brick::platform::esp32::SdSpiFileSystemConfig config{};
+    config.cs   = GPIO_NUM_42;
+    config.sck  = GPIO_NUM_48;
+    config.mosi = GPIO_NUM_47;
+    config.miso = GPIO_NUM_41;
+    return config;
+}
+
+}  // namespace brick::boards::panel480

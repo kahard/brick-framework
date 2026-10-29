@@ -5,6 +5,8 @@ namespace brick::platform::stm32::f1
 
 bool Stm32Buzzer::begin()
 {
+    if (config_.port == nullptr)
+        return false;
     if (config_.port == GPIOB)
         __HAL_RCC_GPIOB_CLK_ENABLE();
     else if (config_.port == GPIOA)

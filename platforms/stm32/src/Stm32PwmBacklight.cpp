@@ -5,7 +5,7 @@ namespace brick::platform::stm32::f1
 
 bool Stm32PwmBacklight::begin()
 {
-    if (config_.timer == nullptr)
+    if (config_.timer == nullptr || config_.port == nullptr)
         return false;
     __HAL_RCC_GPIOC_CLK_ENABLE();
     __HAL_RCC_AFIO_CLK_ENABLE();

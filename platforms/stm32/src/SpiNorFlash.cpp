@@ -11,7 +11,7 @@ SpiNorFlash::SpiNorFlash(SpiNorFlashConfig config) : config_(config)
 
 bool SpiNorFlash::transfer_(const std::uint8_t* command, std::size_t command_size, void* data, std::size_t size)
 {
-    if (config_.spi == nullptr || command == nullptr || (data == nullptr && size != 0))
+    if (config_.spi == nullptr || config_.cs_port == nullptr || command == nullptr || (data == nullptr && size != 0))
         return false;
     config_.cs_port->BSRR = static_cast<std::uint32_t>(config_.cs_pin) << 16;
     const auto command_ok = HAL_SPI_Transmit(config_.spi, const_cast<std::uint8_t*>(command), command_size, 100) == HAL_OK;

@@ -8,8 +8,11 @@
 #include "brick/interfaces/display/IFrameBufferDisplay.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "esp_attr.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 namespace brick::platform::esp32::s3
 {

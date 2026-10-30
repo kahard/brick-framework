@@ -8,6 +8,7 @@
 #include "brick/platform/pc/PcInput.h"
 #include "brick/platform/pc/PcLogger.h"
 #include "brick/platform/pc/PcMemory.h"
+#include "brick/platform/pc/PcSerialPort.h"
 #include "brick/platform/pc/PcTime.h"
 #include "brick/platform/pc/Simulator.h"
 
@@ -43,7 +44,7 @@ public:
     SimulatorBoard(const SimulatorBoardConfig& config, const brick::platform::pc::SimulatorOptions& options)
         : config_(config), time_(options.manual_time), logger_(config.debug_log),
           display_({ config.width, config.height, config.frame_buffers }), sd_(options.fs_root),
-          simulator_(options, display_, time_, config.name)
+          serial_(options.serial_input), simulator_(options, display_, time_, config.name)
     {
         simulator_.attach(touch_);
         simulator_.attach(button_);
@@ -65,6 +66,7 @@ public:
         ok      = backlight_.begin() && ok;
         ok      = touch_.begin() && ok;
         ok      = button_.begin() && ok;
+        ok      = serial_.begin() && ok;
         return ok;
     }
 
@@ -77,6 +79,7 @@ public:
     brick::platform::pc::PcButton&             button() { return button_; }
     brick::platform::pc::PcFileSystem&         sd() { return sd_; }
     brick::platform::pc::PcMemory&             memory() { return memory_; }
+    brick::platform::pc::PcSerialPort&         serial() { return serial_; }
     brick::platform::pc::PcTime&               time() { return time_; }
     brick::platform::pc::PcLogger&             logger() { return logger_; }
     brick::platform::pc::Simulator&            simulator() { return simulator_; }
@@ -90,6 +93,7 @@ private:
     brick::platform::pc::PcBacklight          backlight_;
     brick::platform::pc::PcButton             button_;
     brick::platform::pc::PcFileSystem         sd_;
+    brick::platform::pc::PcSerialPort         serial_;
     brick::platform::pc::PcMemory             memory_;
     brick::platform::pc::Simulator            simulator_;
 };

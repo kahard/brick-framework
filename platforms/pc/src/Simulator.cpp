@@ -26,6 +26,7 @@ namespace
                     "  --scale N               window zoom factor\n"
                     "  --screenshot FILE.ppm   save the last frame when stopping\n"
                     "  --fs DIR                directory used as the SD card (default: sdcard)\n"
+                    "  --serial-in FILE        bytes the serial port receives\n"
                     "  --touch X,Y@MS[+DUR]    touch at MS milliseconds for DUR ms (repeatable)\n"
                     "  --press MS[+DUR]        press the button at MS for DUR ms (repeatable)\n"
                     "Window: mouse = touch, space = button, Esc = quit.\n",
@@ -90,6 +91,8 @@ bool SimulatorOptions::parse(int argc, char** argv, SimulatorOptions& options)
             options.screenshot = argv[++index];
         else if (std::strcmp(option, "--fs") == 0 && value != nullptr)
             options.fs_root = argv[++index];
+        else if (std::strcmp(option, "--serial-in") == 0 && value != nullptr)
+            options.serial_input = argv[++index];
         else if (std::strcmp(option, "--touch") == 0 && value != nullptr)
         {
             ScriptedTouch touch;

@@ -11,6 +11,7 @@
 #include "brick/platform/pc/PcFrameBufferDisplay.h"
 #include "brick/platform/pc/PcInput.h"
 #include "brick/platform/pc/PcMemory.h"
+#include "brick/platform/pc/PcSerialPort.h"
 #include "brick/platform/pc/PcTime.h"
 #include "brick/platform/pc/Simulator.h"
 
@@ -108,6 +109,21 @@ void test_file_system()
     assert(!fs.mounted() && !fs.probe("/sdcard/data.bin"));
     file.reset();
     std::filesystem::remove_all(root);
+}
+
+void test_serial_port()
+{
+    brick::platform::pc::PcSerialPort port;
+    assert(port.begin());
+    const std::uint8_t frame[3] = { 0xA5, 1, 50 };
+    port.inject(frame, sizeof(frame));
+    std::uint8_t buffer[2];
+    assert(port.read(buffer, sizeof(buffer)) == 2 && buffer[0] == 0xA5 && buffer[1] == 1);
+    assert(port.read(buffer, sizeof(buffer)) == 1 && buffer[0] == 50);
+    assert(port.read(buffer, sizeof(buffer)) == 0);
+    assert(port.write(frame, 2) == 2 && port.output().size() == 2);
+    brick::platform::pc::PcSerialPort missing("does-not-exist.bin");
+    assert(!missing.begin());
 }
 
 void test_memory_and_time()
@@ -210,6 +226,7 @@ int main()
     test_frame_buffer_display();
     test_touch_and_button();
     test_file_system();
+    test_serial_port();
     test_memory_and_time();
     test_headless_simulation();
     std::puts("brick_pc_tests: OK");

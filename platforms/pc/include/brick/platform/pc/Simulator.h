@@ -38,6 +38,7 @@ struct SimulatorOptions
     std::uint32_t              scale       = 0;  ///< window zoom; 0 = choose automatically
     std::string                screenshot;       ///< PPM file written when the simulator stops
     std::string                fs_root = "sdcard";
+    std::string                serial_input;  ///< file whose bytes the serial port receives
     std::vector<ScriptedTouch> touches;
     std::vector<ScriptedPress> presses;
 

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "brick/interfaces/storage/IFileSystem.h"
+#include "brick/interfaces/storage/IRemovableFileSystem.h"
 #include "brick/platform/esp32/File.h"
 #include "driver/sdspi_host.h"
 #include "esp_vfs_fat.h"
@@ -26,14 +26,14 @@ struct SdSpiFileSystemConfig
     int max_freq_khz = 20000;
 };
 
-class SdSpiFileSystem final : public interfaces::storage::IFileSystem
+class SdSpiFileSystem final : public interfaces::storage::IRemovableFileSystem
 {
 public:
     explicit SdSpiFileSystem(SdSpiFileSystemConfig config);
     bool                                        mount() override;
-    void                                        unmount();
-    bool                                        mounted() const { return mounted_; }
-    bool                                        probe(const char* path);
+    void                                        unmount() override;
+    bool                                        mounted() const override { return mounted_; }
+    bool                                        probe(const char* path) override;
     std::vector<std::string>                    list_files(const char* path) override;
     std::unique_ptr<interfaces::storage::IFile> open(const char* path, const char* mode) override;
 

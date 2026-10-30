@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "brick/interfaces/storage/IFileSystem.h"
+#include "brick/interfaces/storage/IRemovableFileSystem.h"
 #include "driver/gpio.h"
 #include "driver/sdmmc_host.h"
 #include "esp_log.h"
@@ -44,14 +44,14 @@ private:
     std::FILE* handle_;
 };
 
-class SdmmcFileSystem final : public interfaces::storage::IFileSystem
+class SdmmcFileSystem final : public interfaces::storage::IRemovableFileSystem
 {
 public:
     explicit SdmmcFileSystem(SdmmcFileSystemConfig config = {}) : config_(config) {}
     bool                                        mount() override;
-    void                                        unmount();
-    bool                                        mounted() const { return mounted_; }
-    bool                                        probe(const char* path);
+    void                                        unmount() override;
+    bool                                        mounted() const override { return mounted_; }
+    bool                                        probe(const char* path) override;
     std::vector<std::string>                    list_files(const char* path) override;
     std::unique_ptr<interfaces::storage::IFile> open(const char* path, const char* mode) override;
 

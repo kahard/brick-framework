@@ -64,6 +64,19 @@ std::vector<std::string> PcFileSystem::list_files(const char* path)
     return names;
 }
 
+bool PcFileSystem::probe(const char* path)
+{
+    if (!mounted_ || path == nullptr)
+        return false;
+    FILE* file = std::fopen(host_path(path).c_str(), "rb");
+    if (file == nullptr)
+        return false;
+    unsigned char byte = 0;
+    const bool    ok   = std::fread(&byte, 1, 1, file) == 1;
+    std::fclose(file);
+    return ok;
+}
+
 std::unique_ptr<brick::interfaces::storage::IFile> PcFileSystem::open(const char* path, const char* mode)
 {
     if (!mounted_ || mode == nullptr)

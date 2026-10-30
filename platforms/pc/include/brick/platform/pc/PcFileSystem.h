@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "brick/interfaces/storage/IFileSystem.h"
+#include "brick/interfaces/storage/IRemovableFileSystem.h"
 
 namespace brick::platform::pc
 {
@@ -30,7 +30,7 @@ private:
 /// A directory on the host standing in for an SD card or flash file system.
 /// Target paths such as "/sdcard/assets.bin" are mapped below root by removing
 /// mount_point ("/sdcard") first.
-class PcFileSystem final : public brick::interfaces::storage::IFileSystem
+class PcFileSystem final : public brick::interfaces::storage::IRemovableFileSystem
 {
 public:
     explicit PcFileSystem(std::string root, std::string mount_point = "/sdcard");
@@ -39,8 +39,9 @@ public:
     std::vector<std::string>                           list_files(const char* path) override;
     std::unique_ptr<brick::interfaces::storage::IFile> open(const char* path, const char* mode) override;
 
-    bool        mounted() const { return mounted_; }
-    void        unmount() { mounted_ = false; }
+    bool        mounted() const override { return mounted_; }
+    void        unmount() override { mounted_ = false; }
+    bool        probe(const char* path) override;
     std::string host_path(const char* path) const;
 
 private:

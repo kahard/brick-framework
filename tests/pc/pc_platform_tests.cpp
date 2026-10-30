@@ -103,6 +103,9 @@ void test_file_system()
     const auto names = fs.list_files("/sdcard");
     assert(names.size() == 1 && names[0] == "data.bin");
     assert(fs.open("/sdcard/missing.bin", "r") == nullptr);
+    assert(fs.probe("/sdcard/data.bin") && !fs.probe("/sdcard/missing.bin"));
+    fs.unmount();
+    assert(!fs.mounted() && !fs.probe("/sdcard/data.bin"));
     file.reset();
     std::filesystem::remove_all(root);
 }

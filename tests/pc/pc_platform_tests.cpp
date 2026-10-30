@@ -7,6 +7,7 @@
 
 #include "brick/boards/pc/SimulatorBoard.h"
 #include "brick/core/memory/MemoryBlock.h"
+#include "brick/platform/pc/PcFileAssetSource.h"
 #include "brick/platform/pc/PcFileSystem.h"
 #include "brick/platform/pc/PcFrameBufferDisplay.h"
 #include "brick/platform/pc/PcInput.h"
@@ -126,6 +127,29 @@ void test_serial_port()
     assert(!missing.begin());
 }
 
+void test_file_asset_source()
+{
+    const char* const path = "pc_asset_bundle.bin";
+    {
+        std::ofstream bundle(path, std::ios::binary);
+        const char    bytes[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        bundle.write(bytes, sizeof(bytes));
+    }
+    brick::platform::pc::PcFileAssetSource source(path);
+    assert(source.begin() && source.size() == 8);
+    brick::interfaces::display::AssetDescriptor asset;
+    asset.offset        = 4;
+    asset.size          = 4;
+    std::uint8_t out[4] = {};
+    assert(source.read(asset, 1, out, 3) && out[0] == 5 && out[2] == 7);
+    assert(!source.read(asset, 2, out, 3));
+    asset.offset = 6;
+    assert(!source.read(asset, 0, out, 4));
+    std::filesystem::remove(path);
+    brick::platform::pc::PcFileAssetSource missing("does-not-exist.bin");
+    assert(!missing.begin());
+}
+
 void test_memory_and_time()
 {
     brick::platform::pc::PcMemory memory(128);
@@ -227,6 +251,7 @@ int main()
     test_touch_and_button();
     test_file_system();
     test_serial_port();
+    test_file_asset_source();
     test_memory_and_time();
     test_headless_simulation();
     std::puts("brick_pc_tests: OK");

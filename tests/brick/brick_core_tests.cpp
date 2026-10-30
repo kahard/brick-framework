@@ -102,6 +102,66 @@ void test_bmp_decoder()
         !brick::core::image::BmpDecoder::decode(fs, "missing.bmp", pixels, { .target_width = 2, .target_height = 2 }));
 }
 
+// Top-down BMP whose pixel (x, y) has red = x, green = y * 4 and blue = 0x80.
+std::vector<std::uint8_t> make_gradient_bmp(int width, int height, int bits)
+{
+    const int                 bytes  = bits / 8;
+    const int                 stride = ((width * bytes + 3) / 4) * 4;
+    std::vector<std::uint8_t> bmp(54 + static_cast<std::size_t>(stride) * height, 0);
+    bmp[0]  = 'B';
+    bmp[1]  = 'M';
+    bmp[10] = 54;
+    bmp[14] = 40;
+    bmp[18] = static_cast<std::uint8_t>(width);
+    // Negative height: rows are stored top-down.
+    const std::int32_t top_down = -height;
+    std::memcpy(&bmp[22], &top_down, sizeof(top_down));
+    bmp[26] = 1;
+    bmp[28] = static_cast<std::uint8_t>(bits);
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            std::uint8_t* pixel = &bmp[54 + static_cast<std::size_t>(y) * stride + x * bytes];
+            pixel[0]            = 0x80;
+            pixel[1]            = static_cast<std::uint8_t>(y * 4);
+            pixel[2]            = static_cast<std::uint8_t>(x);
+        }
+    return bmp;
+}
+
+std::uint16_t expected_gradient(int x, int y)
+{
+    return static_cast<std::uint16_t>(((x & 0xF8) << 8) | (((y * 4) & 0xFC) << 3) | (0x80 >> 3));
+}
+
+void test_bmp_decoder_wide_rows()
+{
+    // Rows wider than the decoder's read chunk, in both pixel sizes, plus a
+    // target narrower than the source (left part copied, rows centred).
+    for (const int bits : { 24, 32 })
+    {
+        MemoryFileSystem fs;
+        fs.files["wide.bmp"] = make_gradient_bmp(70, 3, bits);
+        std::uint8_t pixels[70 * 3 * 2];
+        assert(
+            brick::core::image::BmpDecoder::decode(fs, "wide.bmp", pixels, { .target_width = 70, .target_height = 3 }));
+        for (int y = 0; y < 3; ++y)
+            for (int x = 0; x < 70; ++x)
+            {
+                const std::size_t   index = (static_cast<std::size_t>(y) * 70 + x) * 2;
+                const std::uint16_t value = static_cast<std::uint16_t>(pixels[index] | (pixels[index + 1] << 8));
+                assert(value == expected_gradient(x, y));
+            }
+
+        std::uint8_t cropped[40 * 1 * 2];
+        assert(brick::core::image::BmpDecoder::decode(fs, "wide.bmp", cropped,
+                                                      { .target_width = 40, .target_height = 1 }));
+        for (int x = 0; x < 40; ++x)
+            assert(static_cast<std::uint16_t>(cropped[x * 2] | (cropped[x * 2 + 1] << 8)) == expected_gradient(x, 1));
+        assert(fs.open_files() == 0);
+    }
+}
+
 std::vector<std::uint8_t> make_pcm_wav()
 {
     std::vector<std::uint8_t> wav(46, 0);
@@ -300,6 +360,7 @@ int main()
 
     test_periodic_timer();
     test_bmp_decoder();
+    test_bmp_decoder_wide_rows();
     test_wav_decoder();
     test_audio_player();
     test_touch_mapper();

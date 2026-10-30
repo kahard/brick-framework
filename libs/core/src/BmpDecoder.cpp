@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstdlib>
 
 namespace brick::core::image
 {
@@ -40,36 +39,36 @@ bool BmpDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
                                      0;
 
     std::fill_n(destination, static_cast<std::size_t>(options.target_width) * options.target_height * 2, 0);
-    auto* row = static_cast<std::uint8_t*>(std::malloc(stride));
-    if (row == nullptr || !file->seek(static_cast<long>(pixel_offset) + skip_rows * stride, SEEK_SET))
-    {
-        std::free(row);
-        return false;
-    }
-
+    // The copied part of each row is read through a small stack buffer, so no
+    // row-sized allocation is needed. 96 bytes hold whole 24- and 32-bit pixels.
+    std::uint8_t chunk[96];
+    const int    pixels_per_chunk = static_cast<int>(sizeof(chunk)) / bytes_per_pixel;
     for (int source_row = 0; source_row < copy_height; ++source_row)
     {
-        if (file->read(row, 1, stride) != static_cast<std::size_t>(stride))
-        {
-            std::free(row);
+        const long row_offset = static_cast<long>(pixel_offset) + (skip_rows + source_row) * stride;
+        if (!file->seek(row_offset, SEEK_SET))
             return false;
-        }
         if (options.on_row != nullptr && (source_row & 31) == 0)
             options.on_row(static_cast<std::uint32_t>(source_row));
         const int destination_row = bottom_up ? copy_height - 1 - source_row + y_offset : source_row + y_offset;
-        for (int column = 0; column < copy_width; ++column)
+        for (int column = 0; column < copy_width;)
         {
-            const auto*         pixel = row + column * bytes_per_pixel;
-            const std::uint16_t rgb565 =
-                static_cast<std::uint16_t>(((pixel[2] & 0xF8) << 8) | ((pixel[1] & 0xFC) << 3) | (pixel[0] >> 3));
-            const std::size_t index =
-                (static_cast<std::size_t>(destination_row) * options.target_width + column + x_offset) * 2;
-            destination[index]     = static_cast<std::uint8_t>(rgb565 & 0xFF);
-            destination[index + 1] = static_cast<std::uint8_t>(rgb565 >> 8);
+            const int         count = std::min(pixels_per_chunk, copy_width - column);
+            const std::size_t bytes = static_cast<std::size_t>(count) * bytes_per_pixel;
+            if (file->read(chunk, 1, bytes) != bytes)
+                return false;
+            for (int index = 0; index < count; ++index, ++column)
+            {
+                const std::uint8_t* pixel = chunk + index * bytes_per_pixel;
+                const std::uint16_t rgb565 =
+                    static_cast<std::uint16_t>(((pixel[2] & 0xF8) << 8) | ((pixel[1] & 0xFC) << 3) | (pixel[0] >> 3));
+                const std::size_t offset =
+                    (static_cast<std::size_t>(destination_row) * options.target_width + column + x_offset) * 2;
+                destination[offset]     = static_cast<std::uint8_t>(rgb565 & 0xFF);
+                destination[offset + 1] = static_cast<std::uint8_t>(rgb565 >> 8);
+            }
         }
     }
-
-    std::free(row);
     return true;
 }
 

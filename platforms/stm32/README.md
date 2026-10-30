@@ -11,6 +11,8 @@ adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963
 
 USB storage read/write feature macros may be provided by a board package or
 project `board_config.h`; when absent they default to `1`.
+`BRICK_STM32_USB_FS_MAX_OPEN_FILES` (default `2`) sets how many files
+`Stm32UsbFileSystem` can keep open at once; each holds a FatFs `FIL`.
 
 The common `IFile` interface provides `read`, `seek` and `write`; read-only
 implementations may keep the default `write` method, which returns zero.

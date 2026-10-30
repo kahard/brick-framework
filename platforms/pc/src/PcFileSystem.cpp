@@ -4,14 +4,32 @@
 #include <cstring>
 #include <filesystem>
 #include <system_error>
+#include <vector>
 
 namespace brick::platform::pc
 {
 
 PcFile::~PcFile()
 {
+    close();
+}
+
+bool PcFile::open(const std::string& host_path, const char* mode)
+{
+    close();
+    // Always use binary mode: target code expects byte-exact reads and writes.
+    std::string binary_mode = mode;
+    if (binary_mode.find('b') == std::string::npos)
+        binary_mode += 'b';
+    file_ = std::fopen(host_path.c_str(), binary_mode.c_str());
+    return file_ != nullptr;
+}
+
+void PcFile::close()
+{
     if (file_ != nullptr)
         std::fclose(file_);
+    file_ = nullptr;
 }
 
 std::size_t PcFile::read(void* buffer, std::size_t size, std::size_t count)
@@ -51,17 +69,21 @@ std::string PcFileSystem::host_path(const char* path) const
     return (std::filesystem::path(root_) / relative).string();
 }
 
-std::vector<std::string> PcFileSystem::list_files(const char* path)
+std::size_t PcFileSystem::list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
+                                     std::size_t capacity)
 {
-    std::vector<std::string> names;
     if (!mounted_)
-        return names;
-    std::error_code error;
+        return 0;
+    // Sorted, so tests and simulator runs see the same order on every host.
+    std::vector<std::string> names;
+    std::error_code          error;
     for (const auto& entry : std::filesystem::directory_iterator(host_path(path), error))
         if (entry.is_regular_file(error))
             names.push_back(entry.path().filename().string());
     std::sort(names.begin(), names.end());
-    return names;
+    for (std::size_t index = 0; entries != nullptr && index < names.size() && index < capacity; ++index)
+        entries[index].set_name(names[index].c_str());
+    return names.size();
 }
 
 bool PcFileSystem::probe(const char* path)
@@ -77,18 +99,26 @@ bool PcFileSystem::probe(const char* path)
     return ok;
 }
 
-std::unique_ptr<brick::interfaces::storage::IFile> PcFileSystem::open(const char* path, const char* mode)
+bool PcFileSystem::open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file)
 {
+    file.close();
     if (!mounted_ || mode == nullptr)
-        return nullptr;
-    // Always use binary mode: target code expects byte-exact reads and writes.
-    std::string binary_mode = mode;
-    if (binary_mode.find('b') == std::string::npos)
-        binary_mode += 'b';
-    FILE* file = std::fopen(host_path(path).c_str(), binary_mode.c_str());
-    if (file == nullptr)
-        return nullptr;
-    return std::make_unique<PcFile>(file);
+        return false;
+    for (PcFile& candidate : files_)
+    {
+        if (candidate.is_open())
+            continue;
+        if (!candidate.open(host_path(path), mode))
+            return false;
+        file.attach(*this, candidate);
+        return true;
+    }
+    return false;
+}
+
+void PcFileSystem::close(brick::interfaces::storage::IFile& file)
+{
+    static_cast<PcFile&>(file).close();
 }
 
 }  // namespace brick::platform::pc

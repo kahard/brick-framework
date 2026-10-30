@@ -1,11 +1,9 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <dirent.h>
-#include <memory>
-#include <string>
-#include <vector>
 
 #include "brick/interfaces/storage/IRemovableFileSystem.h"
 #include "driver/gpio.h"
@@ -31,36 +29,50 @@ struct SdmmcFileSystemConfig
     int           host_slot    = SDMMC_HOST_SLOT_0;
 };
 
+/// File on the SD card; SdmmcFileSystem keeps a fixed set of them for open().
 class SdmmcFile final : public interfaces::storage::IFile
 {
 public:
-    explicit SdmmcFile(std::FILE* handle);
+    SdmmcFile() = default;
     ~SdmmcFile() override;
+    SdmmcFile(const SdmmcFile&)            = delete;
+    SdmmcFile& operator=(const SdmmcFile&) = delete;
+
+    bool        open(const char* path, const char* mode);
+    void        close();
+    bool        is_open() const { return handle_ != nullptr; }
     std::size_t read(void* buffer, std::size_t size, std::size_t count) override;
     std::size_t write(const void* buffer, std::size_t size, std::size_t count) override;
     bool        seek(long offset, int origin) override;
 
 private:
-    std::FILE* handle_;
+    std::FILE* handle_ = nullptr;
 };
 
 class SdmmcFileSystem final : public interfaces::storage::IRemovableFileSystem
 {
 public:
     explicit SdmmcFileSystem(SdmmcFileSystemConfig config = {}) : config_(config) {}
-    bool                                        mount() override;
-    void                                        unmount() override;
-    bool                                        mounted() const override { return mounted_; }
-    bool                                        probe(const char* path) override;
-    std::vector<std::string>                    list_files(const char* path) override;
-    std::unique_ptr<interfaces::storage::IFile> open(const char* path, const char* mode) override;
+    bool        mount() override;
+    void        unmount() override;
+    bool        mounted() const override { return mounted_; }
+    bool        probe(const char* path) override;
+    std::size_t list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity) override;
+    bool        open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
+
+    /// Matches max_files of the FAT mount.
+    static constexpr std::size_t kMaxOpenFiles = 5;
+
+protected:
+    void close(interfaces::storage::IFile& file) override;
 
 private:
-    static constexpr const char* TAG              = "brick_sdmmc";
-    bool                         mounted_         = false;
-    sdmmc_card_t*                card_            = nullptr;
-    sd_pwr_ctrl_handle_t         pwr_ctrl_handle_ = nullptr;
-    SdmmcFileSystemConfig        config_{};
+    static constexpr const char*         TAG              = "brick_sdmmc";
+    bool                                 mounted_         = false;
+    sdmmc_card_t*                        card_            = nullptr;
+    sd_pwr_ctrl_handle_t                 pwr_ctrl_handle_ = nullptr;
+    SdmmcFileSystemConfig                config_{};
+    std::array<SdmmcFile, kMaxOpenFiles> files_{};
 };
 
 }  // namespace brick::platform::esp32

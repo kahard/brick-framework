@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "brick/platform/esp32/VfsDirectory.h"
 #include "driver/spi_common.h"
 #include "esp_log.h"
 
@@ -69,7 +70,7 @@ bool SdSpiFileSystem::mount()
     device.gpio_cs                          = config_.cs;
     esp_vfs_fat_mount_config_t mount_config = {};
     mount_config.format_if_mount_failed     = false;
-    mount_config.max_files                  = 5;
+    mount_config.max_files                  = kMaxOpenFiles;
     mount_config.allocation_unit_size       = 16 * 1024;
     result = esp_vfs_fat_sdspi_mount(config_.mount_point, &host, &device, &mount_config, &card_);
     if (result != ESP_OK)
@@ -82,24 +83,19 @@ bool SdSpiFileSystem::mount()
     return true;
 }
 
-std::vector<std::string> SdSpiFileSystem::list_files(const char* path)
+std::size_t SdSpiFileSystem::list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity)
 {
-    std::vector<std::string> files;
-    DIR*                     directory = opendir(path);
-    if (!directory)
-        return files;
-    struct dirent* entry;
-    while ((entry = readdir(directory)) != nullptr)
-        if (entry->d_type == DT_REG)
-            files.emplace_back(std::string(path) + "/" + entry->d_name);
-    closedir(directory);
-    return files;
+    return list_vfs_files(path, entries, capacity);
 }
 
-std::unique_ptr<interfaces::storage::IFile> SdSpiFileSystem::open(const char* path, const char* mode)
+bool SdSpiFileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
 {
-    std::FILE* handle = std::fopen(path, mode);
-    return handle == nullptr ? nullptr : std::unique_ptr<interfaces::storage::IFile>(new File(handle));
+    return open_vfs_file(files_, *this, path, mode, file);
+}
+
+void SdSpiFileSystem::close(interfaces::storage::IFile& file)
+{
+    static_cast<File&>(file).close();
 }
 
 }  // namespace brick::platform::esp32

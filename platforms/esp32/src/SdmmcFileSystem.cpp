@@ -1,4 +1,5 @@
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
+#include "brick/platform/esp32/VfsDirectory.h"
 #include "sd_pwr_ctrl_by_on_chip_ldo.h"
 #include <cerrno>
 #include <cstring>
@@ -6,9 +7,6 @@
 namespace brick::platform::esp32
 {
 
-SdmmcFile::SdmmcFile(std::FILE* handle) : handle_(handle)
-{
-}
 
 void SdmmcFileSystem::unmount()
 {
@@ -40,8 +38,23 @@ bool SdmmcFileSystem::probe(const char* path)
 
 SdmmcFile::~SdmmcFile()
 {
+    close();
+}
+
+bool SdmmcFile::open(const char* path, const char* mode)
+{
+    close();
+    handle_ = std::fopen(path, mode);
+    if (handle_ == nullptr)
+        ESP_LOGE("brick_sdmmc", "fopen failed path=%s mode=%s errno=%d (%s)", path, mode, errno, std::strerror(errno));
+    return handle_ != nullptr;
+}
+
+void SdmmcFile::close()
+{
     if (handle_ != nullptr)
         std::fclose(handle_);
+    handle_ = nullptr;
 }
 
 std::size_t SdmmcFile::read(void* buffer, std::size_t size, std::size_t count)
@@ -89,7 +102,7 @@ bool SdmmcFileSystem::mount()
     slot.wp                                 = SDMMC_SLOT_NO_WP;
     slot.flags                              = 0;
     esp_vfs_fat_sdmmc_mount_config_t config = { .format_if_mount_failed   = false,
-                                                .max_files                = 5,
+                                                .max_files                = kMaxOpenFiles,
                                                 .allocation_unit_size     = 16 * 1024,
                                                 .disk_status_check_enable = false,
                                                 .use_one_fat              = false };
@@ -106,31 +119,19 @@ bool SdmmcFileSystem::mount()
     return true;
 }
 
-std::vector<std::string> SdmmcFileSystem::list_files(const char* path)
+std::size_t SdmmcFileSystem::list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity)
 {
-    std::vector<std::string> files;
-    DIR*                     directory = opendir(path);
-    if (directory == nullptr)
-        return files;
-    struct dirent* entry;
-    while ((entry = readdir(directory)) != nullptr)
-    {
-        if (entry->d_type == DT_REG)
-            files.emplace_back(std::string(path) + "/" + entry->d_name);
-    }
-    closedir(directory);
-    return files;
+    return list_vfs_files(path, entries, capacity);
 }
 
-std::unique_ptr<interfaces::storage::IFile> SdmmcFileSystem::open(const char* path, const char* mode)
+bool SdmmcFileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
 {
-    std::FILE* handle = std::fopen(path, mode);
-    if (handle == nullptr)
-    {
-        ESP_LOGE(TAG, "fopen failed path=%s mode=%s errno=%d (%s)", path, mode, errno, std::strerror(errno));
-        return nullptr;
-    }
-    return std::make_unique<SdmmcFile>(handle);
+    return open_vfs_file(files_, *this, path, mode, file);
+}
+
+void SdmmcFileSystem::close(interfaces::storage::IFile& file)
+{
+    static_cast<SdmmcFile&>(file).close();
 }
 
 }  // namespace brick::platform::esp32

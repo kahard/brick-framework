@@ -11,8 +11,8 @@ namespace brick::core::audio
 
 bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, AudioBuffer& output)
 {
-    auto file = file_system.open(path, "rb");
-    if (!file)
+    interfaces::storage::FileHandle file;
+    if (!file_system.open(path, "rb", file))
         return false;
 
     std::uint8_t header[12];

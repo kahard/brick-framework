@@ -45,6 +45,48 @@ extern "C" DRESULT disk_ioctl(BYTE, BYTE, void*)
 namespace brick::platform::stm32::f1
 {
 
+bool Stm32UsbFile::open(const char* path, const char* mode)
+{
+    close();
+    BYTE flags = FA_READ;
+    if (std::strchr(mode, 'w') != nullptr)
+    {
+#if BRICK_STM32_USB_FS_WRITE
+        flags = FA_WRITE | FA_CREATE_ALWAYS;
+#else
+        return false;
+#endif
+    }
+    else if (std::strchr(mode, 'a') != nullptr)
+    {
+#if BRICK_STM32_USB_FS_WRITE
+        flags = FA_WRITE | FA_OPEN_ALWAYS;
+#else
+        return false;
+#endif
+    }
+#if !BRICK_STM32_USB_FS_READ
+    if (std::strchr(mode, 'r') != nullptr)
+        return false;
+#endif
+    if (f_open(&file_, path, flags) != FR_OK)
+        return false;
+    if (std::strchr(mode, 'a') != nullptr && f_lseek(&file_, f_size(&file_)) != FR_OK)
+    {
+        f_close(&file_);
+        return false;
+    }
+    open_ = true;
+    return true;
+}
+
+void Stm32UsbFile::close()
+{
+    if (open_)
+        f_close(&file_);
+    open_ = false;
+}
+
 std::size_t Stm32UsbFile::read(void* buffer, std::size_t size, std::size_t count)
 {
 #if !BRICK_STM32_USB_FS_READ
@@ -110,56 +152,48 @@ void Stm32UsbFileSystem::unmount()
     mounted_ = false;
 }
 
-std::vector<std::string> Stm32UsbFileSystem::list_files(const char* path)
+std::size_t Stm32UsbFileSystem::list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
+                                           std::size_t capacity)
 {
-    std::vector<std::string> result;
     if (!mounted_)
-        return result;
+        return 0;
     DIR     dir{};
     FILINFO info{};
     if (f_opendir(&dir, path) != FR_OK)
-        return result;
+        return 0;
+    std::size_t count = 0;
     while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0)
-        if (!(info.fattrib & AM_DIR))
-            result.emplace_back(info.fname);
+    {
+        if (info.fattrib & AM_DIR)
+            continue;
+        if (entries != nullptr && count < capacity)
+            entries[count].set_name(info.fname);
+        ++count;
+    }
     f_closedir(&dir);
-    return result;
+    return count;
 }
 
-std::unique_ptr<brick::interfaces::storage::IFile> Stm32UsbFileSystem::open(const char* path, const char* mode)
+bool Stm32UsbFileSystem::open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file)
 {
-    if (!mounted_)
-        return nullptr;
-    BYTE flags = FA_READ;
-    if (std::strchr(mode, 'w') != nullptr)
+    file.close();
+    if (!mounted_ || mode == nullptr)
+        return false;
+    for (Stm32UsbFile& candidate : files_)
     {
-#if BRICK_STM32_USB_FS_WRITE
-        flags = FA_WRITE | FA_CREATE_ALWAYS;
-#else
-        return nullptr;
-#endif
+        if (candidate.is_open())
+            continue;
+        if (!candidate.open(path, mode))
+            return false;
+        file.attach(*this, candidate);
+        return true;
     }
-    else if (std::strchr(mode, 'a') != nullptr)
-    {
-#if BRICK_STM32_USB_FS_WRITE
-        flags = FA_WRITE | FA_OPEN_ALWAYS;
-#else
-        return nullptr;
-#endif
-    }
-#if !BRICK_STM32_USB_FS_READ
-    if (std::strchr(mode, 'r') != nullptr)
-        return nullptr;
-#endif
-    FIL file{};
-    if (f_open(&file, path, flags) != FR_OK)
-        return nullptr;
-    if (std::strchr(mode, 'a') != nullptr && f_lseek(&file, f_size(&file)) != FR_OK)
-    {
-        f_close(&file);
-        return nullptr;
-    }
-    return std::make_unique<Stm32UsbFile>(file);
+    return false;
+}
+
+void Stm32UsbFileSystem::close(brick::interfaces::storage::IFile& file)
+{
+    static_cast<Stm32UsbFile&>(file).close();
 }
 
 }  // namespace brick::platform::stm32::f1

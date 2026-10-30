@@ -10,8 +10,9 @@ namespace brick::core::image
 bool BmpDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* destination,
                         const BmpDecodeOptions& options)
 {
-    auto file = file_system.open(path, "rb");
-    if (!file || destination == nullptr || options.target_width == 0 || options.target_height == 0)
+    interfaces::storage::FileHandle file;
+    if (!file_system.open(path, "rb", file) || destination == nullptr || options.target_width == 0
+        || options.target_height == 0)
         return false;
 
     std::uint8_t header[54];

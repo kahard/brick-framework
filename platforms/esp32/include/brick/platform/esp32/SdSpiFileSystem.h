@@ -1,9 +1,7 @@
 #pragma once
 
-#include <dirent.h>
-#include <memory>
-#include <string>
-#include <vector>
+#include <array>
+#include <cstddef>
 
 #include "brick/interfaces/storage/IRemovableFileSystem.h"
 #include "brick/platform/esp32/File.h"
@@ -30,18 +28,25 @@ class SdSpiFileSystem final : public interfaces::storage::IRemovableFileSystem
 {
 public:
     explicit SdSpiFileSystem(SdSpiFileSystemConfig config);
-    bool                                        mount() override;
-    void                                        unmount() override;
-    bool                                        mounted() const override { return mounted_; }
-    bool                                        probe(const char* path) override;
-    std::vector<std::string>                    list_files(const char* path) override;
-    std::unique_ptr<interfaces::storage::IFile> open(const char* path, const char* mode) override;
+    bool        mount() override;
+    void        unmount() override;
+    bool        mounted() const override { return mounted_; }
+    bool        probe(const char* path) override;
+    std::size_t list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity) override;
+    bool        open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
+
+    /// Matches max_files of the FAT mount.
+    static constexpr std::size_t kMaxOpenFiles = 5;
+
+protected:
+    void close(interfaces::storage::IFile& file) override;
 
 private:
-    SdSpiFileSystemConfig config_;
-    bool                  mounted_         = false;
-    bool                  bus_initialized_ = false;
-    sdmmc_card_t*         card_            = nullptr;
+    SdSpiFileSystemConfig           config_;
+    std::array<File, kMaxOpenFiles> files_{};
+    bool                            mounted_         = false;
+    bool                            bus_initialized_ = false;
+    sdmmc_card_t*                   card_            = nullptr;
 };
 
 }  // namespace brick::platform::esp32

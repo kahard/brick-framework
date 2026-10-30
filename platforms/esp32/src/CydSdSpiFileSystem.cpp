@@ -2,37 +2,35 @@
 
 namespace brick::platform::esp32::wroom32
 {
-namespace
+
+bool CydSdSpiFileSystem::File::open(SdSpiFileSystem& filesystem, CydSpi3PinMux& pin_mux, const char* path,
+                                    const char* mode)
 {
+    pin_mux_ = &pin_mux;
+    return pin_mux.select_sd() && filesystem.open(path, mode, file_);
+}
 
-    class CydSdFile final : public brick::interfaces::storage::IFile
-    {
-    public:
-        CydSdFile(std::unique_ptr<brick::interfaces::storage::IFile> file, CydSpi3PinMux& pin_mux)
-            : file_(std::move(file)), pin_mux_(pin_mux)
-        {
-        }
+void CydSdSpiFileSystem::File::close()
+{
+    if (pin_mux_ != nullptr)
+        pin_mux_->select_sd();
+    file_.close();
+}
 
-        ~CydSdFile() override { pin_mux_.select_sd(); }
+std::size_t CydSdSpiFileSystem::File::read(void* buffer, std::size_t size, std::size_t count)
+{
+    return file_ && pin_mux_->select_sd() ? file_->read(buffer, size, count) : 0;
+}
 
-        std::size_t read(void* buffer, std::size_t size, std::size_t count) override
-        {
-            return pin_mux_.select_sd() ? file_->read(buffer, size, count) : 0;
-        }
+std::size_t CydSdSpiFileSystem::File::write(const void* buffer, std::size_t size, std::size_t count)
+{
+    return file_ && pin_mux_->select_sd() ? file_->write(buffer, size, count) : 0;
+}
 
-        std::size_t write(const void* buffer, std::size_t size, std::size_t count) override
-        {
-            return pin_mux_.select_sd() ? file_->write(buffer, size, count) : 0;
-        }
-
-        bool seek(long offset, int origin) override { return pin_mux_.select_sd() && file_->seek(offset, origin); }
-
-    private:
-        std::unique_ptr<brick::interfaces::storage::IFile> file_;
-        CydSpi3PinMux&                                     pin_mux_;
-    };
-
-}  // namespace
+bool CydSdSpiFileSystem::File::seek(long offset, int origin)
+{
+    return file_ && pin_mux_->select_sd() && file_->seek(offset, origin);
+}
 
 CydSdSpiFileSystem::CydSdSpiFileSystem(SdSpiFileSystemConfig config, CydSpi3PinMux& pin_mux)
     : pin_mux_(pin_mux), filesystem_(config)
@@ -41,6 +39,8 @@ CydSdSpiFileSystem::CydSdSpiFileSystem(SdSpiFileSystemConfig config, CydSpi3PinM
 
 CydSdSpiFileSystem::~CydSdSpiFileSystem()
 {
+    for (File& file : files_)
+        file.close();
     unmount();
 }
 
@@ -65,21 +65,32 @@ bool CydSdSpiFileSystem::probe(const char* path)
     return pin_mux_.select_sd() && filesystem_.probe(path);
 }
 
-std::vector<std::string> CydSdSpiFileSystem::list_files(const char* path)
+std::size_t CydSdSpiFileSystem::list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
+                                           std::size_t capacity)
 {
     if (!pin_mux_.select_sd())
-        return {};
-    return filesystem_.list_files(path);
+        return 0;
+    return filesystem_.list_files(path, entries, capacity);
 }
 
-std::unique_ptr<brick::interfaces::storage::IFile> CydSdSpiFileSystem::open(const char* path, const char* mode)
+bool CydSdSpiFileSystem::open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file)
 {
-    if (!pin_mux_.select_sd())
-        return nullptr;
-    std::unique_ptr<brick::interfaces::storage::IFile> file = filesystem_.open(path, mode);
-    if (!file)
-        return nullptr;
-    return std::make_unique<CydSdFile>(std::move(file), pin_mux_);
+    file.close();
+    for (File& candidate : files_)
+    {
+        if (candidate.is_open())
+            continue;
+        if (!candidate.open(filesystem_, pin_mux_, path, mode))
+            return false;
+        file.attach(*this, candidate);
+        return true;
+    }
+    return false;
+}
+
+void CydSdSpiFileSystem::close(brick::interfaces::storage::IFile& file)
+{
+    static_cast<File&>(file).close();
 }
 
 }  // namespace brick::platform::esp32::wroom32

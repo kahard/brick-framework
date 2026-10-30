@@ -3,14 +3,23 @@
 namespace brick::platform::esp32
 {
 
-File::File(std::FILE* handle) : handle_(handle)
+File::~File()
 {
+    close();
 }
 
-File::~File()
+bool File::open(const char* path, const char* mode)
+{
+    close();
+    handle_ = std::fopen(path, mode);
+    return handle_ != nullptr;
+}
+
+void File::close()
 {
     if (handle_ != nullptr)
         std::fclose(handle_);
+    handle_ = nullptr;
 }
 
 std::size_t File::read(void* buffer, std::size_t size, std::size_t count)

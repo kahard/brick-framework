@@ -200,15 +200,17 @@ generated bundle in the simulator). Applications driven over a UART take an
 `--serial-in` in the simulator). For LVGL applications the PC CMake build
 fetches the LVGL version pinned in `platformio-versions.ini`.
 
-The rule checker still reports the SD card applications' use of
-`IFileSystem::list_files()` (see the known debt below) and a vendored touch
-driver component; both must be resolved or excluded before stage 7.
+The rule checker still reports a vendored touch driver component; it must be
+resolved or excluded before stage 7.
 
-### Known debt in the interfaces
+### File system without allocation
 
-`IFileSystem::list_files()` returns `std::vector<std::string>` and
-`IFileSystem::open()` returns `std::unique_ptr<IFile>`; both allocate. They
-are allowed for now because every caller uses them outside time-critical
-paths, but they violate the allocation rules and will be replaced by a
-caller-provided buffer (`list_files(path, FileEntry* entries, capacity)`) and
-by a caller-owned `IFile` object (`open(path, mode, FileHandle&)`).
+`IFileSystem` does not allocate. `list_files(path, FileEntry* entries,
+capacity)` fills a caller-provided array with file names (without the
+directory) and returns the total count; `list_files(path, nullptr, 0)` only
+counts. `open(path, mode, FileHandle&)` binds a caller-owned `FileHandle` to
+one of a fixed set of file objects inside the file system (`kMaxOpenFiles`:
+5 on ESP32, matching `max_files` of the FAT mount; 5 on the PC; 2 on STM32,
+set with `BRICK_STM32_USB_FS_MAX_OPEN_FILES`). The handle closes the file when
+destroyed; it must not outlive its file system, and files are closed before
+unmounting.

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <memory>
+#include <array>
+#include <cstddef>
 
 #include "brick/interfaces/storage/IRemovableFileSystem.h"
 #include "brick/platform/esp32/SdSpiFileSystem.h"
@@ -15,16 +16,39 @@ public:
     CydSdSpiFileSystem(SdSpiFileSystemConfig config, CydSpi3PinMux& pin_mux);
     ~CydSdSpiFileSystem() override;
 
-    bool                                               mount() override;
-    void                                               unmount() override;
-    bool                                               mounted() const override;
-    bool                                               probe(const char* path) override;
-    std::vector<std::string>                           list_files(const char* path) override;
-    std::unique_ptr<brick::interfaces::storage::IFile> open(const char* path, const char* mode) override;
+    bool        mount() override;
+    void        unmount() override;
+    bool        mounted() const override;
+    bool        probe(const char* path) override;
+    std::size_t list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
+                           std::size_t capacity) override;
+    bool        open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
+
+protected:
+    void close(brick::interfaces::storage::IFile& file) override;
 
 private:
-    CydSpi3PinMux&  pin_mux_;
-    SdSpiFileSystem filesystem_;
+    /// A file of the wrapped SD file system that selects the SD card on the
+    /// shared SPI pins before every access.
+    class File final : public brick::interfaces::storage::IFile
+    {
+    public:
+        bool open(SdSpiFileSystem& filesystem, CydSpi3PinMux& pin_mux, const char* path, const char* mode);
+        void close();
+        bool is_open() const { return file_.is_open(); }
+
+        std::size_t read(void* buffer, std::size_t size, std::size_t count) override;
+        std::size_t write(const void* buffer, std::size_t size, std::size_t count) override;
+        bool        seek(long offset, int origin) override;
+
+    private:
+        brick::interfaces::storage::FileHandle file_;
+        CydSpi3PinMux*                         pin_mux_ = nullptr;
+    };
+
+    CydSpi3PinMux&                                   pin_mux_;
+    SdSpiFileSystem                                  filesystem_;
+    std::array<File, SdSpiFileSystem::kMaxOpenFiles> files_{};
 };
 
 }  // namespace brick::platform::esp32::wroom32

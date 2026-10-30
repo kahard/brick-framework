@@ -1,9 +1,7 @@
 #pragma once
 
-#include <dirent.h>
-#include <memory>
-#include <string>
-#include <vector>
+#include <array>
+#include <cstddef>
 
 #include "brick/interfaces/storage/IFileSystem.h"
 #include "brick/platform/esp32/File.h"
@@ -18,14 +16,21 @@ namespace brick::platform::esp32
 class FileSystem final : public interfaces::storage::IFileSystem
 {
 public:
-    bool                                        mount() override;
-    std::vector<std::string>                    list_files(const char* path) override;
-    std::unique_ptr<interfaces::storage::IFile> open(const char* path, const char* mode) override;
+    bool        mount() override;
+    std::size_t list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity) override;
+    bool        open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
+
+    /// Matches max_files of the FAT mount.
+    static constexpr std::size_t kMaxOpenFiles = 5;
+
+protected:
+    void close(interfaces::storage::IFile& file) override;
 
 private:
-    static constexpr const char* TAG      = "brick_fs";
-    bool                         mounted_ = false;
-    sdmmc_card_t*                card_    = nullptr;
+    static constexpr const char*    TAG      = "brick_fs";
+    bool                            mounted_ = false;
+    sdmmc_card_t*                   card_    = nullptr;
+    std::array<File, kMaxOpenFiles> files_{};
 };
 
 }  // namespace brick::platform::esp32

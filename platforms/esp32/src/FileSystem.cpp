@@ -1,5 +1,7 @@
 #include "brick/platform/esp32/FileSystem.h"
 
+#include "brick/platform/esp32/VfsDirectory.h"
+
 namespace brick::platform::esp32
 {
 
@@ -13,7 +15,7 @@ bool FileSystem::mount()
     slot_cfg.host_id                     = SPI2_HOST;
     slot_cfg.gpio_cs                     = GPIO_NUM_42;
     esp_vfs_fat_mount_config_t mount_cfg = { .format_if_mount_failed = false,
-                                             .max_files              = 5,
+                                             .max_files              = kMaxOpenFiles,
                                              .allocation_unit_size   = 16 * 1024 };
     const esp_err_t            result    = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_cfg, &mount_cfg, &card_);
     if (result != ESP_OK)
@@ -26,26 +28,19 @@ bool FileSystem::mount()
     return true;
 }
 
-std::vector<std::string> FileSystem::list_files(const char* path)
+std::size_t FileSystem::list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity)
 {
-    std::vector<std::string> files;
-    DIR*                     directory = opendir(path);
-    if (directory == nullptr)
-        return files;
-    struct dirent* entry;
-    while ((entry = readdir(directory)) != nullptr)
-    {
-        if (entry->d_type == DT_REG)
-            files.emplace_back(std::string(path) + "/" + entry->d_name);
-    }
-    closedir(directory);
-    return files;
+    return list_vfs_files(path, entries, capacity);
 }
 
-std::unique_ptr<interfaces::storage::IFile> FileSystem::open(const char* path, const char* mode)
+bool FileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
 {
-    std::FILE* handle = std::fopen(path, mode);
-    return handle == nullptr ? nullptr : std::unique_ptr<interfaces::storage::IFile>(new File(handle));
+    return open_vfs_file(files_, *this, path, mode, file);
+}
+
+void FileSystem::close(interfaces::storage::IFile& file)
+{
+    static_cast<File&>(file).close();
 }
 
 }  // namespace brick::platform::esp32

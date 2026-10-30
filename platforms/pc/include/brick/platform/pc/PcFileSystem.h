@@ -1,30 +1,35 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdio>
-#include <memory>
 #include <string>
-#include <vector>
 
 #include "brick/interfaces/storage/IRemovableFileSystem.h"
 
 namespace brick::platform::pc
 {
 
-/// File opened with the C standard library.
+/// File opened with the C standard library; PcFileSystem keeps a fixed set of
+/// them for open(), like the target file systems.
 class PcFile final : public brick::interfaces::storage::IFile
 {
 public:
-    explicit PcFile(FILE* file) : file_(file) {}
+    PcFile() = default;
     ~PcFile() override;
     PcFile(const PcFile&)            = delete;
     PcFile& operator=(const PcFile&) = delete;
+
+    bool open(const std::string& host_path, const char* mode);
+    void close();
+    bool is_open() const { return file_ != nullptr; }
 
     std::size_t read(void* buffer, std::size_t size, std::size_t count) override;
     std::size_t write(const void* buffer, std::size_t size, std::size_t count) override;
     bool        seek(long offset, int origin) override;
 
 private:
-    FILE* file_;
+    FILE* file_ = nullptr;
 };
 
 /// A directory on the host standing in for an SD card or flash file system.
@@ -35,19 +40,27 @@ class PcFileSystem final : public brick::interfaces::storage::IRemovableFileSyst
 public:
     explicit PcFileSystem(std::string root, std::string mount_point = "/sdcard");
 
-    bool                                               mount() override;
-    std::vector<std::string>                           list_files(const char* path) override;
-    std::unique_ptr<brick::interfaces::storage::IFile> open(const char* path, const char* mode) override;
+    bool        mount() override;
+    std::size_t list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
+                           std::size_t capacity) override;
+    bool        open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
 
     bool        mounted() const override { return mounted_; }
     void        unmount() override { mounted_ = false; }
     bool        probe(const char* path) override;
     std::string host_path(const char* path) const;
 
+    /// As many open files as the ESP32 FAT mounts allow.
+    static constexpr std::size_t kMaxOpenFiles = 5;
+
+protected:
+    void close(brick::interfaces::storage::IFile& file) override;
+
 private:
-    std::string root_;
-    std::string mount_point_;
-    bool        mounted_ = false;
+    std::string                       root_;
+    std::string                       mount_point_;
+    bool                              mounted_ = false;
+    std::array<PcFile, kMaxOpenFiles> files_{};
 };
 
 }  // namespace brick::platform::pc

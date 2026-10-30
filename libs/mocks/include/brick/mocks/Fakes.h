@@ -74,30 +74,54 @@ private:
     std::size_t                      position_ = 0;
 };
 
-/// File system with files kept in memory; list_files() returns their names.
+/// File system with files kept in memory; list_files() returns their keys.
 class MemoryFileSystem final : public brick::interfaces::storage::IFileSystem
 {
 public:
     bool mount() override { return mountable; }
 
-    std::vector<std::string> list_files(const char*) override
+    std::size_t list_files(const char*, brick::interfaces::storage::FileEntry* entries, std::size_t capacity) override
     {
-        std::vector<std::string> names;
+        std::size_t count = 0;
         for (const auto& file : files)
-            names.push_back(file.first);
-        return names;
+        {
+            if (entries != nullptr && count < capacity)
+                entries[count].set_name(file.first.c_str());
+            ++count;
+        }
+        return count;
     }
 
-    std::unique_ptr<brick::interfaces::storage::IFile> open(const char* path, const char*) override
+    bool open(const char* path, const char*, brick::interfaces::storage::FileHandle& file) override
     {
+        file.close();
         const auto it = files.find(path);
         if (it == files.end())
-            return nullptr;
-        return std::make_unique<MemoryFile>(it->second);
+            return false;
+        open_.push_back(std::make_unique<MemoryFile>(it->second));
+        file.attach(*this, *open_.back());
+        return true;
     }
+
+    /// Files opened and not closed yet.
+    std::size_t open_files() const { return open_.size(); }
 
     bool                                             mountable = true;
     std::map<std::string, std::vector<std::uint8_t>> files;
+
+protected:
+    void close(brick::interfaces::storage::IFile& file) override
+    {
+        for (auto it = open_.begin(); it != open_.end(); ++it)
+            if (it->get() == &file)
+            {
+                open_.erase(it);
+                return;
+            }
+    }
+
+private:
+    std::vector<std::unique_ptr<MemoryFile>> open_;
 };
 
 /// Partial-update display that records every transfer.

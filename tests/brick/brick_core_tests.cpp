@@ -90,7 +90,7 @@ void test_bmp_decoder()
     std::uint8_t pixels[2 * 2 * 2] = {};
     const bool   decoded =
         brick::core::image::BmpDecoder::decode(fs, "test.bmp", pixels, { .target_width = 2, .target_height = 2 });
-    assert(decoded);
+    assert(decoded && fs.open_files() == 0);
 
     // RGB565, native little endian: top-left red, top-right green,
     // bottom-left blue, white.
@@ -134,6 +134,7 @@ void test_wav_decoder()
     assert(buffer.size() == 2);
     assert(buffer.data()[0] == 0);
     assert(buffer.data()[1] == 255);
+    assert(fs.open_files() == 0);
     assert(!brick::core::audio::WavDecoder::decode(fs, "missing.wav", buffer));
 }
 

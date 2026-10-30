@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 
 #include "brick/interfaces/storage/IFileSystem.h"
 
@@ -16,13 +15,11 @@ inline bool write_verify(brick::interfaces::storage::IFileSystem& file_system, c
 {
     if (path == nullptr || pattern == nullptr || size == 0U)
         return false;
-    {
-        auto file = file_system.open(path, "w");
-        if (file == nullptr || file->write(pattern, 1U, size) != size)
-            return false;
-    }
-    std::unique_ptr<brick::interfaces::storage::IFile> file = file_system.open(path, "r");
-    if (file == nullptr)
+    brick::interfaces::storage::FileHandle file;
+    if (!file_system.open(path, "w", file) || file->write(pattern, 1U, size) != size)
+        return false;
+    file.close();
+    if (!file_system.open(path, "r", file))
         return false;
     std::uint8_t buffer[256]{};
     if (size > sizeof(buffer) || file->read(buffer, 1U, size) != size)

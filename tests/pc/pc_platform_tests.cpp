@@ -7,6 +7,7 @@
 
 #include "brick/boards/pc/SimulatorBoard.h"
 #include "brick/core/memory/MemoryBlock.h"
+#include "brick/core/storage/StorageWriteVerify.h"
 #include "brick/platform/pc/PcFileAssetSource.h"
 #include "brick/platform/pc/PcFileSystem.h"
 #include "brick/platform/pc/PcFrameBufferDisplay.h"
@@ -93,24 +94,47 @@ void test_file_system()
     std::filesystem::create_directories(root);
     assert(fs.mount());
 
+    using brick::interfaces::storage::FileEntry;
+    using brick::interfaces::storage::FileHandle;
     {
-        auto file = fs.open("/sdcard/data.bin", "w");
-        assert(file != nullptr);
+        FileHandle file;
+        assert(fs.open("/sdcard/data.bin", "w", file) && file.is_open());
         const char text[] = "brick";
         assert(file->write(text, 1, 5) == 5);
     }
-    auto file = fs.open("/sdcard/data.bin", "r");
-    assert(file != nullptr);
+    FileHandle file;
+    assert(fs.open("/sdcard/data.bin", "r", file));
     char read_back[6] = {};
     assert(file->read(read_back, 1, 5) == 5 && std::strcmp(read_back, "brick") == 0);
     assert(file->seek(1, SEEK_SET) && file->read(read_back, 1, 1) == 1 && read_back[0] == 'r');
-    const auto names = fs.list_files("/sdcard");
-    assert(names.size() == 1 && names[0] == "data.bin");
-    assert(fs.open("/sdcard/missing.bin", "r") == nullptr);
+    FileHandle missing;
+    assert(!fs.open("/sdcard/missing.bin", "r", missing) && !missing);
+
+    // Directory listing: names without the directory, total count returned.
+    FileHandle other;
+    assert(fs.open("/sdcard/other.bin", "w", other));
+    other.close();
+    FileEntry entries[1];
+    assert(fs.list_files("/sdcard", nullptr, 0) == 2);
+    assert(fs.list_files("/sdcard", entries, 1) == 2 && std::strcmp(entries[0].name, "data.bin") == 0);
+
+    // The file objects are a fixed set; closing a handle frees its object.
+    FileHandle extra[brick::platform::pc::PcFileSystem::kMaxOpenFiles];
+    for (std::size_t index = 0; index + 1 < brick::platform::pc::PcFileSystem::kMaxOpenFiles; ++index)
+        assert(fs.open("/sdcard/data.bin", "r", extra[index]));
+    assert(!fs.open("/sdcard/data.bin", "r", extra[brick::platform::pc::PcFileSystem::kMaxOpenFiles - 1]));
+    extra[0].close();
+    assert(fs.open("/sdcard/data.bin", "r", extra[brick::platform::pc::PcFileSystem::kMaxOpenFiles - 1]));
+    for (FileHandle& handle : extra)
+        handle.close();
+
+    const std::uint8_t pattern[] = { 0x00, 0x55, 0xAA, 0xFF };
+    assert(brick::core::storage::write_verify(fs, "/sdcard/verify.bin", pattern, sizeof(pattern)));
+
     assert(fs.probe("/sdcard/data.bin") && !fs.probe("/sdcard/missing.bin"));
+    file.close();
     fs.unmount();
     assert(!fs.mounted() && !fs.probe("/sdcard/data.bin"));
-    file.reset();
     std::filesystem::remove_all(root);
 }
 

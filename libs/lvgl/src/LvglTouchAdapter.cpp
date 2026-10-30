@@ -1,8 +1,8 @@
-#include "brick/platform/esp32/LvglTouchAdapter.h"
+#include "brick/lvgl/LvglTouchAdapter.h"
 
 #include <array>
 
-namespace brick::platform::esp32
+namespace brick::lvgl
 {
 
 LvglTouchAdapter::LvglTouchAdapter(brick::interfaces::display::ITouchscreen& touchscreen) : touchscreen_(touchscreen)
@@ -44,4 +44,4 @@ void LvglTouchAdapter::read_callback_(lv_indev_t* indev, lv_indev_data_t* data)
                                                                                           LV_INDEV_STATE_PRESSED;
 }
 
-}  // namespace brick::platform::esp32
+}  // namespace brick::lvgl

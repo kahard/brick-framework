@@ -15,12 +15,12 @@
 
 #if defined(ARDUINO_ARCH_ESP8266) || defined(ESP8266)
 #    include <pgmspace.h>
-#    define BRICK_PROGMEM PROGMEM
-#    define brick_progmem_read_byte(address) pgm_read_byte(address)
+#    define BRICK_PROGMEM                                  PROGMEM
+#    define brick_progmem_read_byte(address)               pgm_read_byte(address)
 #    define brick_progmem_copy(destination, source, bytes) memcpy_P((destination), (source), (bytes))
 #else
 #    include <string.h>
 #    define BRICK_PROGMEM
-#    define brick_progmem_read_byte(address) (*(const unsigned char*)(address))
+#    define brick_progmem_read_byte(address)               (*(const unsigned char*)(address))
 #    define brick_progmem_copy(destination, source, bytes) memcpy((destination), (source), (bytes))
 #endif

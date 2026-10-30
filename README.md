@@ -20,6 +20,7 @@ brick-framework/
 ├── libs/
 │   ├── core/          platform-independent algorithms and components
 │   ├── interfaces/    small reusable contracts
+│   ├── lvgl/          LVGL v9 adapters for the display and touch contracts
 │   ├── mocks/         test doubles (BRICK::Mocks)
 │   └── rules/         coding policies and static-analysis rules
 ├── platforms/

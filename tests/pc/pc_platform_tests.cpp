@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "brick/boards/pc/SimulatorBoard.h"
+#include "brick/core/memory/MemoryBlock.h"
 #include "brick/platform/pc/PcFileSystem.h"
 #include "brick/platform/pc/PcFrameBufferDisplay.h"
 #include "brick/platform/pc/PcInput.h"
@@ -114,6 +115,14 @@ void test_memory_and_time()
     assert(memory.allocate(100, brick::interfaces::memory::MemoryKind::external, 4) == nullptr);  // over budget
     memory.release(block);
     assert(memory.live_blocks() == 0);
+
+    {
+        brick::core::memory::MemoryBlock owned(memory);
+        assert(owned.allocate(32, brick::interfaces::memory::MemoryKind::external) && owned.size() == 32);
+        assert(!owned.allocate(16, brick::interfaces::memory::MemoryKind::external));  // already holds a block
+        assert(memory.live_blocks() == 1);
+    }
+    assert(memory.live_blocks() == 0);  // released by the destructor
 
     brick::platform::pc::PcTime time(true);
     assert(time.millis() == 0);

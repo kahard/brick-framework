@@ -1,6 +1,6 @@
-#include "brick/platform/esp32/LvglImagePresenter.h"
+#include "brick/lvgl/LvglImagePresenter.h"
 
-namespace brick::platform::esp32
+namespace brick::lvgl
 {
 
 LvglImagePresenter::LvglImagePresenter(lv_obj_t* target) : target_(target)
@@ -27,4 +27,4 @@ bool LvglImagePresenter::present(const std::uint8_t* data, std::uint32_t width, 
     return true;
 }
 
-}  // namespace brick::platform::esp32
+}  // namespace brick::lvgl

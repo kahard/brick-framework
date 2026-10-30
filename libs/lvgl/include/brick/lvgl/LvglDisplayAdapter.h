@@ -6,7 +6,7 @@
 #include "brick/interfaces/display/IFrameBufferDisplay.h"
 #include "lvgl.h"
 
-namespace brick::platform::esp32
+namespace brick::lvgl
 {
 
 /// LVGL v9 display adapter for the portable BRICK display contract.
@@ -33,4 +33,4 @@ private:
     void*                                            framebuffer_2_ = nullptr;
 };
 
-}  // namespace brick::platform::esp32
+}  // namespace brick::lvgl

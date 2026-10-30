@@ -6,6 +6,7 @@
 #include "brick/boards/esp32/s3/panel480/Profile.h"
 #include "brick/interfaces/board/IBoard.h"
 #include "brick/platform/esp32/EspIdfLogger.h"
+#include "brick/platform/esp32/EspMemory.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/SdSpiFileSystem.h"
 #include "brick/platform/esp32/s3/St7701sRgbDisplay.h"
@@ -83,6 +84,7 @@ public:
     brick::platform::esp32::touch::Gt911Touchscreen& touch() { return touch_.get(); }
     brick::platform::esp32::SdSpiFileSystem&         sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&          time() { return time_; }
+    brick::interfaces::memory::IMemoryProvider&      memory() { return memory_; }
     brick::interfaces::logging::ILogger&             logger() { return logger_.get(); }
 
 private:
@@ -90,6 +92,7 @@ private:
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
 
     brick::platform::esp32::FreeRtosTime time_;
+    brick::platform::esp32::EspMemory    memory_;
     brick::boards::common::Logger<Features::logging, brick::platform::esp32::EspIdfLogger,
                                   brick::platform::esp32::NullLogger>
                                                                                  logger_;

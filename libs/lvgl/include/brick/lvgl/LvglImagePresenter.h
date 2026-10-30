@@ -5,7 +5,7 @@
 #include "brick/interfaces/display/IImagePresenter.h"
 #include "lvgl.h"
 
-namespace brick::platform::esp32
+namespace brick::lvgl
 {
 
 class LvglImagePresenter final : public interfaces::display::IImagePresenter
@@ -22,4 +22,4 @@ private:
     lv_img_dsc_t descriptor_{};
 };
 
-}  // namespace brick::platform::esp32
+}  // namespace brick::lvgl

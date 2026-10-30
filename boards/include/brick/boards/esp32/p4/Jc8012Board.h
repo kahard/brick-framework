@@ -6,6 +6,7 @@
 #include "brick/boards/esp32/p4/jc8012/Profile.h"
 #include "brick/interfaces/board/IBoard.h"
 #include "brick/platform/esp32/EspIdfLogger.h"
+#include "brick/platform/esp32/EspMemory.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/GpioBacklight.h"
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
@@ -84,6 +85,7 @@ public:
     brick::interfaces::display::IBacklight&            backlight() { return backlight_.get(); }
     brick::platform::esp32::SdmmcFileSystem&           sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&            time() { return time_; }
+    brick::interfaces::memory::IMemoryProvider&        memory() { return memory_; }
     brick::interfaces::logging::ILogger&               logger() { return logger_.get(); }
 
 private:
@@ -91,6 +93,7 @@ private:
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
 
     brick::platform::esp32::FreeRtosTime time_;
+    brick::platform::esp32::EspMemory    memory_;
     brick::boards::common::Logger<Features::logging, brick::platform::esp32::EspIdfLogger,
                                   brick::platform::esp32::NullLogger>
                                                                                    logger_;

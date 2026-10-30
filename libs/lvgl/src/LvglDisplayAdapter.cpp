@@ -1,10 +1,9 @@
-#include "brick/platform/esp32/LvglDisplayAdapter.h"
+#include "brick/lvgl/LvglDisplayAdapter.h"
 
 #include <cstddef>
 
-#include "esp_log.h"
 
-namespace brick::platform::esp32
+namespace brick::lvgl
 {
 
 LvglDisplayAdapter::LvglDisplayAdapter(brick::interfaces::display::IDisplayDevice& device) : device_(device)
@@ -115,4 +114,4 @@ void LvglDisplayAdapter::flush_(lv_display_t* display, const lv_area_t& area, st
     lv_display_flush_ready(display);
 }
 
-}  // namespace brick::platform::esp32
+}  // namespace brick::lvgl

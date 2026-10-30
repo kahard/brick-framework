@@ -3,7 +3,7 @@
 #include "brick/interfaces/display/ITouchscreen.h"
 #include "lvgl.h"
 
-namespace brick::platform::esp32
+namespace brick::lvgl
 {
 
 class LvglTouchAdapter final
@@ -19,4 +19,4 @@ private:
     brick::interfaces::display::ITouchscreen& touchscreen_;
 };
 
-}  // namespace brick::platform::esp32
+}  // namespace brick::lvgl

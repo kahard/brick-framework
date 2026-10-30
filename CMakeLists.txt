@@ -53,6 +53,18 @@ target_include_directories(brick_boards INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/boards/include")
 target_link_libraries(brick_boards INTERFACE BRICK::Interfaces)
 
+# LVGL adapters. Their sources are compiled into the consumer, which must also
+# link an LVGL v9 target.
+add_library(brick_lvgl INTERFACE)
+add_library(BRICK::Lvgl ALIAS brick_lvgl)
+target_include_directories(brick_lvgl INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/lvgl/include")
+target_sources(brick_lvgl INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/lvgl/src/LvglDisplayAdapter.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/lvgl/src/LvglImagePresenter.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/lvgl/src/LvglTouchAdapter.cpp")
+target_link_libraries(brick_lvgl INTERFACE BRICK::Interfaces)
+
 add_library(brick_mocks INTERFACE)
 add_library(BRICK::Mocks ALIAS brick_mocks)
 target_include_directories(brick_mocks INTERFACE

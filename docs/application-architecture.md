@@ -183,27 +183,26 @@ Each stage ends with every application still building for its target.
    `src/app` + `src/target` + `pc/`, running in the simulator and on the CYD.
    *Done.*
 6. **Roll-out** - the remaining applications, family by family; each one
-   gets a PC variant and a headless smoke test in CI. *In progress.*
+   gets a PC variant and a headless smoke test in CI. *Done.*
 7. **Enforcement** - the rule checker fails CI for `src/app`, `boards/` and
    `platforms/` (except `platforms/pc`).
 
 ### Roll-out status (brick-test-apps)
 
-| Board | Portable with PC variant | Still to migrate |
-|---|---|---|
-| ESP-12F ST7789 | all 5 | - |
-| CYD | display_touch_smoke, sd_card_filesystem_touch_smoke, framebuffer, asset_stream_api_framebuffer, asset_stream_api, color_profile_asset, color_calibration | lvgl_asset, lvgl_asset_framebuffer |
-| Panel 480x480 | display_touch_smoke, sd_card_filesystem_touch_smoke, framebuffer, asset_stream_api_framebuffer | lvgl_framebuffer_touch |
-| JC1060 | display_touch_smoke, sdmmc_filesystem_write_verify, framebuffer, asset_stream_api_framebuffer | lvgl_asset_framebuffer, lvgl_benchmark |
-| JC8012 | display_touch_smoke, sd_card_filesystem_touch_smoke, framebuffer, asset_stream_api_framebuffer | lvgl_asset_framebuffer, lvgl_benchmark |
+All 31 applications (ESP-12F ST7789 5, CYD 9, Panel 480x480 5, JC1060 6,
+JC8012 6) use `src/app` + `src/target` and have a PC variant with a headless
+smoke test.
 
 Asset applications take an `IAssetSource&` from the target entry point
 (`PartitionAssetSource` on the board, `PcFileAssetSource` reading the
 generated bundle in the simulator). Applications driven over a UART take an
 `ISerialPort&` (`EspUartPort` on the board, `PcSerialPort` replaying
-`--serial-in` in the simulator). All remaining applications use LVGL; the PC
-CMake build fetches the LVGL version pinned in `platformio-versions.ini` for
-them.
+`--serial-in` in the simulator). For LVGL applications the PC CMake build
+fetches the LVGL version pinned in `platformio-versions.ini`.
+
+The rule checker still reports the SD card applications' use of
+`IFileSystem::list_files()` (see the known debt below) and a vendored touch
+driver component; both must be resolved or excluded before stage 7.
 
 ### Known debt in the interfaces
 

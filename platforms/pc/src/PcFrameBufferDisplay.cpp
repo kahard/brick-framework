@@ -47,6 +47,8 @@ bool PcFrameBufferDisplay::set_rotation(Rotation rotation)
 
 DisplayCapabilities PcFrameBufferDisplay::capabilities() const
 {
+    // Every hardware panel driver transfers with DMA; host memory stands in for
+    // DMA-capable memory in the simulator.
     const auto          display_size = size();
     const std::size_t   frame_bytes  = static_cast<std::size_t>(display_size.width) * display_size.height * 2U;
     const bool          scanout      = config_.frame_buffers != 0;
@@ -56,6 +58,7 @@ DisplayCapabilities PcFrameBufferDisplay::capabilities() const
     result.native_format      = PixelFormat::rgb565;
     result.full_frame_bytes   = frame_bytes;
     result.max_transfer_bytes = frame_bytes;
+    result.dma                = true;
     result.vsync              = scanout;
     result.scanout_buffers    = scanout;
     result.partial_transfer   = true;

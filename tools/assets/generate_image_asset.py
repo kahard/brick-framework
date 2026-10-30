@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--header", type=Path, help="Generated declaration header")
     parser.add_argument("--binary", type=Path, help="Optional raw pixel output")
     parser.add_argument("--resize", help="Resize to WIDTHxHEIGHT before conversion")
-    parser.add_argument("--progmem", action="store_true", help="Place generated C data in ESP8266 PROGMEM")
+    parser.add_argument("--progmem", action="store_true", help="Place generated C data in program memory (BRICK_PROGMEM, needed on ESP8266)")
     return parser.parse_args()
 
 
@@ -107,8 +107,8 @@ extern const brick_image_asset_t {args.symbol};
 """,
             encoding="utf-8",
         )
-        storage_include = '#include <pgmspace.h>\n' if args.progmem else ''
-        storage = 'PROGMEM ' if args.progmem else ''
+        storage_include = '#include "brick/core/memory/ProgramMemory.h"\n' if args.progmem else ''
+        storage = 'BRICK_PROGMEM ' if args.progmem else ''
         source = (
             f'#include "{header.name}"\n{storage_include}\n'
             f"static const uint8_t {storage}{args.symbol}_data[] = {{\n{format_bytes(data)}\n}};\n\n"

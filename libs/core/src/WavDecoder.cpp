@@ -3,13 +3,12 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
-#include <utility>
-#include <vector>
 
 namespace brick::core::audio
 {
 
-bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, AudioBuffer& output)
+bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* samples,
+                        std::size_t capacity, AudioBuffer& output)
 {
     interfaces::storage::FileHandle file;
     if (!file_system.open(path, "rb", file))
@@ -34,13 +33,15 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
         const std::uint32_t chunk_size = read_u32(chunk + 4);
         if (std::memcmp(chunk, "fmt ", 4) == 0)
         {
-            std::vector<std::uint8_t> fmt(chunk_size);
-            if (fmt.size() < 16 || !read_exact(*file, fmt.data(), fmt.size()))
+            // Only the first 16 bytes (PCM fields) are used; extensions are skipped.
+            std::uint8_t fmt[16];
+            if (chunk_size < sizeof(fmt) || !read_exact(*file, fmt, sizeof(fmt))
+                || (chunk_size > sizeof(fmt) && !file->seek(static_cast<long>(chunk_size - sizeof(fmt)), SEEK_CUR)))
                 return false;
-            format      = read_u16(fmt.data());
-            channels    = read_u16(fmt.data() + 2);
-            sample_rate = read_u32(fmt.data() + 4);
-            bits        = read_u16(fmt.data() + 14);
+            format      = read_u16(fmt);
+            channels    = read_u16(fmt + 2);
+            sample_rate = read_u32(fmt + 4);
+            bits        = read_u16(fmt + 14);
             position += static_cast<long>(chunk_size);
             have_fmt = true;
         }
@@ -76,20 +77,21 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
     const std::size_t bytes_per_sample = bits / 8;
     const std::size_t bytes_per_frame  = channels * bytes_per_sample;
     const std::size_t frame_count      = data_size / bytes_per_frame;
-    if (frame_count == 0 || !file->seek(data_offset, SEEK_SET))
+    if (frame_count == 0 || samples == nullptr || frame_count > capacity || !file->seek(data_offset, SEEK_SET))
         return false;
 
-    std::vector<std::uint8_t> samples(frame_count), input(4096);
-    std::size_t               remaining = frame_count, output_index = 0;
+    // 256 bytes hold a whole number of frames of every supported format.
+    std::uint8_t input[256];
+    std::size_t  remaining = frame_count, output_index = 0;
     while (remaining > 0)
     {
-        const std::size_t frames = std::min(remaining, input.size() / bytes_per_frame);
-        if (!read_exact(*file, input.data(), frames * bytes_per_frame))
+        const std::size_t frames = std::min(remaining, sizeof(input) / bytes_per_frame);
+        if (!read_exact(*file, input, frames * bytes_per_frame))
             return false;
         for (std::size_t i = 0; i < frames; ++i)
         {
             int         mixed = 0;
-            const auto* frame = input.data() + i * bytes_per_frame;
+            const auto* frame = input + i * bytes_per_frame;
             for (std::size_t channel = 0; channel < channels; ++channel)
             {
                 const auto* sample = frame + channel * bytes_per_sample;
@@ -102,7 +104,7 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
         remaining -= frames;
     }
 
-    output.assign(std::move(samples), sample_rate);
+    output.assign(samples, frame_count, sample_rate);
     return true;
 }
 

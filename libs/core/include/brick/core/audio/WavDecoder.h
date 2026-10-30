@@ -9,10 +9,15 @@
 namespace brick::core::audio
 {
 
+/// Decodes PCM WAV (8 or 16 bit, mono or stereo) to 8-bit unsigned mono.
 class WavDecoder
 {
 public:
-    static bool decode(interfaces::storage::IFileSystem& file_system, const char* path, AudioBuffer& output);
+    /// Writes the samples to samples (capacity bytes, one per frame) and points
+    /// output at them. Fails when the file is not a supported WAV or has more
+    /// frames than capacity; samples must stay valid while output is played.
+    static bool decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* samples,
+                       std::size_t capacity, AudioBuffer& output);
 
 private:
     static bool          read_exact(interfaces::storage::IFile& file, void* data, std::size_t size);

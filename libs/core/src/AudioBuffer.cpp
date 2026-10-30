@@ -1,25 +1,21 @@
 #include "brick/core/audio/AudioBuffer.h"
 
-#include <utility>
-
 namespace brick::core::audio
 {
 
-AudioBuffer::AudioBuffer() = default;
-
-AudioBuffer::AudioBuffer(std::vector<std::uint8_t> samples, std::uint32_t sample_rate)
-    : samples_(std::move(samples)), sample_rate_(sample_rate)
+AudioBuffer::AudioBuffer(const std::uint8_t* data, std::size_t size, std::uint32_t sample_rate)
 {
+    assign(data, size, sample_rate);
 }
 
 const std::uint8_t* AudioBuffer::data() const
 {
-    return view_data_ != nullptr ? view_data_ : samples_.data();
+    return data_;
 }
 
 std::size_t AudioBuffer::size() const
 {
-    return view_data_ != nullptr ? view_size_ : samples_.size();
+    return size_;
 }
 
 std::uint32_t AudioBuffer::sample_rate() const
@@ -29,30 +25,20 @@ std::uint32_t AudioBuffer::sample_rate() const
 
 bool AudioBuffer::empty() const
 {
-    return size() == 0;
+    return size_ == 0;
 }
 
 void AudioBuffer::clear()
 {
-    view_data_ = nullptr;
-    view_size_ = 0;
-    samples_.clear();
+    data_        = nullptr;
+    size_        = 0;
     sample_rate_ = 0;
 }
 
-void AudioBuffer::assign(std::vector<std::uint8_t> samples, std::uint32_t sample_rate)
+void AudioBuffer::assign(const std::uint8_t* data, std::size_t size, std::uint32_t sample_rate)
 {
-    view_data_   = nullptr;
-    view_size_   = 0;
-    samples_     = std::move(samples);
-    sample_rate_ = sample_rate;
-}
-
-void AudioBuffer::assign_view(const std::uint8_t* data, std::size_t size, std::uint32_t sample_rate)
-{
-    samples_.clear();
-    view_data_   = data;
-    view_size_   = size;
+    data_        = data;
+    size_        = data != nullptr ? size : 0;
     sample_rate_ = sample_rate;
 }
 

@@ -187,22 +187,27 @@ std::vector<std::uint8_t> make_pcm_wav()
 void test_wav_decoder()
 {
     MemoryFileSystem fs;
-    fs.files["test.wav"] = make_pcm_wav();
+    fs.files["test.wav"]                       = make_pcm_wav();
+    std::uint8_t                    samples[4] = {};
     brick::core::audio::AudioBuffer buffer;
-    assert(brick::core::audio::WavDecoder::decode(fs, "test.wav", buffer));
+    assert(brick::core::audio::WavDecoder::decode(fs, "test.wav", samples, sizeof(samples), buffer));
     assert(buffer.sample_rate() == 8000);
-    assert(buffer.size() == 2);
+    assert(buffer.size() == 2 && buffer.data() == samples);
     assert(buffer.data()[0] == 0);
     assert(buffer.data()[1] == 255);
     assert(fs.open_files() == 0);
-    assert(!brick::core::audio::WavDecoder::decode(fs, "missing.wav", buffer));
+    assert(!brick::core::audio::WavDecoder::decode(fs, "missing.wav", samples, sizeof(samples), buffer));
+    // More frames than the caller's buffer holds.
+    assert(!brick::core::audio::WavDecoder::decode(fs, "test.wav", samples, 1, buffer));
+    assert(fs.open_files() == 0);
 }
 
 void test_audio_player()
 {
     FakeAudioOutput                         output;
     brick::core::audio::PeriodicAudioPlayer player(output);
-    brick::core::audio::AudioBuffer         buffer({ 10, 20, 30 }, 8000);
+    const std::uint8_t                      samples[] = { 10, 20, 30 };
+    brick::core::audio::AudioBuffer         buffer(samples, sizeof(samples), 8000);
     assert(player.begin());
     assert(player.play(buffer));
     assert(player.playing());

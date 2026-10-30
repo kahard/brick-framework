@@ -22,162 +22,18 @@
 #include "brick/interfaces/display/DisplayRect.h"
 #include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/display/PixelBuffer.h"
+#include "brick/mocks/Fakes.h"
 
 namespace
 {
 
-class FakeClock final : public brick::interfaces::timing::IClock
-{
-public:
-    std::uint32_t now = 0;
-    std::uint32_t millis() const override { return now; }
-};
-
-class MemoryFile final : public brick::interfaces::storage::IFile
-{
-public:
-    explicit MemoryFile(const std::vector<std::uint8_t>& data) : data_(data) {}
-
-    std::size_t read(void* buffer, std::size_t size, std::size_t count) override
-    {
-        const std::size_t requested = size * count;
-        const std::size_t available = data_.size() - position_;
-        const std::size_t bytes     = requested < available ? requested : available;
-        if (bytes > 0)
-        {
-            std::memcpy(buffer, data_.data() + position_, bytes);
-            position_ += bytes;
-        }
-        return size == 0 ? 0 : bytes / size;
-    }
-
-    bool seek(long offset, int origin) override
-    {
-        long base = 0;
-        if (origin == SEEK_CUR)
-            base = static_cast<long>(position_);
-        if (origin == SEEK_END)
-            base = static_cast<long>(data_.size());
-        const long target = base + offset;
-        if (target < 0 || target > static_cast<long>(data_.size()))
-            return false;
-        position_ = static_cast<std::size_t>(target);
-        return true;
-    }
-
-private:
-    const std::vector<std::uint8_t>& data_;
-    std::size_t                      position_ = 0;
-};
-
-class FakeDisplay final : public brick::interfaces::display::IDisplayDevice
-{
-public:
-    bool                                    begin() override { return true; }
-    brick::interfaces::display::DisplaySize size() const override { return { 320, 240 }; }
-    brick::interfaces::display::PixelFormat pixel_format() const override
-    {
-        return brick::interfaces::display::PixelFormat::rgb565;
-    }
-    bool set_rotation(brick::interfaces::display::Rotation) override { return true; }
-
-    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
-                     const brick::interfaces::display::PixelBuffer& buffer) override
-    {
-        if (!buffer.valid() || buffer.format != pixel_format()
-            || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
-            return false;
-        last_area       = area;
-        last_pixels     = buffer.data;
-        last_byte_count = buffer.stride_bytes * buffer.height;
-        submitted_areas.push_back(area);
-        submitted_byte_counts.push_back(last_byte_count);
-        return true;
-    }
-
-    brick::interfaces::display::DisplayRect              last_area{};
-    const std::uint8_t*                                  last_pixels     = nullptr;
-    std::size_t                                          last_byte_count = 0;
-    std::vector<brick::interfaces::display::DisplayRect> submitted_areas;
-    std::vector<std::size_t>                             submitted_byte_counts;
-};
-
-class MemoryAssetReader final : public brick::interfaces::display::IAssetReader
-{
-public:
-    explicit MemoryAssetReader(const std::vector<std::uint8_t>& data) : data_(data) {}
-
-    bool read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset, std::uint8_t* destination,
-              std::size_t bytes) override
-    {
-        if (destination == nullptr || asset.data != data_.data() || offset + bytes > data_.size())
-            return false;
-        std::memcpy(destination, data_.data() + offset, bytes);
-        offsets.push_back(offset);
-        sizes.push_back(bytes);
-        return true;
-    }
-
-    const std::vector<std::uint8_t>& data_;
-    std::vector<std::size_t>         offsets;
-    std::vector<std::size_t>         sizes;
-};
-
-class MemoryAssetSource final : public brick::interfaces::display::IAssetSource
-{
-public:
-    explicit MemoryAssetSource(const std::vector<std::uint8_t>& data) : data_(data) {}
-
-    bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
-              std::size_t bytes) override
-    {
-        if (destination == nullptr || offset > asset.size || bytes > asset.size - offset || asset.offset > data_.size()
-            || bytes > data_.size() - asset.offset - offset)
-            return false;
-        std::memcpy(destination, data_.data() + asset.offset + offset, bytes);
-        offsets.push_back(offset);
-        sizes.push_back(bytes);
-        return true;
-    }
-
-    const std::vector<std::uint8_t>& data_;
-    std::vector<std::size_t>         offsets;
-    std::vector<std::size_t>         sizes;
-};
-
-class MemoryFileSystem final : public brick::interfaces::storage::IFileSystem
-{
-public:
-    bool mount() override { return true; }
-
-    std::vector<std::string> list_files(const char*) override { return {}; }
-
-    std::unique_ptr<brick::interfaces::storage::IFile> open(const char* path, const char*) override
-    {
-        const auto it = files.find(path);
-        if (it == files.end())
-            return nullptr;
-        return std::make_unique<MemoryFile>(it->second);
-    }
-
-    std::map<std::string, std::vector<std::uint8_t>> files;
-};
-
-class FakeAudioOutput final : public brick::interfaces::audio::IAudioOutput
-{
-public:
-    bool begin() override
-    {
-        started = true;
-        return true;
-    }
-    void write_sample(std::uint8_t sample) override { samples.push_back(sample); }
-    void stop() override { stopped = true; }
-
-    bool                      started = false;
-    bool                      stopped = false;
-    std::vector<std::uint8_t> samples;
-};
+using brick::mocks::FakeAudioOutput;
+using brick::mocks::FakeClock;
+using brick::mocks::MemoryAssetReader;
+using brick::mocks::MemoryAssetSource;
+using brick::mocks::MemoryFile;
+using brick::mocks::MemoryFileSystem;
+using FakeDisplay = brick::mocks::RecordingDisplay;
 
 void test_periodic_timer()
 {

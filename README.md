@@ -20,12 +20,12 @@ brick-framework/
 ├── libs/
 │   ├── core/          platform-independent algorithms and components
 │   ├── interfaces/    small reusable contracts
-│   ├── mocks/         test doubles
+│   ├── mocks/         test doubles (BRICK::Mocks)
 │   └── rules/         coding policies and static-analysis rules
 ├── platforms/
 │   ├── esp32/         ESP-IDF and ESP32 adapters
 │   ├── esp8266/       Arduino ESP8266 adapters
-│   ├── pc/            PC implementations and test support
+│   ├── pc/            PC platform and simulator (BRICK::PlatformPC)
 │   └── stm32/         STM32 adapters
 ├── boards/            ready-made board packages (wiring profiles + IBoard)
 ├── tests/             PC regression tests
@@ -78,6 +78,19 @@ Pillow for the asset tools. `make setup` installs both into `.venv`; then
 
 The tests cover timer scheduling and wraparound, BMP/WAV decoding, and the
 audio player using deterministic in-memory fakes.
+
+## PC simulator
+
+`platforms/pc` implements the interfaces on Windows and Linux (display in
+memory, touch, button, backlight, time, logger, a directory as SD card) and
+`boards/include/brick/boards/pc/SimulatorBoard.h` assembles them like a real
+board. With SDL2 installed the display is shown in a window (mouse = touch);
+without it, or with `--headless`, applications run without a window, which
+is how CI runs their smoke tests. Link `BRICK::PlatformPC` and use
+`brick_add_simulator()` from `cmake/BrickSimulator.cmake`.
+
+Test doubles that record calls (displays, touch screens, file systems,
+loggers) are in `libs/mocks` (`BRICK::Mocks`).
 
 ## Development workflow
 

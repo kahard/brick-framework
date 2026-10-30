@@ -1,14 +1,14 @@
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
 
 #include "esp_cache.h"
-#include "esp_heap_caps.h"
 #include "esp_memory_utils.h"
 #include <cstring>
 
 namespace brick::platform::esp32::p4
 {
 
-MipiDsiDisplay::MipiDsiDisplay(MipiDsiPanelConfig config) : config_(config), rotation_(config.default_rotation)
+MipiDsiDisplay::MipiDsiDisplay(MipiDsiPanelConfig config, brick::interfaces::memory::IMemoryProvider& memory)
+    : config_(config), rotation_(config.default_rotation), memory_(memory)
 {
     logical_width_  = config_.width;
     logical_height_ = config_.height;
@@ -268,11 +268,9 @@ bool MipiDsiDisplay::ensure_rotation_buffers_()
     const auto source_bytes = static_cast<std::size_t>(logical_width_) * logical_height_ * sizeof(std::uint16_t);
     const auto target_bytes = static_cast<std::size_t>(config_.width) * config_.height * sizeof(std::uint16_t);
     // Allocated on the first rotated draw and kept until the display is destroyed.
-    constexpr std::uint32_t kPsram = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
-    // brick-rules: allow(malloc) one-time PSRAM rotation buffers, released in the destructor
-    rotation_source_ = static_cast<std::uint16_t*>(heap_caps_aligned_alloc(64, source_bytes, kPsram));
-    // brick-rules: allow(malloc) one-time PSRAM rotation buffers, released in the destructor
-    rotation_target_ = static_cast<std::uint16_t*>(heap_caps_aligned_alloc(64, target_bytes, kPsram));
+    using brick::interfaces::memory::MemoryKind;
+    rotation_source_ = static_cast<std::uint16_t*>(memory_.allocate(source_bytes, MemoryKind::external, 64));
+    rotation_target_ = static_cast<std::uint16_t*>(memory_.allocate(target_bytes, MemoryKind::external, 64));
     if (rotation_source_ == nullptr || rotation_target_ == nullptr)
     {
         release_rotation_buffers_();
@@ -298,9 +296,9 @@ bool MipiDsiDisplay::ensure_rotation_buffers_()
 void MipiDsiDisplay::release_rotation_buffers_()
 {
     if (rotation_source_ != nullptr)
-        heap_caps_free(rotation_source_);  // brick-rules: allow(malloc) releases the one-time rotation buffers
+        memory_.release(rotation_source_);
     if (rotation_target_ != nullptr)
-        heap_caps_free(rotation_target_);  // brick-rules: allow(malloc) releases the one-time rotation buffers
+        memory_.release(rotation_target_);
     rotation_source_ = nullptr;
     rotation_target_ = nullptr;
 }

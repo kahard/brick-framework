@@ -36,7 +36,7 @@ class Jc1060BoardTemplate final : public brick::interfaces::board::IBoard
 public:
     Jc1060BoardTemplate() : logger_(Features::log_level)
     {
-        display_.emplace(jc1060::display_config());
+        display_.emplace(jc1060::display_config(), memory_);
         backlight_.emplace(jc1060::kBacklightGpio);
         touch_.emplace(jc1060::touch_config());
         sd_.emplace(jc1060::sd_config());

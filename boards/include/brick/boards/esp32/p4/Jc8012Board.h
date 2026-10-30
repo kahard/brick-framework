@@ -39,7 +39,7 @@ public:
         brick::interfaces::display::Rotation rotation = brick::interfaces::display::Rotation::rotate_0)
         : logger_(Features::log_level)
     {
-        display_.emplace(jc8012::display_config(rotation));
+        display_.emplace(jc8012::display_config(rotation), memory_);
         backlight_.emplace(jc8012::kBacklightGpio);
         touch_.emplace(jc8012::touch_config(rotation));
         sd_.emplace(jc8012::sd_config());

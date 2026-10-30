@@ -27,7 +27,9 @@ def render(font: ImageFont.FreeTypeFont, char: str):
             if image.getpixel((x, y)):
                 row[x // 8] |= 0x80 >> (x & 7)
         rows.append(row)
-    return width, height, rows
+    # ``top`` keeps the glyph on a common baseline: it is the offset of the
+    # cropped bitmap from the top of the text line.
+    return width, height, top, rows
 
 
 def main() -> None:
@@ -49,22 +51,22 @@ def main() -> None:
         "",
         "#ifndef BRICK_BITMAP_GLYPH_DEFINED",
         "#define BRICK_BITMAP_GLYPH_DEFINED",
-        "struct BrickBitmapGlyph { uint16_t width; uint16_t height; uint16_t stride; const uint8_t* data; };",
+        "struct BrickBitmapGlyph { uint16_t width; uint16_t height; uint16_t stride; int16_t top; const uint8_t* data; };",
         "#endif",
         f"static const uint8_t {args.name}_data[] = {{",
     ]
     offsets = []
     data = []
-    for width, height, rows in glyphs:
+    for width, height, top, rows in glyphs:
         stride = (width + 7) // 8
-        offsets.append((width, height, stride, len(data)))
+        offsets.append((width, height, stride, top, len(data)))
         for row in rows:
             data.extend(row)
     for index in range(0, len(data), 16):
         out.append("  " + ", ".join(f"0x{byte:02X}" for byte in data[index:index + 16]) + ",")
     out += ["};", "", f"static const BrickBitmapGlyph {args.name}_glyphs[] = {{"]
-    for width, height, stride, offset in offsets:
-        out.append(f"  {{{width}, {height}, {stride}, {args.name}_data + {offset}}},")
+    for width, height, stride, top, offset in offsets:
+        out.append(f"  {{{width}, {height}, {stride}, {top}, {args.name}_data + {offset}}},")
     out += ["};", f"static const char {args.name}_chars[] = "]
     escaped = "".join("\\x%02X" % ord(char) if ord(char) < 32 or ord(char) > 126 else ("\\\\" if char == "\\" else '\\"' if char == '"' else char) for char in args.chars)
     out[-1] += f'"{escaped}";'

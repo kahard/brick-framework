@@ -11,6 +11,8 @@ namespace brick::platform::pc
 {
 
 /// Single-point touch screen driven by the simulator window or a script.
+/// Reports like the hardware drivers: one `pressed` sample, `moved` samples,
+/// then one `released` sample at the last position.
 class PcTouchscreen final : public brick::interfaces::display::ITouchscreen
 {
 public:
@@ -22,12 +24,20 @@ public:
         using brick::interfaces::display::TouchState;
         if (!pressed && !pressed_)
             return;
-        point_.state = !pressed ? TouchState::released : (pressed_ ? TouchState::moved : TouchState::pressed);
-        point_.x = point_.raw_x = x;
-        point_.y = point_.raw_y = y;
-        point_.pressure         = pressed ? 1 : 0;
-        pressed_                = pressed;
-        fresh_                  = true;
+        if (!pressed)
+            point_.state = TouchState::released;
+        else if (!pressed_)
+            point_.state = TouchState::pressed;
+        else if (!(fresh_ && point_.state == TouchState::pressed))
+            point_.state = TouchState::moved;  // an unread press stays a press
+        if (pressed)
+        {
+            point_.x = point_.raw_x = x;
+            point_.y = point_.raw_y = y;
+        }
+        point_.pressure = pressed ? 1 : 0;
+        pressed_        = pressed;
+        fresh_          = true;
     }
 
     bool read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override
@@ -36,7 +46,7 @@ public:
         if (!fresh_)
             return false;
         fresh_ = false;
-        if (point_.state != brick::interfaces::display::TouchState::released && capacity > 0 && points != nullptr)
+        if (capacity > 0 && points != nullptr)
         {
             points[0] = point_;
             count     = 1;

@@ -23,3 +23,15 @@ jobs:
           python-version: "3.12"
       - run: make setup
       - run: make format-check
+
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python libs/rules/test_brick_rules.py
+      # Report only until the migration in docs/application-architecture.md
+      # reaches stage 7; then add --strict.
+      - run: python libs/rules/brick_rules.py libs boards platforms

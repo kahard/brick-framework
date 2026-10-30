@@ -91,6 +91,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [VERSIONING.md](VERSIONING.md) for
 the complete workflow. The original Polish architecture notes are available
 in [docs/architecture-pl.md](docs/architecture-pl.md).
 
+## Architecture and rules
+
+- [Application architecture and PC simulation](docs/application-architecture.md):
+  layers, how applications stay portable, the PC simulator and the migration
+  plan.
+- [Embedded coding rules](docs/embedded-coding-rules.md): rules for code that
+  runs on a microcontroller, checked by [`libs/rules`](libs/rules/README.md).
+
 ## Design principles
 
 - keep interfaces small and driven by real use cases,

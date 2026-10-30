@@ -32,6 +32,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: python libs/rules/test_brick_rules.py
-      # Report only until the migration in docs/application-architecture.md
-      # reaches stage 7; then add --strict.
-      - run: python libs/rules/brick_rules.py libs boards platforms
+      - run: python libs/rules/brick_rules.py --strict boards platforms
+      # libs/core still has known findings (libs/rules/README.md); report only.
+      - run: python libs/rules/brick_rules.py libs

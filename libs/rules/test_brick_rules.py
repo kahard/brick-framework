@@ -17,7 +17,12 @@ CASES = {
         ("attribute [[nodiscard]] bool f();", False),
     ],
     "new-delete": [("auto* p = new Widget();", True), ("delete p;", True), ("bool renew = true;", False)],
-    "malloc": [("p = malloc(4);", True), ("p = heap_caps_malloc(4, MALLOC_CAP_DMA);", True), ("freeze();", False)],
+    "malloc": [
+        ("p = malloc(4);", True),
+        ("p = heap_caps_malloc(4, MALLOC_CAP_DMA);", True),
+        ("p = heap_caps_aligned_alloc(64, 4, MALLOC_CAP_SPIRAM);", True),
+        ("freeze();", False),
+    ],
     "std-container": [("std::vector<int> v;", True), ("std::array<int, 4> a;", False)],
     "double": [("double x = 1.0;", True), ("float x = 1.0f;", False)],
     "static-local": [
@@ -66,6 +71,15 @@ def main() -> int:
         if brick_rules.check_file(path)[1]:
             failures += 1
             print("FAIL static class members were reported as function-local statics")
+    with tempfile.TemporaryDirectory() as directory:
+        app = Path(directory)
+        for relative in ("src/app/Test.cpp", "components/vendor_driver/driver.c"):
+            (app / relative).parent.mkdir(parents=True)
+            (app / relative).write_text("void f() {}\n", encoding="utf-8")
+        checked = {path.relative_to(app).as_posix() for path in brick_rules.sources([app])}
+        if checked != {"src/app/Test.cpp"}:
+            failures += 1
+            print(f"FAIL vendored components/ should be skipped, checked: {sorted(checked)}")
     print("brick_rules self-test:", "OK" if failures == 0 else f"{failures} failures")
     return 1 if failures else 0
 

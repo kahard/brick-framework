@@ -249,9 +249,10 @@ bool MipiDsiDisplay::wait_for_transfer_complete(std::uint32_t timeout_ms)
                          + config_.hsync_front_porch + config_.hsync_pulse_width;
     const auto v_total = static_cast<std::uint32_t>(config_.height) + config_.vsync_back_porch
                          + config_.vsync_front_porch + config_.vsync_pulse_width;
-    const auto frame_us = static_cast<std::uint32_t>((static_cast<double>(h_total) * v_total * 1'000'000.0)
-                                                     / (config_.pixel_clock_mhz * 1'000'000.0))
-                          + 2'000;
+    // Pixels divided by pixels per microsecond.
+    const auto frame_us =
+        static_cast<std::uint32_t>(static_cast<float>(h_total) * static_cast<float>(v_total) / config_.pixel_clock_mhz)
+        + 2'000;
     const auto wait_ms = (frame_us + 999) / 1'000;
     if (wait_ms > timeout_ms)
         return false;
@@ -266,10 +267,12 @@ bool MipiDsiDisplay::ensure_rotation_buffers_()
         return true;
     const auto source_bytes = static_cast<std::size_t>(logical_width_) * logical_height_ * sizeof(std::uint16_t);
     const auto target_bytes = static_cast<std::size_t>(config_.width) * config_.height * sizeof(std::uint16_t);
-    rotation_source_ =
-        static_cast<std::uint16_t*>(heap_caps_aligned_alloc(64, source_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    rotation_target_ =
-        static_cast<std::uint16_t*>(heap_caps_aligned_alloc(64, target_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    // Allocated on the first rotated draw and kept until the display is destroyed.
+    constexpr std::uint32_t kPsram = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+    // brick-rules: allow(malloc) one-time PSRAM rotation buffers, released in the destructor
+    rotation_source_ = static_cast<std::uint16_t*>(heap_caps_aligned_alloc(64, source_bytes, kPsram));
+    // brick-rules: allow(malloc) one-time PSRAM rotation buffers, released in the destructor
+    rotation_target_ = static_cast<std::uint16_t*>(heap_caps_aligned_alloc(64, target_bytes, kPsram));
     if (rotation_source_ == nullptr || rotation_target_ == nullptr)
     {
         release_rotation_buffers_();
@@ -295,9 +298,9 @@ bool MipiDsiDisplay::ensure_rotation_buffers_()
 void MipiDsiDisplay::release_rotation_buffers_()
 {
     if (rotation_source_ != nullptr)
-        heap_caps_free(rotation_source_);
+        heap_caps_free(rotation_source_);  // brick-rules: allow(malloc) releases the one-time rotation buffers
     if (rotation_target_ != nullptr)
-        heap_caps_free(rotation_target_);
+        heap_caps_free(rotation_target_);  // brick-rules: allow(malloc) releases the one-time rotation buffers
     rotation_source_ = nullptr;
     rotation_target_ = nullptr;
 }

@@ -185,7 +185,8 @@ Each stage ends with every application still building for its target.
 6. **Roll-out** - the remaining applications, family by family; each one
    gets a PC variant and a headless smoke test in CI. *Done.*
 7. **Enforcement** - the rule checker fails CI for `src/app`, `boards/` and
-   `platforms/` (except `platforms/pc`).
+   `platforms/` (except `platforms/pc`). *Done*; `libs/core` is still
+   reported only (see `libs/rules/README.md`).
 
 ### Roll-out status (brick-test-apps)
 
@@ -199,9 +200,6 @@ generated bundle in the simulator). Applications driven over a UART take an
 `ISerialPort&` (`EspUartPort` on the board, `PcSerialPort` replaying
 `--serial-in` in the simulator). For LVGL applications the PC CMake build
 fetches the LVGL version pinned in `platformio-versions.ini`.
-
-The rule checker still reports a vendored touch driver component; it must be
-resolved or excluded before stage 7.
 
 ### File system without allocation
 

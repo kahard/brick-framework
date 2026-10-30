@@ -7,6 +7,7 @@ Usage:
 Every C/C++ source under PATH is classified by its location:
 
   host     platforms/pc, libs/mocks, tests, tools, pc/   -> not checked
+  vendored components/, managed_components/ (ESP-IDF)  -> not checked
   app      .../src/app/...                                -> all rules
   target   everything else (core, boards, platforms, app entry points)
                                                           -> all rules except
@@ -31,7 +32,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"}
-SKIPPED_DIRS = {".git", ".pio", ".venv", "build", "managed_components", "generated", "node_modules", "fonts"}
+# components/ holds third-party ESP-IDF components copied into a project,
+# kept as published; managed_components/ is their downloaded counterpart.
+SKIPPED_DIRS = {
+    ".git", ".pio", ".venv", "build", "components", "managed_components", "generated", "node_modules", "fonts",
+}
 HOST_PARTS = (("platforms", "pc"), ("libs", "mocks"), ("tests",), ("tools",), ("pc",))
 ENTRY_FILES = {"main.cpp", "Types.h", "ApplicationConfig.h"}
 
@@ -53,7 +58,8 @@ RULES = (
          "lambda (rule L1): use a named function, a small class or a C callback with context"),
     Rule("new-delete", re.compile(r"\bnew\s+[\w:]|\bnew\s*\(|\bdelete\s*(\[\s*\])?\s*\w"),
          "new/delete (rule M1): allocate during initialization through owned storage or IMemoryProvider"),
-    Rule("malloc", re.compile(r"\b(malloc|calloc|realloc|free|heap_caps_malloc|heap_caps_calloc|heap_caps_free)\s*\("),
+    Rule("malloc", re.compile(r"\b(malloc|calloc|realloc|free|aligned_alloc|heap_caps_malloc|heap_caps_calloc|heap_caps_realloc"
+                                r"|heap_caps_aligned_alloc|heap_caps_free)\s*\("),
          "heap call (rule M1): allocate once during initialization through IMemoryProvider"),
     Rule("std-container", re.compile(r"\bstd::(vector|map|unordered_map|set|unordered_set|list|deque|queue|stack)\b"),
          "allocating container (rule M2): use std::array or a caller-provided buffer"),

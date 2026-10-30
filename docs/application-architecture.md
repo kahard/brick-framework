@@ -171,19 +171,36 @@ replacement:
 Each stage ends with every application still building for its target.
 
 1. **Environment** - pinned tools, cross-platform scripts, CI building all
-   applications (done).
+   applications. *Done.*
 2. **Documentation and rules** - this document, the coding rules and the rule
-   checker in report-only mode.
+   checker in report-only mode. *Done.*
 3. **PC platform** - `platforms/pc`, `boards/pc/SimulatorBoard.h`,
-   `libs/mocks`, unit tests; CMake target `BRICK::PlatformPC`.
-4. **Portable building blocks** - `IMemoryProvider`, `ISerialPort`,
-   `libs/lvgl`, asset/file-system injection.
+   `libs/mocks`, unit tests; CMake target `BRICK::PlatformPC`. *Done.*
+4. **Portable building blocks** - `IMemoryProvider` + `MemoryBlock` +
+   `EspMemory` (*done*), `IRemovableFileSystem` (*done*), `libs/lvgl`
+   (*done*), `ISerialPort` and asset-source injection (*open*).
 5. **Reference application** - `cyd/common/display_touch_smoke` split into
    `src/app` + `src/target` + `pc/`, running in the simulator and on the CYD.
+   *Done.*
 6. **Roll-out** - the remaining applications, family by family; each one
-   gets a PC variant and a headless smoke test in CI.
+   gets a PC variant and a headless smoke test in CI. *In progress.*
 7. **Enforcement** - the rule checker fails CI for `src/app`, `boards/` and
    `platforms/` (except `platforms/pc`).
+
+### Roll-out status (brick-test-apps)
+
+| Board | Portable with PC variant | Still to migrate |
+|---|---|---|
+| ESP-12F ST7789 | all 5 | - |
+| CYD | display_touch_smoke, sd_card_filesystem_touch_smoke | color_profile_asset, asset_stream_api, lvgl_asset, asset_stream_api_framebuffer, color_calibration, framebuffer, lvgl_asset_framebuffer |
+| Panel 480x480 | display_touch_smoke, sd_card_filesystem_touch_smoke | framebuffer, asset_stream_api_framebuffer, lvgl_framebuffer_touch |
+| JC1060 | display_touch_smoke, sdmmc_filesystem_write_verify | framebuffer, asset_stream_api_framebuffer, lvgl_asset_framebuffer, lvgl_benchmark |
+| JC8012 | sd_card_filesystem_touch_smoke | display_touch, framebuffer, asset_stream_api_framebuffer, lvgl_asset_framebuffer, lvgl_benchmark |
+
+The remaining applications need `MemoryBlock` instead of their own
+`heap_caps` wrappers, an `IAssetSource&` instead of `PartitionAssetSource`,
+and, for LVGL, an LVGL build in the simulator (LVGL v9 is pinned in
+`platformio-versions.ini` and can be fetched by the PC CMake build).
 
 ### Known debt in the interfaces
 

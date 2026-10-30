@@ -185,8 +185,7 @@ Each stage ends with every application still building for its target.
 6. **Roll-out** - the remaining applications, family by family; each one
    gets a PC variant and a headless smoke test in CI. *Done.*
 7. **Enforcement** - the rule checker fails CI for `src/app`, `boards/` and
-   `platforms/` (except `platforms/pc`). *Done*; `libs/core` is still
-   reported only (see `libs/rules/README.md`).
+   `platforms/` (except `platforms/pc`). *Done*, together with `libs/`.
 
 ### Roll-out status (brick-test-apps)
 

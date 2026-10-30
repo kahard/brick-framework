@@ -15,6 +15,7 @@
 
 #include "brick/core/audio/PeriodicAudioPlayer.h"
 #include "brick/core/audio/WavDecoder.h"
+#include "brick/core/display/Screen.h"
 #include "brick/core/image/BmpDecoder.h"
 #include "brick/core/input/TouchMapper.h"
 #include "brick/core/timing/PeriodicTimer.h"
@@ -219,6 +220,26 @@ void test_audio_player()
     assert(output.stopped);
 }
 
+void test_screen_canvas()
+{
+    FakeDisplay                   display;
+    brick::core::display::Screen  screen(display);
+    std::array<std::uint16_t, 64> pixels{};
+
+    // The canvas draws into the caller's pixels and presents exactly its area.
+    auto canvas = screen.create_canvas({ 4, 8, 16, 4 }, pixels);
+    assert(canvas.valid() && canvas.buffer().data == reinterpret_cast<std::uint8_t*>(pixels.data()));
+    assert(canvas.clear(0xF800).present());
+    assert(pixels[0] == 0xF800 && pixels[63] == 0xF800);
+    assert(display.last_area.x == 4 && display.last_area.y == 8 && display.last_byte_count == 16 * 4 * 2);
+
+    // A full-width strip of the 320-pixel display needs more than 64 pixels.
+    assert(!screen.create_canvas(1, pixels).valid());
+    assert(!screen.create_canvas({ 0, 0, 16, 5 }, pixels).valid());
+    assert(!screen.create_canvas({ 0, 0, 0, 4 }, pixels).valid());
+    assert(!screen.create_canvas({ 0, 0, 1, 1 }, nullptr, 1).valid());
+}
+
 void test_touch_mapper()
 {
     using brick::core::input::TouchCalibration;
@@ -368,6 +389,7 @@ int main()
     test_bmp_decoder_wide_rows();
     test_wav_decoder();
     test_audio_player();
+    test_screen_canvas();
     test_touch_mapper();
     test_asset_streamer();
     test_asset_bundle();

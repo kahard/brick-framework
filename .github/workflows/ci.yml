@@ -32,6 +32,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: python libs/rules/test_brick_rules.py
-      - run: python libs/rules/brick_rules.py --strict boards platforms
-      # libs/core still has known findings (libs/rules/README.md); report only.
-      - run: python libs/rules/brick_rules.py libs
+      - run: python libs/rules/brick_rules.py --strict libs boards platforms

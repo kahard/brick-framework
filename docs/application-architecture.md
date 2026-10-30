@@ -178,7 +178,7 @@ Each stage ends with every application still building for its target.
    `libs/mocks`, unit tests; CMake target `BRICK::PlatformPC`. *Done.*
 4. **Portable building blocks** - `IMemoryProvider` + `MemoryBlock` +
    `EspMemory` (*done*), `IRemovableFileSystem` (*done*), `libs/lvgl`
-   (*done*), `ISerialPort` and asset-source injection (*open*).
+   (*done*), `ISerialPort` and asset-source injection (*done*).
 5. **Reference application** - `cyd/common/display_touch_smoke` split into
    `src/app` + `src/target` + `pc/`, running in the simulator and on the CYD.
    *Done.*
@@ -192,15 +192,18 @@ Each stage ends with every application still building for its target.
 | Board | Portable with PC variant | Still to migrate |
 |---|---|---|
 | ESP-12F ST7789 | all 5 | - |
-| CYD | display_touch_smoke, sd_card_filesystem_touch_smoke | color_profile_asset, asset_stream_api, lvgl_asset, asset_stream_api_framebuffer, color_calibration, framebuffer, lvgl_asset_framebuffer |
-| Panel 480x480 | display_touch_smoke, sd_card_filesystem_touch_smoke | framebuffer, asset_stream_api_framebuffer, lvgl_framebuffer_touch |
-| JC1060 | display_touch_smoke, sdmmc_filesystem_write_verify | framebuffer, asset_stream_api_framebuffer, lvgl_asset_framebuffer, lvgl_benchmark |
-| JC8012 | sd_card_filesystem_touch_smoke | display_touch, framebuffer, asset_stream_api_framebuffer, lvgl_asset_framebuffer, lvgl_benchmark |
+| CYD | display_touch_smoke, sd_card_filesystem_touch_smoke, framebuffer, asset_stream_api_framebuffer, asset_stream_api, color_profile_asset, color_calibration | lvgl_asset, lvgl_asset_framebuffer |
+| Panel 480x480 | display_touch_smoke, sd_card_filesystem_touch_smoke, framebuffer, asset_stream_api_framebuffer | lvgl_framebuffer_touch |
+| JC1060 | display_touch_smoke, sdmmc_filesystem_write_verify, framebuffer, asset_stream_api_framebuffer | lvgl_asset_framebuffer, lvgl_benchmark |
+| JC8012 | display_touch_smoke, sd_card_filesystem_touch_smoke, framebuffer, asset_stream_api_framebuffer | lvgl_asset_framebuffer, lvgl_benchmark |
 
-The remaining applications need `MemoryBlock` instead of their own
-`heap_caps` wrappers, an `IAssetSource&` instead of `PartitionAssetSource`,
-and, for LVGL, an LVGL build in the simulator (LVGL v9 is pinned in
-`platformio-versions.ini` and can be fetched by the PC CMake build).
+Asset applications take an `IAssetSource&` from the target entry point
+(`PartitionAssetSource` on the board, `PcFileAssetSource` reading the
+generated bundle in the simulator). Applications driven over a UART take an
+`ISerialPort&` (`EspUartPort` on the board, `PcSerialPort` replaying
+`--serial-in` in the simulator). All remaining applications use LVGL; the PC
+CMake build fetches the LVGL version pinned in `platformio-versions.ini` for
+them.
 
 ### Known debt in the interfaces
 

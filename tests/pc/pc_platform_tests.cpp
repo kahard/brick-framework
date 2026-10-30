@@ -32,7 +32,7 @@ void test_partial_display()
     PcFrameBufferDisplay display({ 4, 2, 0 });
     assert(display.begin());
     assert(display.size().width == 4 && display.size().height == 2);
-    assert(!display.capabilities().scanout_buffers);
+    assert(!display.capabilities().scanout_buffers && display.capabilities().dma);
     assert(display.frame_buffer_count() == 0);
 
     const std::uint16_t pixels[2] = { 0xF800, 0x07E0 };
@@ -51,7 +51,7 @@ void test_frame_buffer_display()
 {
     PcFrameBufferDisplay display({ 3, 2, 2 });
     assert(display.begin());
-    assert(display.capabilities().scanout_buffers && display.wait_for_vsync(10));
+    assert(display.capabilities().scanout_buffers && display.capabilities().dma && display.wait_for_vsync(10));
     WritablePixelBuffer back{};
     assert(display.frame_buffer_count() == 2 && display.get_frame_buffer(1, back));
     assert(back.width == 3 && back.height == 2 && back.stride_bytes == 6);
@@ -73,8 +73,10 @@ void test_touch_and_button()
     assert(!touch.read(points, 2, count));  // no new sample
     touch.set(true, 11, 21);
     assert(touch.read(points, 2, count) && count == 1 && points[0].state == TouchState::moved);
+    // Like the hardware drivers: one released sample at the last position.
     touch.set(false, 0, 0);
-    assert(touch.read(points, 2, count) && count == 0 && !touch.pressed());
+    assert(touch.read(points, 2, count) && count == 1 && points[0].state == TouchState::released);
+    assert(points[0].x == 11 && points[0].y == 21 && !touch.pressed());
 
     brick::platform::pc::PcButton button;
     assert(button.begin() && !button.is_pressed());
@@ -226,7 +228,7 @@ void test_headless_simulation()
     CountingApplication           application(board);
     assert(brick::platform::pc::run(application, board.simulator()) == 0);
     assert(application.updates == 10);
-    assert(application.touches == 2);  // pressed at 30 ms, moved/held at 40 ms
+    assert(application.touches == 3);  // pressed at 30 ms, moved/held at 40 ms, released at 50 ms
     assert(board.time().millis() == 90);
 
     std::ifstream screenshot(file, std::ios::binary);

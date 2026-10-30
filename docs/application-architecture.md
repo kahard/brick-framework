@@ -134,6 +134,23 @@ in-memory file systems) live in `libs/mocks` as `BRICK::Mocks`; they are
 separate from the simulator because they record calls instead of emulating
 hardware.
 
+## Contracts the simulator relies on
+
+- **RGB565 byte order.** `PixelFormat::rgb565` data is little-endian: a
+  native `std::uint16_t` per pixel, the same as the generated
+  `BRICK_IMAGE_FORMAT_RGB565_LE` assets. Drivers convert to the panel's wire
+  order (ILI9341/ST7789 take big-endian). Code that packs bytes by hand must
+  write the low byte first; the simulator shows swapped colours otherwise,
+  which is how a big-endian packing bug in the ESP-12F button test was found.
+- **Constant tables in flash.** Mark them `BRICK_PROGMEM` and read them with
+  `brick_progmem_read_byte()` / `brick_progmem_copy()` from
+  `brick/core/memory/ProgramMemory.h`; on ESP8266 this is PROGMEM, everywhere
+  else plain memory.
+- **Build-time configuration.** Values an embedded build passes with `-D` in
+  `platformio.ini` are passed to the simulator with `DEFINES` in
+  `pc/simulator.cmake`; generated sources (fonts, assets) are produced by the
+  application's Makefile targets listed in `PREBUILD`.
+
 ## Hardware-specific concerns and how they stay out of `src/app`
 
 The audit of `brick-test-apps` (31 applications, October 2026) found that 11

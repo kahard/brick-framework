@@ -14,6 +14,9 @@ struct DisplaySize
 
 enum class PixelFormat : std::uint8_t
 {
+    /// One 16-bit pixel, stored little-endian (low byte first) like a native
+    /// std::uint16_t on every BRICK target and in generated *_RGB565_LE assets.
+    /// Display drivers convert to the byte order their panel expects.
     rgb565,
     rgb888,
 };

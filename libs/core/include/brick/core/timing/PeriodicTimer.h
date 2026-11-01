@@ -7,7 +7,7 @@
 namespace brick::core::timing
 {
 
-class PeriodicTimer
+class PeriodicTimer final
 {
 public:
     explicit PeriodicTimer(const interfaces::timing::IClock& clock);

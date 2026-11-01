@@ -44,8 +44,21 @@ CASES = {
         ("    static bool parse(const char* text);", False),
         ("    static std::uint8_t buffer[256];", True),
     ],
+    "class-final": [
+        ("class Decoder", True),
+        ("class Display : public IDisplayDevice", True),
+        ("template <typename T> class Pool {", True),
+        ("class Peripheral<true, T>", True),
+        ("class Decoder final", False),
+        ("class Display final : public IDisplayDevice", False),
+        ("class Peripheral<true, T> final", False),
+        ("class IDisplayDevice", False),
+        ("class Decoder;", False),
+        ("enum class Mode : std::uint8_t", False),
+        ("    friend class Decoder;", False),
+    ],
 }
-CLASS_MEMBERS = """class Decoder
+CLASS_MEMBERS = """class Decoder final
 {
 private:
     static std::uint16_t read_u16(const std::uint8_t* data);

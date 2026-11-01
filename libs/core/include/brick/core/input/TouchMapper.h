@@ -19,7 +19,7 @@ struct TouchCalibration
     bool         swap_xy   = false;
 };
 
-class TouchMapper
+class TouchMapper final
 {
 public:
     TouchMapper(brick::interfaces::display::DisplaySize display_size, TouchCalibration calibration);

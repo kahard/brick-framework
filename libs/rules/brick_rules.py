@@ -79,6 +79,10 @@ RULES = (
          "time compared with < or > (rule H7): compare the signed difference, or use Timer"),
     Rule("static-local", re.compile(r"^[ \t]+static\s+(?!constexpr\b|const\b|inline\b)[\w:<>, ]+?[\s*&]+\w+\s*(?:\[[^\]]*\]\s*)?[;={]"),
          "function-local static (rule L4): make the object a member of its owner"),
+    # Interfaces are named I<Name>; every other class definition is final.
+    Rule("class-final", re.compile(r"^\s*(?:template\s*<[^;{}]*>\s*)?class\s+(?!I[A-Z])\w+\b(?:\s*<[^;{}]*>)?"
+                                   r"(?!\s*final\b)\s*(?::[^;{]*)?\{?\s*$"),
+         "class without final (rule D2): implementations are final, only I<Name> interfaces are inherited"),
 )
 # Rules that only make sense inside a function body.
 FUNCTION_SCOPE_RULES = {"static-local"}

@@ -9,7 +9,7 @@ namespace brick::core::audio
 /// 8-bit unsigned mono samples at a sample rate. The buffer only refers to
 /// the samples: their owner keeps them valid while the buffer, or a player
 /// playing it, uses them.
-class AudioBuffer
+class AudioBuffer final
 {
 public:
     AudioBuffer() = default;

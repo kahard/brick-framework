@@ -3,8 +3,9 @@
 `brick_rules.py` checks the mechanically detectable part of the
 [embedded coding rules](../../docs/embedded-coding-rules.md): lambdas, heap
 allocation, allocating standard types, exceptions/RTTI, `double`,
-function-local statics and, in the application layer, includes of platform,
-board, SDK or OS headers.
+function-local statics, `volatile` objects, time compared with `<` or `>`,
+classes without `final` and, in the application layer, busy delays and
+includes of platform, board, SDK or OS headers.
 
 ```text
 python libs/rules/brick_rules.py libs boards platforms           # framework report

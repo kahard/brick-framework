@@ -6,7 +6,7 @@
 namespace brick::core::time
 {
 
-class Timer
+class Timer final
 {
 public:
     explicit Timer(interfaces::time::ITimeProvider& clock) : clock_(clock) {}

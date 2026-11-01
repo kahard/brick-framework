@@ -17,7 +17,7 @@ struct Stm32UsbHostConfig
     std::uint8_t  host_id    = 0;
 };
 
-class Stm32UsbHost
+class Stm32UsbHost final
 {
 public:
     explicit Stm32UsbHost(Stm32UsbHostConfig config = {}) : config_(config) {}

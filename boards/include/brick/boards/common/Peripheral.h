@@ -18,7 +18,7 @@ template <bool Enabled, typename T>
 class Peripheral;
 
 template <typename T>
-class Peripheral<true, T>
+class Peripheral<true, T> final
 {
 public:
     template <typename... Args>
@@ -35,7 +35,7 @@ private:
 };
 
 template <typename T>
-class Peripheral<false, T>
+class Peripheral<false, T> final
 {
 public:
     template <typename... Args>

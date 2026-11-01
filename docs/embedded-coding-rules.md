@@ -175,8 +175,9 @@ interface references in the constructor (in an application: a `Services`
 struct). It never creates hardware itself; no singletons, no global
 accessors.
 
-**D2. Implementations are `final`.** Inherit only to implement an
-interface, one level deep; no `protected` state.
+**D2. Implementations are `final`. [checked: `class-final`]** Inherit only
+to implement an interface (named `I<Name>`), one level deep; no `protected`
+state.
 
 **D3. One responsibility per class.** As a guide a file stays below about
 200 lines and a function below about 40; split anything bigger.

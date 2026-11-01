@@ -16,7 +16,7 @@ struct SpiNorFlashConfig
     std::uint16_t      cs_pin  = GPIO_PIN_12;
 };
 
-class SpiNorFlash
+class SpiNorFlash final
 {
 public:
     explicit SpiNorFlash(SpiNorFlashConfig config);

@@ -11,7 +11,7 @@ template <bool Enabled, typename Impl, typename Null>
 class Logger;
 
 template <typename Impl, typename Null>
-class Logger<true, Impl, Null>
+class Logger<true, Impl, Null> final
 {
 public:
     explicit Logger(int level) : value_(level) {}
@@ -23,7 +23,7 @@ private:
 };
 
 template <typename Impl, typename Null>
-class Logger<false, Impl, Null>
+class Logger<false, Impl, Null> final
 {
 public:
     explicit Logger(int) {}

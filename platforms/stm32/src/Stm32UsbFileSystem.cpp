@@ -144,15 +144,9 @@ Status Stm32UsbFileSystem::mount()
 {
     if (mounted_)
         return Status::ok;
-    g_usb_host                = &host_;
-    const std::uint32_t start = HAL_GetTick();
-    while (!host_.storage_ready() && HAL_GetTick() - start < mount_timeout_ms_)
-    {
-        host_.process();
-        HAL_Delay(10);
-    }
+    g_usb_host = &host_;
     if (!host_.storage_ready())
-        return Status::timeout;
+        return host_.port_connected() ? Status::busy : Status::not_ready;
     if (f_mount(&fatfs_, "", 1) != FR_OK)
         return Status::error;
     mounted_ = true;
@@ -163,8 +157,25 @@ void Stm32UsbFileSystem::unmount()
 {
     if (!mounted_)
         return;
+    for (Stm32UsbFile& file : files_)
+        file.close();
     f_mount(nullptr, "", 0);
     mounted_ = false;
+}
+
+bool Stm32UsbFileSystem::probe(const char* path)
+{
+    if (!mounted_ || path == nullptr || !host_.storage_ready())
+        return false;
+    FILINFO info{};
+    if (f_stat(path, &info) == FR_OK)
+        return true;
+    // f_stat() does not accept the root directory.
+    DIR dir{};
+    if (f_opendir(&dir, path) != FR_OK)
+        return false;
+    f_closedir(&dir);
+    return true;
 }
 
 std::size_t Stm32UsbFileSystem::list_files(const char* path, brick::interfaces::storage::FileEntry* entries,

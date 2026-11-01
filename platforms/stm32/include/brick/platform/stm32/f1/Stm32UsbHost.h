@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "brick/Status.h"
+#include "brick/platform/stm32/f1/Stm32UsbHostConfig.h"
 #include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_hcd.h"
 #include "usbh_core.h"
@@ -10,18 +11,12 @@
 namespace brick::platform::stm32::f1
 {
 
-struct Stm32UsbHostConfig
-{
-    /// VBUS switch; nullptr when VBUS is always on.
-    GPIO_TypeDef* power_port = GPIOC;
-    std::uint16_t power_pin  = GPIO_PIN_10;
-    std::uint8_t  host_id    = 0;
-};
-
+/// USB OTG FS host (PA11/PA12) with the mass storage class. The application
+/// loop calls process() often.
 class Stm32UsbHost final
 {
 public:
-    explicit Stm32UsbHost(Stm32UsbHostConfig config = {}) : config_(config) {}
+    explicit Stm32UsbHost(Stm32UsbHostConfig config) : config_(config) {}
 
     Status            begin();
     void              process();

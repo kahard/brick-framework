@@ -5,20 +5,9 @@ namespace brick::platform::stm32::f1
 
 Status Stm32Buzzer::begin()
 {
-    if (config_.port == nullptr)
+    if (!config_.pin.connected())
         return Status::invalid_argument;
-    if (config_.port == GPIOB)
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-    else if (config_.port == GPIOA)
-        __HAL_RCC_GPIOA_CLK_ENABLE();
-    else if (config_.port == GPIOC)
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-
-    GPIO_InitTypeDef pins{};
-    pins.Pin   = config_.pin;
-    pins.Mode  = GPIO_MODE_OUTPUT_PP;
-    pins.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(config_.port, &pins);
+    configure(config_.pin, GPIO_MODE_OUTPUT_PP);
     initialized_ = true;
     return set_enabled(false);
 }
@@ -27,11 +16,7 @@ Status Stm32Buzzer::set_enabled(bool enabled)
 {
     if (!initialized_)
         return Status::not_ready;
-    const bool level = enabled == config_.active_high;
-    if (level)
-        config_.port->BSRR = config_.pin;
-    else
-        config_.port->BSRR = static_cast<std::uint32_t>(config_.pin) << 16;
+    write(config_.pin, enabled == config_.active_high);
     return Status::ok;
 }
 

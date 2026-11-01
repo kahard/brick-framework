@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "brick/interfaces/storage/IFileSystem.h"
+#include "brick/interfaces/storage/IRemovableFileSystem.h"
 #include "brick/platform/stm32/f1/Stm32UsbHost.h"
 #include "ff.h"
 
@@ -37,17 +37,19 @@ private:
     bool open_ = false;
 };
 
-class Stm32UsbFileSystem final : public brick::interfaces::storage::IFileSystem
+/// FAT file system on a USB mass storage device.
+class Stm32UsbFileSystem final : public brick::interfaces::storage::IRemovableFileSystem
 {
 public:
-    explicit Stm32UsbFileSystem(Stm32UsbHost& host, std::uint32_t mount_timeout_ms = 10000)
-        : host_(host), mount_timeout_ms_(mount_timeout_ms)
-    {
-    }
+    explicit Stm32UsbFileSystem(Stm32UsbHost& host) : host_(host) {}
 
-    Status      mount() override;
-    void        unmount();
-    bool        mounted() const { return mounted_; }
+    /// Does not wait for the device: Status::not_ready without a device,
+    /// Status::busy while it is being enumerated (call again later).
+    Status mount() override;
+    void   unmount() override;
+    bool   mounted() const override { return mounted_; }
+    /// True when the device is still there and path (file or directory) exists.
+    bool        probe(const char* path) override;
     std::size_t list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
                            std::size_t capacity) override;
     Status      open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
@@ -59,7 +61,6 @@ protected:
 
 private:
     Stm32UsbHost&                           host_;
-    std::uint32_t                           mount_timeout_ms_;
     FATFS                                   fatfs_{};
     bool                                    mounted_ = false;
     std::array<Stm32UsbFile, kMaxOpenFiles> files_{};

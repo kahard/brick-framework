@@ -1,27 +1,30 @@
 #include "brick/platform/stm32/f1/ResistiveTouchscreen.h"
 
+#include "brick/platform/stm32/f1/HalStatus.h"
+
 namespace brick::platform::stm32::f1
 {
+
 namespace
 {
-    constexpr std::uint16_t kX1 = GPIO_PIN_4;  // PC4, ADC2_IN14
-    constexpr std::uint16_t kX2 = GPIO_PIN_0;  // PB0, ADC2_IN8
-    constexpr std::uint16_t kY1 = GPIO_PIN_5;  // PC5, ADC2_IN15
-    constexpr std::uint16_t kY2 = GPIO_PIN_1;  // PB1, ADC2_IN9
-}  // namespace
 
-ResistiveTouchscreen::ResistiveTouchscreen(ResistiveTouchscreenConfig config) : config_(config)
-{
-}
+    constexpr std::uint32_t kConversionTimeoutMs = 10;
+
+}  // namespace
 
 Status ResistiveTouchscreen::begin()
 {
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    __HAL_RCC_ADC2_CLK_ENABLE();
+    if (started_)
+        return Status::ok;
+    if (config_.adc == nullptr || !config_.x_plus.connected() || !config_.x_minus.connected()
+        || !config_.y_plus.connected() || !config_.y_minus.connected() || config_.display_size.width == 0
+        || config_.display_size.height == 0)
+        return Status::invalid_argument;
+    if (const Status status = enable_clock(config_.adc); !is_ok(status))
+        return status;
+    // PCLK2 / 6 keeps the ADC clock within its 14 MHz limit at 72 MHz.
     __HAL_RCC_ADC_CONFIG(RCC_ADCPCLK2_DIV6);
-
-    adc_.Instance                   = ADC2;
+    adc_.Instance                   = config_.adc;
     adc_.Init.ScanConvMode          = ADC_SCAN_DISABLE;
     adc_.Init.ContinuousConvMode    = DISABLE;
     adc_.Init.DiscontinuousConvMode = DISABLE;
@@ -30,73 +33,72 @@ Status ResistiveTouchscreen::begin()
     adc_.Init.NbrOfConversion       = 1;
     if (const HAL_StatusTypeDef result = HAL_ADC_Init(&adc_); result != HAL_OK)
         return to_status(result);
-    return to_status(HAL_ADCEx_Calibration_Start(&adc_));
+    const Status status = to_status(HAL_ADCEx_Calibration_Start(&adc_));
+    started_            = is_ok(status);
+    return status;
 }
 
 Status ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity,
                                   std::size_t& count)
 {
+    using brick::interfaces::display::TouchState;
     count = 0;
+    if (!started_)
+        return Status::not_ready;
     if (points == nullptr || capacity == 0)
         return Status::invalid_argument;
-    if (!layers_connected_())
+    if (!layers_touch_())
     {
-        if (was_pressed_)
-        {
-            points[0].state = brick::interfaces::display::TouchState::released;
-            count           = 1;
-        }
-        was_pressed_ = false;
+        if (!was_pressed_)
+            return Status::no_data;
+        points[0].state = TouchState::released;
+        count           = 1;
+        was_pressed_    = false;
         return Status::ok;
     }
-
     std::uint16_t raw_x = 0;
     std::uint16_t raw_y = 0;
     if (const Status status = sample_position_(raw_x, raw_y); !is_ok(status))
         return status;
-    auto& point = points[0];
-    point.id    = 0;
-    point.raw_x = raw_x;
-    point.raw_y = raw_y;
-    point.x     = map_(raw_x, config_.raw_x_min, config_.raw_x_max, config_.width, config_.invert_x);
-    point.y     = map_(raw_y, config_.raw_y_min, config_.raw_y_max, config_.height, config_.invert_y);
-    point.state =
-        was_pressed_ ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
-    was_pressed_ = true;
-    count        = 1;
+    points[0]       = mapper_.map(0, static_cast<std::int16_t>(raw_x), static_cast<std::int16_t>(raw_y));
+    points[0].state = was_pressed_ ? TouchState::moved : TouchState::pressed;
+    was_pressed_    = true;
+    count           = 1;
     return Status::ok;
 }
 
-bool ResistiveTouchscreen::layers_connected_()
+bool ResistiveTouchscreen::layers_touch_()
 {
-    configure_pin_(GPIOC, kX1, GPIO_MODE_INPUT, GPIO_PULLUP);
-    configure_pin_(GPIOB, kX2, GPIO_MODE_INPUT);
-    configure_pin_(GPIOC, kY1, GPIO_MODE_OUTPUT_PP);
-    configure_pin_(GPIOB, kY2, GPIO_MODE_OUTPUT_PP);
-    GPIOC->BSRR          = static_cast<std::uint32_t>(kY1) << 16;
-    GPIOB->BSRR          = static_cast<std::uint32_t>(kY2) << 16;
+    // X+ pulled up, Y plate grounded: X+ falls when the layers touch.
+    configure(config_.x_plus, GPIO_MODE_INPUT, GPIO_PULLUP);
+    configure(config_.x_minus, GPIO_MODE_INPUT);
+    configure(config_.y_plus, GPIO_MODE_OUTPUT_PP);
+    configure(config_.y_minus, GPIO_MODE_OUTPUT_PP);
+    write(config_.y_plus, false);
+    write(config_.y_minus, false);
     std::uint16_t sample = 0;
-    return is_ok(sample_adc_(ADC_CHANNEL_14, sample)) && sample < config_.pressed_threshold;
+    return is_ok(sample_adc_(config_.x_plus_channel, sample)) && sample < config_.pressed_threshold;
 }
 
 Status ResistiveTouchscreen::sample_position_(std::uint16_t& raw_x, std::uint16_t& raw_y)
 {
-    configure_pin_(GPIOC, kX1, GPIO_MODE_OUTPUT_PP);
-    configure_pin_(GPIOB, kX2, GPIO_MODE_OUTPUT_PP);
-    configure_pin_(GPIOC, kY1, GPIO_MODE_ANALOG);
-    configure_pin_(GPIOB, kY2, GPIO_MODE_INPUT);
-    GPIOC->BSRR = kX1;
-    GPIOB->BSRR = static_cast<std::uint32_t>(kX2) << 16;
-    if (const Status status = sample_adc_(ADC_CHANNEL_15, raw_x); !is_ok(status))
+    // Voltage across the X plate, read on Y+.
+    configure(config_.x_plus, GPIO_MODE_OUTPUT_PP);
+    configure(config_.x_minus, GPIO_MODE_OUTPUT_PP);
+    configure(config_.y_plus, GPIO_MODE_ANALOG);
+    configure(config_.y_minus, GPIO_MODE_INPUT);
+    write(config_.x_plus, true);
+    write(config_.x_minus, false);
+    if (const Status status = sample_adc_(config_.y_plus_channel, raw_x); !is_ok(status))
         return status;
-
-    configure_pin_(GPIOC, kX1, GPIO_MODE_ANALOG);
-    configure_pin_(GPIOB, kX2, GPIO_MODE_INPUT);
-    configure_pin_(GPIOC, kY1, GPIO_MODE_OUTPUT_PP);
-    configure_pin_(GPIOB, kY2, GPIO_MODE_OUTPUT_PP);
-    GPIOC->BSRR = kY1;
-    GPIOB->BSRR = static_cast<std::uint32_t>(kY2) << 16;
-    return sample_adc_(ADC_CHANNEL_14, raw_y);
+    // Voltage across the Y plate, read on X+.
+    configure(config_.x_plus, GPIO_MODE_ANALOG);
+    configure(config_.x_minus, GPIO_MODE_INPUT);
+    configure(config_.y_plus, GPIO_MODE_OUTPUT_PP);
+    configure(config_.y_minus, GPIO_MODE_OUTPUT_PP);
+    write(config_.y_plus, true);
+    write(config_.y_minus, false);
+    return sample_adc_(config_.x_plus_channel, raw_y);
 }
 
 Status ResistiveTouchscreen::sample_adc_(std::uint32_t channel, std::uint16_t& value)
@@ -109,34 +111,11 @@ Status ResistiveTouchscreen::sample_adc_(std::uint32_t channel, std::uint16_t& v
         return to_status(result);
     if (const HAL_StatusTypeDef result = HAL_ADC_Start(&adc_); result != HAL_OK)
         return to_status(result);
-    const HAL_StatusTypeDef conversion = HAL_ADC_PollForConversion(&adc_, 10);
-    const bool              ready      = conversion == HAL_OK;
-    if (ready)
+    const HAL_StatusTypeDef conversion = HAL_ADC_PollForConversion(&adc_, kConversionTimeoutMs);
+    if (conversion == HAL_OK)
         value = static_cast<std::uint16_t>(HAL_ADC_GetValue(&adc_));
     HAL_ADC_Stop(&adc_);
     return to_status(conversion);
-}
-
-void ResistiveTouchscreen::configure_pin_(GPIO_TypeDef* port, std::uint16_t pin, std::uint32_t mode,
-                                          std::uint32_t pull) const
-{
-    GPIO_InitTypeDef init{};
-    init.Pin   = pin;
-    init.Mode  = mode;
-    init.Pull  = pull;
-    init.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(port, &init);
-}
-
-std::int16_t ResistiveTouchscreen::map_(std::uint16_t value, std::uint16_t minimum, std::uint16_t maximum,
-                                        std::uint16_t size, bool invert) const
-{
-    std::int32_t mapped = (static_cast<std::int32_t>(value) - minimum) * size / (maximum - minimum);
-    if (mapped < 0)
-        mapped = 0;
-    if (mapped >= size)
-        mapped = size - 1;
-    return static_cast<std::int16_t>(invert ? size - 1 - mapped : mapped);
 }
 
 }  // namespace brick::platform::stm32::f1

@@ -1,43 +1,54 @@
 #include "brick/platform/stm32/f1/Ssd1963ParallelDisplay.h"
 
+#include <initializer_list>
+
 namespace brick::platform::stm32::f1
 {
 
-Ssd1963ParallelDisplay::Ssd1963ParallelDisplay(Ssd1963ParallelDisplayConfig config) : config_(config)
+namespace
 {
-}
+
+    constexpr std::uint16_t kDataPins = 0x00FF;
+    // Delays of the tested power-up sequence: on tested panels, lighting the
+    // backlight without the supply gate transition leaves the controller blank.
+    constexpr std::uint32_t kSupplyOffMs     = 200;
+    constexpr std::uint32_t kSupplySettleMs  = 150;
+    constexpr std::uint32_t kResetPulseMs    = 100;
+    constexpr std::uint32_t kResetRecoveryMs = 100;
+    constexpr std::uint32_t kSoftResetMs     = 100;
+    constexpr std::uint32_t kPllLockMs       = 1;
+
+    constexpr std::uint8_t kSoftReset          = 0x01;
+    constexpr std::uint8_t kDisplayOn          = 0x29;
+    constexpr std::uint8_t kSetColumnAddress   = 0x2A;
+    constexpr std::uint8_t kSetPageAddress     = 0x2B;
+    constexpr std::uint8_t kWriteMemoryStart   = 0x2C;
+    constexpr std::uint8_t kSetAddressMode     = 0x36;
+    constexpr std::uint8_t kSetPixelFormat     = 0x3A;
+    constexpr std::uint8_t kSetLcdMode         = 0xB0;
+    constexpr std::uint8_t kSetHorizontalTimes = 0xB4;
+    constexpr std::uint8_t kSetVerticalTimes   = 0xB6;
+    constexpr std::uint8_t kSetPll             = 0xE0;
+    constexpr std::uint8_t kSetPixelClock      = 0xE6;
+    constexpr std::uint8_t kSetPixelInterface  = 0xF0;
+
+}  // namespace
 
 Status Ssd1963ParallelDisplay::begin()
 {
     if (started_)
         return Status::ok;
-    if (config_.data_port == nullptr || config_.data_mask == 0 || config_.rs_port == nullptr
-        || config_.wr_port == nullptr || config_.cs_port == nullptr)
+    if (config_.width == 0 || config_.height == 0 || config_.timing.horizontal_total == 0
+        || config_.timing.vertical_total == 0 || config_.timing.pixel_clock_ratio == 0 || config_.data_port == nullptr
+        || !config_.rs.connected() || !config_.wr.connected() || !config_.cs.connected())
         return Status::invalid_argument;
-    configure_output_(config_.data_port, config_.data_mask);
-    configure_output_(config_.rs_port, config_.rs_pin);
-    configure_output_(config_.wr_port, config_.wr_pin);
-    configure_output_(config_.rd_port, config_.rd_pin);
-    configure_output_(config_.cs_port, config_.cs_pin);
-    configure_output_(config_.reset_port, config_.reset_pin);
-    configure_output_(config_.display_enable_port, config_.display_enable_pin);
+    configure({ config_.data_port, kDataPins }, GPIO_MODE_OUTPUT_PP);
+    for (const GpioPin& pin : { config_.rs, config_.wr, config_.cs, config_.rd, config_.reset, config_.display_enable })
+        configure(pin, GPIO_MODE_OUTPUT_PP);
     write_bus_(0);
-    write_pin_(config_.rd_port, config_.rd_pin, true);
-    write_pin_(config_.rs_port, config_.rs_pin, true);
-    write_pin_(config_.wr_port, config_.wr_pin, true);
-    write_pin_(config_.cs_port, config_.cs_pin, true);
-    write_pin_(config_.reset_port, config_.reset_pin, true);
-    // Cycle the optional panel supply gate before the SSD1963 reset sequence.
-    // Keep these delays: on tested panels lighting only the backlight without
-    // this transition leaves the controller blank.
-    write_pin_(config_.display_enable_port, config_.display_enable_pin, false);
-    HAL_Delay(200);
-    write_pin_(config_.display_enable_port, config_.display_enable_pin, true);
-    HAL_Delay(150);
-    write_pin_(config_.reset_port, config_.reset_pin, false);
-    HAL_Delay(100);
-    write_pin_(config_.reset_port, config_.reset_pin, true);
-    HAL_Delay(100);
+    for (const GpioPin& pin : { config_.rd, config_.rs, config_.wr, config_.cs, config_.reset })
+        write(pin, true);
+    power_up_panel_();
     const Status status = initialize_controller_();
     started_            = is_ok(status);
     return status;
@@ -47,6 +58,7 @@ brick::interfaces::display::DisplaySize Ssd1963ParallelDisplay::size() const
 {
     return { config_.width, config_.height };
 }
+
 brick::interfaces::display::PixelFormat Ssd1963ParallelDisplay::pixel_format() const
 {
     return brick::interfaces::display::PixelFormat::rgb565;
@@ -75,7 +87,7 @@ Status Ssd1963ParallelDisplay::set_rotation(brick::interfaces::display::Rotation
         return Status::not_ready;
     if (rotation != brick::interfaces::display::Rotation::rotate_0)
         return Status::not_supported;
-    command_(0x36);
+    command_(kSetAddressMode);
     data_(0x00);
     return Status::ok;
 }
@@ -95,7 +107,8 @@ Status Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRe
     if (const Status status = set_window_(area.x, area.y, area.width, area.height); !is_ok(status))
         return status;
 
-    command_(0x2C);
+    // The controller takes 8-bit red, green and blue for every pixel.
+    command_(kWriteMemoryStart);
     for (std::uint32_t row = 0; row < buffer.height; ++row)
     {
         const auto* pixels =
@@ -111,99 +124,94 @@ Status Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRe
     return Status::ok;
 }
 
-void Ssd1963ParallelDisplay::configure_output_(GPIO_TypeDef* port, std::uint16_t pins) const
+void Ssd1963ParallelDisplay::power_up_panel_() const
 {
-    if (port == nullptr)
-        return;
-    GPIO_InitTypeDef init{};
-    init.Pin   = pins;
-    init.Mode  = GPIO_MODE_OUTPUT_PP;
-    init.Pull  = GPIO_NOPULL;
-    init.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(port, &init);
+    // Cycle the optional panel supply gate, then reset the controller.
+    write(config_.display_enable, false);
+    HAL_Delay(kSupplyOffMs);
+    write(config_.display_enable, true);
+    HAL_Delay(kSupplySettleMs);
+    write(config_.reset, false);
+    HAL_Delay(kResetPulseMs);
+    write(config_.reset, true);
+    HAL_Delay(kResetRecoveryMs);
 }
 
-void Ssd1963ParallelDisplay::write_pin_(GPIO_TypeDef* port, std::uint16_t pin, bool high) const
-{
-    if (port == nullptr)
-        return;
-    port->BSRR = high ? pin : static_cast<std::uint32_t>(pin) << 16;
-}
 void Ssd1963ParallelDisplay::write_bus_(std::uint8_t value) const
 {
-    config_.data_port->BSRR =
-        (static_cast<std::uint32_t>(config_.data_mask & ~value) << 16) | (value & config_.data_mask);
+    config_.data_port->BSRR = (static_cast<std::uint32_t>(kDataPins & ~value) << 16) | (value & kDataPins);
 }
+
 void Ssd1963ParallelDisplay::pulse_write_() const
 {
-    write_pin_(config_.wr_port, config_.wr_pin, false);
-    write_pin_(config_.wr_port, config_.wr_pin, true);
+    write(config_.wr, false);
+    write(config_.wr, true);
 }
+
 void Ssd1963ParallelDisplay::command_(std::uint8_t value) const
 {
-    write_pin_(config_.cs_port, config_.cs_pin, false);
-    write_pin_(config_.rs_port, config_.rs_pin, false);
+    write(config_.cs, false);
+    write(config_.rs, false);
     write_bus_(value);
     pulse_write_();
-    write_pin_(config_.cs_port, config_.cs_pin, true);
+    write(config_.cs, true);
 }
+
 void Ssd1963ParallelDisplay::data_(std::uint8_t value) const
 {
-    write_pin_(config_.cs_port, config_.cs_pin, false);
-    write_pin_(config_.rs_port, config_.rs_pin, true);
+    write(config_.cs, false);
+    write(config_.rs, true);
     write_bus_(value);
     pulse_write_();
-    write_pin_(config_.cs_port, config_.cs_pin, true);
+    write(config_.cs, true);
+}
+
+void Ssd1963ParallelDisplay::data16_(std::uint16_t value) const
+{
+    data_(static_cast<std::uint8_t>(value >> 8));
+    data_(static_cast<std::uint8_t>(value));
 }
 
 Status Ssd1963ParallelDisplay::initialize_controller_()
 {
-    command_(0x01);
-    command_(0x01);
-    command_(0x01);
-    HAL_Delay(100);
-    command_(0xE0);
-    data_(0x01);
-    HAL_Delay(1);
-    command_(0xE0);
-    data_(0x03);
-    HAL_Delay(1);
-    command_(0xB0);
+    const Ssd1963PanelTiming& timing = config_.timing;
+    command_(kSoftReset);
+    command_(kSoftReset);
+    command_(kSoftReset);
+    HAL_Delay(kSoftResetMs);
+    command_(kSetPll);
+    data_(0x01);  // enable
+    HAL_Delay(kPllLockMs);
+    command_(kSetPll);
+    data_(0x03);  // lock
+    HAL_Delay(kPllLockMs);
+    command_(kSetLcdMode);
     data_(0x00);
     data_(0x00);
-    data_((config_.width - 1) >> 8);
-    data_(config_.width - 1);
-    data_((config_.height - 1) >> 8);
-    data_(config_.height - 1);
+    data16_(config_.width - 1);
+    data16_(config_.height - 1);
     data_(0x00);
-    command_(0xF0);
-    data_(0x00);
-    command_(0x3A);
+    command_(kSetPixelInterface);
+    data_(0x00);  // 8-bit bus
+    command_(kSetPixelFormat);
     data_(0x60);
-    command_(0xE6);
-    data_(config_.pll_m);
-    data_(config_.pll_n);
-    data_(config_.pll_k);
-    command_(0xB4);
-    data_(0x02);
-    data_(0x0D);
-    data_(0x00);
-    data_(0x2B);
-    data_(0x28);
-    data_(0x00);
-    data_(0x00);
-    data_(0x00);
-    command_(0xB6);
-    data_(0x01);
-    data_(0x1D);
-    data_(0x00);
-    data_(0x0C);
-    data_(0x09);
-    data_(0x00);
-    data_(0x00);
+    command_(kSetPixelClock);
+    data_(static_cast<std::uint8_t>(timing.pixel_clock_ratio >> 16));
+    data16_(static_cast<std::uint16_t>(timing.pixel_clock_ratio));
+    command_(kSetHorizontalTimes);
+    data16_(timing.horizontal_total);
+    data16_(timing.horizontal_sync_start);
+    data_(timing.horizontal_sync_width);
+    data16_(0);   // LPS
+    data_(0x00);  // LPSPP
+    command_(kSetVerticalTimes);
+    data16_(timing.vertical_total);
+    data16_(timing.vertical_sync_start);
+    data_(timing.vertical_sync_width);
+    data16_(0);  // FPS
     if (const Status status = set_window_(0, 0, config_.width, config_.height); !is_ok(status))
         return status;
-    command_(0x29);  // display on
+    command_(kDisplayOn);
     return Status::ok;
 }
 
@@ -212,18 +220,12 @@ Status Ssd1963ParallelDisplay::set_window_(std::uint16_t x, std::uint16_t y, std
 {
     if (width == 0 || height == 0)
         return Status::invalid_argument;
-    const auto x2 = static_cast<std::uint16_t>(x + width - 1);
-    const auto y2 = static_cast<std::uint16_t>(y + height - 1);
-    command_(0x2A);
-    data_(x >> 8);
-    data_(x);
-    data_(x2 >> 8);
-    data_(x2);
-    command_(0x2B);
-    data_(y >> 8);
-    data_(y);
-    data_(y2 >> 8);
-    data_(y2);
+    command_(kSetColumnAddress);
+    data16_(x);
+    data16_(static_cast<std::uint16_t>(x + width - 1));
+    command_(kSetPageAddress);
+    data16_(y);
+    data16_(static_cast<std::uint16_t>(y + height - 1));
     return Status::ok;
 }
 

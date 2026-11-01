@@ -31,15 +31,7 @@ void Stm32UsbHost::user_callback_(USBH_HandleTypeDef*, uint8_t event)
 Status Stm32UsbHost::begin()
 {
     __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    if (config_.power_port != nullptr)
-    {
-        GPIO_InitTypeDef power{};
-        power.Pin   = config_.power_pin;
-        power.Mode  = GPIO_MODE_OUTPUT_PP;
-        power.Speed = GPIO_SPEED_FREQ_HIGH;
-        HAL_GPIO_Init(config_.power_port, &power);
-    }
+    configure(config_.power, GPIO_MODE_OUTPUT_PP);
     // Some pendrives keep their controller in reset unless VBUS is present
     // before the OTG host core starts probing the port.
     cycle_vbus_();
@@ -129,11 +121,11 @@ void Stm32UsbHost::recover_after_removal_()
 
 void Stm32UsbHost::cycle_vbus_()
 {
-    if (config_.power_port == nullptr)
+    if (!config_.power.connected())
         return;
-    HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_RESET);
+    write(config_.power, false);
     HAL_Delay(kVbusOffMs);
-    HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_SET);
+    write(config_.power, true);
     HAL_Delay(kVbusSettleMs);
 }
 

@@ -118,6 +118,9 @@ struct filled by the target; they are never read from a board header inside
 | memory for pixel buffers | `PcMemory` - aligned heap blocks |
 | `IBuzzer` | `PcBuzzer` - counts beeps |
 | `IByteStorage`, `INorFlash` | `PcByteStorage`, `PcNorFlash` - blank memory (the flash answers with a W25Q64 ID) |
+| `IWifiStation`, `IWifiAccessPoint` | `PcWifi` - simulated radio: networks from `--wifi`, scans and joins in simulated time |
+| `INetworkInterface` (wired) | `PcHostNetwork` - the PC's own connection, down with `--offline` |
+| `IDnsResolver`, `ITcpSocket` | `PcDnsResolver`, `PcTcpSocket` - the real network (fail at once with `--offline`) |
 
 `boards/pc/SimulatorBoard.h` assembles them like a real board, with the
 screen size and feature set given as template parameters, so a CYD

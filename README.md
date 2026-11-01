@@ -48,6 +48,11 @@ The initial implementation includes:
 - portable display, touchscreen, and backlight interfaces,
 - touch calibration and coordinate mapping,
 - an ESP-IDF MIPI-DSI adapter,
+- networking: Wi-Fi station and hotspot, Ethernet, DNS and TCP behind
+  interfaces, with a portable Wi-Fi manager, a link selector (Ethernet before
+  Wi-Fi) and an HTTP connectivity probe, on ESP32, ESP32-P4 (ESP32-C6
+  co-processor), ESP8266 and the PC simulator (see
+  [docs/network.md](docs/network.md)),
 - board packages for JC1060, JC8012, ESP32-S3 480x480 panel, CYD and
   ESP-12F ST7789 boards.
 

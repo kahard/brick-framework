@@ -2,7 +2,7 @@
 
 Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 
-## [0.3.0] - kandydat 0.3.0-rc.1 (2026-11-01), przed testem sprzętowym
+## [0.3.0] - kandydat 0.3.0-rc.2 (2026-11-01), przed testem sprzętowym
 
 ### Changed (niekompatybilne z 0.2.x)
 
@@ -39,7 +39,19 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 - adaptery STM32F1: SSD1963, dotyk rezystancyjny i FT5x06, EEPROM I2C,
   SPI NOR, buzzer, podświetlenie PWM, host USB MSC z FatFs,
 - zasady pisania kodu embedded (`docs/embedded-coding-rules.md`) i ich
-  sprawdzanie w CI (`libs/rules/brick_rules.py --strict`).
+  sprawdzanie w CI (`libs/rules/brick_rules.py --strict`),
+- sieć (`docs/network.md`): interfejsy `INetworkInterface`, `IWifiStation`,
+  `IWifiAccessPoint`, `IDnsResolver`, `ITcpSocket`; przenośne `WifiManager`
+  (najsilniejsza znana sieć, ponawianie z rosnącą przerwą, hotspot zapasowy),
+  `NetworkSelector` (wspólny interfejs dostępu do internetu, np. Ethernet
+  przed Wi-Fi) i `HttpProbe` (sprawdzenie internetu),
+- ESP32: `EspWifi` (stacja i hotspot; na ESP32-P4 przez koprocesor ESP32-C6,
+  `esp_wifi_remote` + `esp_hosted`), `EspEthernet` (EMAC + PHY RMII),
+  `EspDnsResolver`, `EspTcpSocket`; ESP8266: `Esp8266Wifi`,
+  `Esp8266DnsResolver`, `Esp8266TcpSocket`,
+- płytki: flaga `wifi` (CYD, Panel 480, JC1060, JC8012, ESP-12F) i `ethernet`
+  (JC1060, IP101), domyślnie wyłączone; `SimulatorBoard` ma symulowane
+  Wi-Fi (`--wifi`) i sieć komputera jako Ethernet (`--offline`),
 
 ### Fixed
 

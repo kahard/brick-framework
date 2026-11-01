@@ -2,6 +2,50 @@
 
 Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 
+## [Unreleased]
+
+### Changed (niekompatybilne z 0.2.x)
+
+- operacje, które mogą się nie udać, zwracają `brick::Status` zamiast `bool`
+  (interfejsy, sterowniki, płytki, core); kontrakt aplikacji to
+  `Status initialize(); void update();`,
+- `IFileSystem` nie alokuje: `list_files()` wypełnia tablicę wywołującego,
+  `open()` wiąże `FileHandle` z jednym z `kMaxOpenFiles` plików,
+- `AudioBuffer` i `WavDecoder` wskazują na próbki wywołującego,
+  `Screen::create_canvas()` rysuje w pikselach wywołującego,
+- konstruktor `MipiDsiDisplay` przyjmuje `IMemoryProvider`,
+- `Stm32UsbHost::read_blocks()` / `write_blocks()` zwracają `Status`,
+- definicje płytek z repozytorium `brick-boards` są częścią frameworka (`boards/`).
+
+### Added
+
+- platforma PC: symulator z oknem SDL2 lub bez okna (testy w CI),
+  `SimulatorBoard`, mocki `BRICK::Mocks`,
+- `IMemoryProvider` i `MemoryBlock`, `ISerialPort`, `IRemovableFileSystem`,
+  `PcFileAssetSource`, przenośne adaptery LVGL w `libs/lvgl`,
+- `DragSlider`, profile kolorów RGB565 i interfejs podświetlenia,
+- płytka ESP-12F ST7789 (ESP8266), karta SD i podświetlenie CYD, dotyk
+  i obrót DMA2D dla JC8012,
+- adaptery STM32F1: SSD1963, dotyk rezystancyjny i FT5x06, EEPROM I2C,
+  SPI NOR, buzzer, podświetlenie PWM, host USB MSC z FatFs,
+- zasady pisania kodu embedded (`docs/embedded-coding-rules.md`) i ich
+  sprawdzanie w CI (`libs/rules/brick_rules.py --strict`).
+
+### Fixed
+
+- ILI9341: oczekiwanie na transfer SPI ma limit czasu, a kolejkowane
+  deskryptory SPI nie leżą już na stosie (po błędzie DMA czytał nadpisaną pamięć),
+- GT911: flaga nowej próbki jest czyszczona po odczycie punktów,
+- MIPI DSI: flaga odświeżenia współdzielona z przerwaniem jest atomowa,
+- host USB STM32: przełączanie VBUS po odłączeniu urządzenia nie używa
+  niezdefiniowanego pinu zasilania,
+- WAV bez bajtu wyrównania po ostatnim chunku jest akceptowany; BMP
+  z uszkodzonymi wymiarami nie przepełnia obliczeń offsetów,
+- adapter LVGL zachowuje błąd wysyłania obrazu (`flush_status()`),
+- `Stm32PwmBacklight` implementuje `IBacklight`,
+- porównania czasu są odporne na przepełnienie licznika milisekund,
+- linia bazowa i przesunięcie glifów w generowanych fontach.
+
 ## [0.2.1] - 2026-08-21
 
 ### Fixed

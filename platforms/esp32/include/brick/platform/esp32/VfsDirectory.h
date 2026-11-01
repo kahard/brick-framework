@@ -1,12 +1,31 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdio>
 #include <dirent.h>
 
 #include "brick/interfaces/storage/IFileSystem.h"
 
 namespace brick::platform::esp32
 {
+
+/// IRemovableFileSystem::probe() for a path of the ESP-IDF VFS: a file with
+/// at least one byte, or a directory.
+inline bool probe_vfs_path(const char* path)
+{
+    if (std::FILE* file = std::fopen(path, "rb"))
+    {
+        unsigned char byte = 0;
+        const bool    read = std::fread(&byte, 1, 1, file) == 1;
+        std::fclose(file);
+        return read;
+    }
+    DIR* directory = opendir(path);
+    if (directory == nullptr)
+        return false;
+    closedir(directory);
+    return true;
+}
 
 /// IFileSystem::list_files() for a directory of the ESP-IDF VFS.
 inline std::size_t list_vfs_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity)

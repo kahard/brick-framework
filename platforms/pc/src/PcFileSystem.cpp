@@ -93,6 +93,9 @@ bool PcFileSystem::probe(const char* path)
 {
     if (!mounted_ || path == nullptr)
         return false;
+    std::error_code error;
+    if (std::filesystem::is_directory(host_path(path), error))
+        return true;
     FILE* file = std::fopen(host_path(path).c_str(), "rb");
     if (file == nullptr)
         return false;

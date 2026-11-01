@@ -26,15 +26,7 @@ void SdmmcFileSystem::unmount()
 
 bool SdmmcFileSystem::probe(const char* path)
 {
-    if (!mounted_ || path == nullptr)
-        return false;
-    std::FILE* file = std::fopen(path, "rb");
-    if (file == nullptr)
-        return false;
-    unsigned char byte = 0;
-    const bool    ok   = std::fread(&byte, 1, 1, file) == 1;
-    std::fclose(file);
-    return ok;
+    return mounted_ && path != nullptr && probe_vfs_path(path);
 }
 
 SdmmcFile::~SdmmcFile()

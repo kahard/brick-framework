@@ -189,58 +189,58 @@ Status Ili9341SpiDisplay::send_command_(std::uint8_t command, const std::uint8_t
 
 Status Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
 {
-    constexpr std::size_t                      kQueueDepth = 2;
-    std::array<spi_transaction_t, kQueueDepth> transactions{};
-    std::size_t                                queued      = 0;
-    std::size_t                                next_buffer = 0;
-
+    if (length % 2 != 0)
+        return Status::invalid_argument;
     gpio_set_level(config_.dc_gpio, 1);
-    while (length != 0)
+    std::size_t queued = 0;
+    Status      status = Status::ok;
+    for (std::size_t buffer = 0; length != 0; buffer = (buffer + 1) % kPixelBufferCount)
     {
-        if (queued == kQueueDepth)
+        // Every buffer is in flight: wait for the oldest before refilling it.
+        if (queued == kPixelBufferCount)
         {
-            spi_transaction_t* completed = nullptr;
-            if (const esp_err_t err = spi_device_get_trans_result(spi_device_, &completed, kTransferTimeoutTicks);
-                err != ESP_OK)
-                return to_status(err);
+            if (status = collect_transaction_(); !is_ok(status))
+                break;
             --queued;
         }
-
-        std::size_t chunk = std::min(length, kPixelTransferBytes);
-        // RGB565 assets are stored in the portable little-endian memory
-        // representation. ILI9341 expects each pixel on SPI MSB first.
-        chunk &= ~std::size_t{ 1 };
-        if (chunk == 0)
-            return Status::invalid_argument;
-        for (std::size_t index = 0; index < chunk; index += 2)
-        {
-            pixel_tx_buffers_[next_buffer][index]     = data[index + 1];
-            pixel_tx_buffers_[next_buffer][index + 1] = data[index];
-        }
-
-        spi_transaction_t& transaction = transactions[next_buffer];
-        transaction                    = {};
-        transaction.length             = chunk * 8;
-        transaction.tx_buffer          = pixel_tx_buffers_[next_buffer].data();
-        if (const esp_err_t err = spi_device_queue_trans(spi_device_, &transaction, kTransferTimeoutTicks);
-            err != ESP_OK)
-            return to_status(err);
-
+        const std::size_t chunk = std::min(length, kPixelTransferBytes);
+        if (status = queue_pixels_(data, chunk, buffer); !is_ok(status))
+            break;
+        ++queued;
         data += chunk;
         length -= chunk;
-        next_buffer = (next_buffer + 1) % kQueueDepth;
-        ++queued;
     }
-
-    while (queued != 0)
+    // Collect what is still queued, also after an error, so no transfer is
+    // left running from a buffer that the next call refills.
+    for (; queued != 0; --queued)
     {
-        spi_transaction_t* completed = nullptr;
-        if (const esp_err_t err = spi_device_get_trans_result(spi_device_, &completed, kTransferTimeoutTicks);
-            err != ESP_OK)
-            return to_status(err);
-        --queued;
+        if (const Status collected = collect_transaction_(); is_ok(status))
+            status = collected;
     }
-    return Status::ok;
+    return status;
+}
+
+Status Ili9341SpiDisplay::queue_pixels_(const std::uint8_t* data, std::size_t length, std::size_t buffer)
+{
+    // RGB565 assets are stored in the portable little-endian memory
+    // representation. ILI9341 expects each pixel on SPI MSB first.
+    auto& pixels = pixel_tx_buffers_[buffer];
+    for (std::size_t index = 0; index < length; index += 2)
+    {
+        pixels[index]     = data[index + 1];
+        pixels[index + 1] = data[index];
+    }
+    spi_transaction_t& transaction = pixel_transactions_[buffer];
+    transaction                    = {};
+    transaction.length             = length * 8;  // in bits
+    transaction.tx_buffer          = pixels.data();
+    return to_status(spi_device_queue_trans(spi_device_, &transaction, kTransferTimeoutTicks));
+}
+
+Status Ili9341SpiDisplay::collect_transaction_()
+{
+    spi_transaction_t* completed = nullptr;
+    return to_status(spi_device_get_trans_result(spi_device_, &completed, kTransferTimeoutTicks));
 }
 
 Status Ili9341SpiDisplay::set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width,

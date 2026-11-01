@@ -53,6 +53,8 @@ private:
     Status transmit_(bool data, const std::uint8_t* bytes, std::size_t length);
     Status send_command_(std::uint8_t command, const std::uint8_t* args = nullptr, std::size_t length = 0);
     Status send_data_(const std::uint8_t* data, std::size_t length);
+    Status queue_pixels_(const std::uint8_t* data, std::size_t length, std::size_t buffer);
+    Status collect_transaction_();
     Status set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height);
     Status initialize_panel_();
 
@@ -61,8 +63,14 @@ private:
     bool                         spi_ready_          = false;
     bool                         started_            = false;
     static constexpr std::size_t kPixelTransferBytes = 4 * 1024;
-    alignas(4) std::array<std::array<std::uint8_t, kPixelTransferBytes>, 2> pixel_tx_buffers_{};
-    static constexpr const char* TAG = "brick_ili9341_spi";
+    // One buffer is filled while the other is sent.
+    static constexpr std::size_t kPixelBufferCount = 2;
+    static_assert(kPixelTransferBytes % 2 == 0, "a transfer holds whole RGB565 pixels");
+    alignas(4) std::array<std::array<std::uint8_t, kPixelTransferBytes>, kPixelBufferCount> pixel_tx_buffers_{};
+    // Members, not locals: the SPI driver reads a queued descriptor until it
+    // is collected, also when send_data_() returns early with an error.
+    std::array<spi_transaction_t, kPixelBufferCount> pixel_transactions_{};
+    static constexpr const char*                     TAG = "brick_ili9341_spi";
 };
 
 }  // namespace brick::platform::esp32

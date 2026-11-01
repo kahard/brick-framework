@@ -25,6 +25,18 @@ CASES = {
     ],
     "std-container": [("std::vector<int> v;", True), ("std::array<int, 4> a;", False)],
     "double": [("double x = 1.0;", True), ("float x = 1.0f;", False)],
+    "volatile": [
+        ("    volatile bool ready = false;", True),
+        ("    auto* reg = reinterpret_cast<volatile const std::uint32_t*>(base + 0x440U);", False),
+        ("    volatile std::uint32_t* const port = registers;", False),
+    ],
+    "time-compare": [
+        ("    if (time_.millis() < next_ms_)", True),
+        ("    if (deadline >= clock.micros())", True),
+        ("    if (static_cast<std::int32_t>(time_.millis() - next_ms_) < 0)", False),
+        ("    const auto elapsed = static_cast<std::uint32_t>(time_.millis()) - start;", False),
+        ("    log(\"%u\", millis());", False),
+    ],
     "static-local": [
         ("    static Widget widget;", True),
         ("    static constexpr int kSize = 4;", False),
@@ -80,6 +92,19 @@ def main() -> int:
         if checked != {"src/app/Test.cpp"}:
             failures += 1
             print(f"FAIL vendored components/ should be skipped, checked: {sorted(checked)}")
+    with tempfile.TemporaryDirectory() as directory:
+        app = Path(directory) / "src" / "app" / "Test.cpp"
+        app.parent.mkdir(parents=True)
+        app.write_text("void Test::update()\n{\n    time_.delay_ms(10);\n}\n", encoding="utf-8")
+        target = Path(directory) / "src" / "target" / "main.cpp"
+        target.parent.mkdir(parents=True)
+        target.write_text("void loop()\n{\n    board.time().delay_ms(10);\n}\n", encoding="utf-8")
+        if "app-delay" not in {rule for _, rule, _ in brick_rules.check_file(app)[1]}:
+            failures += 1
+            print("FAIL delay in src/app was not reported")
+        if "app-delay" in {rule for _, rule, _ in brick_rules.check_file(target)[1]}:
+            failures += 1
+            print("FAIL delay in src/target was reported")
     print("brick_rules self-test:", "OK" if failures == 0 else f"{failures} failures")
     return 1 if failures else 0
 

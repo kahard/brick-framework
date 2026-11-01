@@ -71,6 +71,12 @@ RULES = (
          "exceptions / RTTI (rule L2): report errors through return values"),
     Rule("double", re.compile(r"\bdouble\b"),
          "double (rule L3): use integers, fixed point or float"),
+    # A pointer to volatile (a register address) is allowed; a volatile object is not.
+    Rule("volatile", re.compile(r"\bvolatile\b(?![\w\s:]*\*)"),
+         "volatile object (rule H4): share state through std::atomic or an RTOS primitive"),
+    Rule("time-compare", re.compile(r"\b(millis|micros)\s*\(\s*\)\s*(<=?|>=?)(?![<>=])"
+                                    r"|(?<![<>\-])(<=?|>=?)\s*(?:\w+(?:\.|->))*(millis|micros)\s*\(\s*\)"),
+         "time compared with < or > (rule H7): compare the signed difference, or use Timer"),
     Rule("static-local", re.compile(r"^[ \t]+static\s+(?!constexpr\b|const\b|inline\b)[\w:<>, ]+?[\s*&]+\w+\s*(?:\[[^\]]*\]\s*)?[;={]"),
          "function-local static (rule L4): make the object a member of its owner"),
 )
@@ -101,6 +107,7 @@ def function_scopes(code_lines: list[str]) -> list[bool]:
                 pending += c
         pending += " "
     return result
+APP_DELAY = re.compile(r"\b(delay_ms|delay|vTaskDelay|HAL_Delay)\s*\(")
 LAYER_RULE_ID = "layer-include"
 SUPPRESS = re.compile(r"brick-rules:\s*allow\(([\w,\s-]+)\)\s*(\S.*)?")
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]([^">]+)[">]')
@@ -201,6 +208,9 @@ def check_file(path: Path):
                                  f"application layer includes <{include.group(1)}> (rule A1): take an interface instead"))
         if line.lstrip().startswith("#"):
             continue
+        if layer == "app" and APP_DELAY.search(line) and not suppressed(raw_lines, index, "app-delay"):
+            findings.append((index + 1, "app-delay",
+                             "delay in the application layer (rule H6): let the target loop pace update()"))
         for rule in RULES:
             if rule.rule_id in FUNCTION_SCOPE_RULES and not in_function[index]:
                 continue

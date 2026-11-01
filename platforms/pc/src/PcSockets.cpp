@@ -5,20 +5,7 @@
 #include <string>
 #include <thread>
 
-#ifdef _WIN32
-#    include <winsock2.h>
-#    include <ws2tcpip.h>
-#else
-#    include <arpa/inet.h>
-#    include <cerrno>
-#    include <fcntl.h>
-#    include <netdb.h>
-#    include <netinet/in.h>
-#    include <sys/select.h>
-#    include <sys/socket.h>
-#    include <unistd.h>
-#endif
-
+#include "SocketSupport.h"
 #include "brick/core/network/Ipv4.h"
 
 namespace brick::platform::pc
@@ -29,90 +16,16 @@ using brick::interfaces::network::LinkState;
 
 namespace
 {
-#ifdef _WIN32
-    using Handle                    = SOCKET;
-    constexpr Handle kInvalidHandle = INVALID_SOCKET;
-
-    void start_sockets()
-    {
-        static std::once_flag started;
-        std::call_once(started,
-                       []
-                       {
-                           WSADATA data;
-                           WSAStartup(MAKEWORD(2, 2), &data);
-                       });
-    }
-    int last_error()
-    {
-        return WSAGetLastError();
-    }
-    bool would_block(int error)
-    {
-        return error == WSAEWOULDBLOCK;
-    }
-    bool connect_pending(int error)
-    {
-        return error == WSAEWOULDBLOCK || error == WSAEINPROGRESS;
-    }
-    bool timed_out(int error)
-    {
-        return error == WSAETIMEDOUT;
-    }
-    void close_handle(Handle handle)
-    {
-        closesocket(handle);
-    }
-    bool make_non_blocking(Handle handle)
-    {
-        u_long enabled = 1;
-        return ioctlsocket(handle, FIONBIO, &enabled) == 0;
-    }
-#else
-    using Handle                    = int;
-    constexpr Handle kInvalidHandle = -1;
-
-    void start_sockets()
-    {
-    }
-    int last_error()
-    {
-        return errno;
-    }
-    bool would_block(int error)
-    {
-        return error == EAGAIN || error == EWOULDBLOCK;
-    }
-    bool connect_pending(int error)
-    {
-        return error == EINPROGRESS;
-    }
-    bool timed_out(int error)
-    {
-        return error == ETIMEDOUT;
-    }
-    void close_handle(Handle handle)
-    {
-        ::close(handle);
-    }
-    bool make_non_blocking(Handle handle)
-    {
-        const int flags = ::fcntl(handle, F_GETFL, 0);
-        return flags >= 0 && ::fcntl(handle, F_SETFL, flags | O_NONBLOCK) == 0;
-    }
-#endif
-
-#ifdef MSG_NOSIGNAL
-    // Linux: a send to a connection the server closed must fail, not raise SIGPIPE.
-    constexpr int kSendFlags = MSG_NOSIGNAL;
-#else
-    constexpr int kSendFlags = 0;
-#endif
-
-    Handle to_handle(std::intptr_t value)
-    {
-        return static_cast<Handle>(value);
-    }
+    using sockets::close_handle;
+    using sockets::connect_pending;
+    using sockets::Handle;
+    using sockets::kInvalidHandle;
+    using sockets::kSendFlags;
+    using sockets::last_error;
+    using sockets::make_non_blocking;
+    using sockets::timed_out;
+    using sockets::to_handle;
+    using sockets::would_block;
 
     sockaddr_in to_sockaddr(const brick::interfaces::network::Endpoint& endpoint)
     {
@@ -138,7 +51,7 @@ Status PcHostNetwork::begin()
     state_ = LinkState::down;
     if (offline_)
         return Status::ok;
-    start_sockets();
+    sockets::start();
     // Connecting a UDP socket sends nothing; it only picks the route, whose
     // local address is the PC's address on the internet-facing network.
     const Handle handle = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -209,7 +122,7 @@ Status PcDnsResolver::resolve(const char* host_name)
         lookup_->status = Status::not_found;
         return Status::ok;
     }
-    start_sockets();
+    sockets::start();
     // The thread keeps the lookup alive; a cancelled lookup just finishes unseen.
     std::thread(
         [lookup = lookup_, name = std::string(host_name)]
@@ -254,7 +167,7 @@ Status PcTcpSocket::connect(const brick::interfaces::network::Endpoint& remote)
     close();
     if (offline_)
         return fail_(Status::error);
-    start_sockets();
+    sockets::start();
     const Handle handle = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (handle == kInvalidHandle)
         return fail_(Status::no_memory);

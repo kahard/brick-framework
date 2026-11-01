@@ -2,7 +2,7 @@
 
 Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 
-## [Unreleased]
+## [0.3.0] - kandydat 0.3.0-rc.1 (2026-11-01), przed testem sprzętowym
 
 ### Changed (niekompatybilne z 0.2.x)
 

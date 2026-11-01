@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -71,19 +72,20 @@ private:
     bool                  ppa_rotate_buffer_(const std::uint16_t* source);
     bool                  full_frame_transfer_(const brick::interfaces::display::PixelBuffer& buffer);
 
-    MipiDsiPanelConfig                          config_;
-    brick::interfaces::display::Rotation        rotation_         = brick::interfaces::display::Rotation::rotate_0;
-    esp_lcd_dsi_bus_handle_t                    bus_              = nullptr;
-    esp_lcd_panel_io_handle_t                   io_               = nullptr;
-    esp_lcd_panel_handle_t                      panel_            = nullptr;
-    esp_ldo_channel_handle_t                    mipi_dsi_ldo_     = nullptr;
-    SemaphoreHandle_t                           color_trans_done_ = nullptr;
-    SemaphoreHandle_t                           refresh_done_     = nullptr;
-    volatile bool                               color_ready_for_refresh_ = false;
-    bool                                        initialized_             = false;
-    bool                                        transfer_pending_        = false;
-    std::uint16_t                               logical_width_           = 0;
-    std::uint16_t                               logical_height_          = 0;
+    MipiDsiPanelConfig                   config_;
+    brick::interfaces::display::Rotation rotation_         = brick::interfaces::display::Rotation::rotate_0;
+    esp_lcd_dsi_bus_handle_t             bus_              = nullptr;
+    esp_lcd_panel_io_handle_t            io_               = nullptr;
+    esp_lcd_panel_handle_t               panel_            = nullptr;
+    esp_ldo_channel_handle_t             mipi_dsi_ldo_     = nullptr;
+    SemaphoreHandle_t                    color_trans_done_ = nullptr;
+    SemaphoreHandle_t                    refresh_done_     = nullptr;
+    // Set by the task, cleared by the refresh-done interrupt.
+    std::atomic<bool>                           color_ready_for_refresh_{ false };
+    bool                                        initialized_      = false;
+    bool                                        transfer_pending_ = false;
+    std::uint16_t                               logical_width_    = 0;
+    std::uint16_t                               logical_height_   = 0;
     brick::interfaces::memory::IMemoryProvider& memory_;
     std::uint16_t*                              rotation_source_         = nullptr;
     std::uint16_t*                              rotation_target_         = nullptr;

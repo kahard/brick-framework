@@ -52,10 +52,11 @@ bool IRAM_ATTR MipiDsiDisplay::on_color_trans_done_(esp_lcd_panel_handle_t, esp_
 bool IRAM_ATTR MipiDsiDisplay::on_refresh_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void* user_ctx)
 {
     auto* self = static_cast<MipiDsiDisplay*>(user_ctx);
-    if (!self->color_ready_for_refresh_)
+    // Only the refresh after a completed color transfer counts; reading and
+    // clearing the flag is one atomic step.
+    if (!self->color_ready_for_refresh_.exchange(false))
         return false;
-    self->color_ready_for_refresh_ = false;
-    BaseType_t woken               = pdFALSE;
+    BaseType_t woken = pdFALSE;
     if (self->refresh_done_ != nullptr)
         xSemaphoreGiveFromISR(self->refresh_done_, &woken);
     return woken == pdTRUE;

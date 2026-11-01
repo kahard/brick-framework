@@ -264,6 +264,14 @@ bool Simulator::begin()
     }
     return true;
 #else
+    // A run limited by --frames can go on without a window; an endless one
+    // would run unseen until killed.
+    if (options_.frames == 0)
+    {
+        std::fprintf(stderr, "Built without SDL2, so there is no window: use --web to see the screen in a browser, "
+                             "or --headless\n");
+        return false;
+    }
     std::fprintf(stderr, "Built without SDL2: running headless\n");
     options_.headless = true;
     return true;

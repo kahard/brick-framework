@@ -93,8 +93,9 @@ memory, touch, button, backlight, time, logger, a directory as SD card) and
 board. With SDL2 installed the display is shown in a window (mouse = touch);
 with `--web [PORT]` it is shown in a web browser instead (a built-in server,
 default http://localhost:8080/; `--web-lan` lets a phone or tablet on the
-network open it too); without either, or with `--headless`, applications run
-without a window, which is how CI runs their smoke tests. Link `BRICK::PlatformPC` and use
+network open it too); with `--headless`, applications run without a window,
+which is how CI runs their smoke tests. Without SDL2 an endless run needs
+`--web` or `--headless`. Link `BRICK::PlatformPC` and use
 `brick_add_simulator()` from `cmake/BrickSimulator.cmake`.
 
 Test doubles that record calls (displays, touch screens, file systems,

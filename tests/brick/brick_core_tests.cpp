@@ -144,6 +144,75 @@ std::uint16_t expected_gradient(int x, int y)
     return static_cast<std::uint16_t>(((x & 0xF8) << 8) | (((y * 4) & 0xFC) << 3) | (0x80 >> 3));
 }
 
+std::uint16_t pixel_at(const std::uint8_t* pixels, int width, int x, int y)
+{
+    const std::size_t index = (static_cast<std::size_t>(y) * width + x) * 2;
+    return static_cast<std::uint16_t>(pixels[index] | (pixels[index + 1] << 8));
+}
+
+int g_reported_rows = 0;
+
+void count_row(std::uint32_t)
+{
+    ++g_reported_rows;
+}
+
+void test_bmp_decoder_placement()
+{
+    MemoryFileSystem fs;
+    fs.files["small.bmp"] = make_2x2_bmp();
+    fs.files["tall.bmp"]  = make_gradient_bmp(3, 5, 24);
+
+    // A smaller image is centred and the border is cleared.
+    std::uint8_t centred[4 * 4 * 2];
+    std::memset(centred, 0xAA, sizeof(centred));
+    assert(brick::core::image::BmpDecoder::decode(fs, "small.bmp", centred, { .target_width = 4, .target_height = 4 })
+           == Status::ok);
+    assert(pixel_at(centred, 4, 1, 1) == 0xF800 && pixel_at(centred, 4, 2, 1) == 0x07E0);
+    assert(pixel_at(centred, 4, 1, 2) == 0x001F && pixel_at(centred, 4, 2, 2) == 0xFFFF);
+    assert(pixel_at(centred, 4, 0, 0) == 0 && pixel_at(centred, 4, 3, 3) == 0 && pixel_at(centred, 4, 0, 2) == 0);
+
+    // A taller image keeps its middle rows; on_row reports progress.
+    std::uint8_t cropped[3 * 3 * 2];
+    g_reported_rows = 0;
+    assert(brick::core::image::BmpDecoder::decode(fs, "tall.bmp", cropped,
+                                                  { .target_width = 3, .target_height = 3, .on_row = count_row })
+           == Status::ok);
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 3; ++x)
+            assert(pixel_at(cropped, 3, x, y) == expected_gradient(x, y + 1));
+    assert(g_reported_rows == 1);
+
+    std::vector<std::uint8_t> rgb555  = make_2x2_bmp();
+    rgb555[28]                        = 16;
+    std::vector<std::uint8_t> not_bmp = make_2x2_bmp();
+    not_bmp[0]                        = 'X';
+    fs.files["rgb555.bmp"]            = rgb555;
+    fs.files["not_bmp.bmp"]           = not_bmp;
+    assert(brick::core::image::BmpDecoder::decode(fs, "rgb555.bmp", centred, { .target_width = 4, .target_height = 4 })
+           == Status::not_supported);
+    assert(brick::core::image::BmpDecoder::decode(fs, "not_bmp.bmp", centred, { .target_width = 4, .target_height = 4 })
+           == Status::error);
+    assert(brick::core::image::BmpDecoder::decode(fs, "small.bmp", centred, { .target_width = 0, .target_height = 4 })
+           == Status::invalid_argument);
+
+    // Corrupted dimensions would overflow the row offsets.
+    std::vector<std::uint8_t> huge_width  = make_2x2_bmp();
+    huge_width[20]                        = 1;  // 65538 pixels
+    std::vector<std::uint8_t> huge_height = make_2x2_bmp();
+    huge_height[22] = huge_height[23] = huge_height[24] = 0;
+    huge_height[25]                                     = 0x80;  // INT32_MIN
+    fs.files["huge_width.bmp"]                          = huge_width;
+    fs.files["huge_height.bmp"]                         = huge_height;
+    assert(
+        brick::core::image::BmpDecoder::decode(fs, "huge_width.bmp", centred, { .target_width = 4, .target_height = 4 })
+        == Status::not_supported);
+    assert(brick::core::image::BmpDecoder::decode(fs, "huge_height.bmp", centred,
+                                                  { .target_width = 4, .target_height = 4 })
+           == Status::not_supported);
+    assert(fs.open_files() == 0);
+}
+
 void test_bmp_decoder_wide_rows()
 {
     // Rows wider than the decoder's read chunk, in both pixel sizes, plus a
@@ -212,6 +281,85 @@ void test_wav_decoder()
            == Status::not_found);
     // More frames than the caller's buffer holds.
     assert(brick::core::audio::WavDecoder::decode(fs, "test.wav", samples, 1, buffer) == Status::no_memory);
+    assert(fs.open_files() == 0);
+}
+
+// A WAV whose extra_chunks variant has an odd-sized LIST chunk (with its pad
+// byte) before "fmt " and an 18-byte fmt chunk, as some editors write them.
+std::vector<std::uint8_t> make_wav(std::uint16_t format, std::uint16_t channels, std::uint16_t bits,
+                                   const std::vector<std::uint8_t>& data, bool extra_chunks)
+{
+    std::vector<std::uint8_t> wav;
+    const auto                tag = [&wav](const char* text) { wav.insert(wav.end(), text, text + 4); };
+    const auto                u16 = [&wav](unsigned value)
+    {
+        wav.push_back(static_cast<std::uint8_t>(value & 0xFF));
+        wav.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
+    };
+    const auto u32 = [&u16](std::uint32_t value)
+    {
+        u16(value & 0xFFFF);
+        u16(value >> 16);
+    };
+    const unsigned frame_bytes = channels * bits / 8U;
+    tag("RIFF");
+    u32(0);
+    tag("WAVE");
+    if (extra_chunks)
+    {
+        tag("LIST");
+        u32(3);
+        wav.insert(wav.end(), { 1, 2, 3, 0 });
+    }
+    tag("fmt ");
+    u32(extra_chunks ? 18 : 16);
+    u16(format);
+    u16(channels);
+    u32(8000);
+    u32(8000 * frame_bytes);
+    u16(frame_bytes);
+    u16(bits);
+    if (extra_chunks)
+        u16(0);
+    tag("data");
+    u32(static_cast<std::uint32_t>(data.size()));
+    wav.insert(wav.end(), data.begin(), data.end());
+    return wav;
+}
+
+void test_wav_decoder_formats()
+{
+    // 16-bit stereo frames: full scale, negative full scale, silence.
+    const std::vector<std::uint8_t> stereo = { 0xFF, 0x7F, 0xFF, 0x7F, 0x00, 0x80, 0x00, 0x80, 0x00, 0x10, 0x00, 0xF0 };
+    for (const bool extra_chunks : { false, true })
+    {
+        MemoryFileSystem fs;
+        fs.files["stereo.wav"]                     = make_wav(1, 2, 16, stereo, extra_chunks);
+        std::uint8_t                    samples[3] = {};
+        brick::core::audio::AudioBuffer buffer;
+        assert(brick::core::audio::WavDecoder::decode(fs, "stereo.wav", samples, sizeof(samples), buffer)
+               == Status::ok);
+        assert(buffer.size() == 3 && buffer.sample_rate() == 8000);
+        assert(samples[0] == 255 && samples[1] == 0 && samples[2] == 128);
+        assert(fs.open_files() == 0);
+    }
+
+    MemoryFileSystem fs;
+    fs.files["float.wav"]                      = make_wav(3, 1, 16, { 0, 0 }, false);
+    fs.files["24bit.wav"]                      = make_wav(1, 1, 24, { 0, 0, 0 }, false);
+    fs.files["empty.wav"]                      = make_wav(1, 1, 8, {}, false);
+    fs.files["truncated.wav"]                  = { 'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A' };
+    std::uint8_t                    samples[4] = {};
+    brick::core::audio::AudioBuffer buffer;
+    assert(brick::core::audio::WavDecoder::decode(fs, "float.wav", samples, sizeof(samples), buffer)
+           == Status::not_supported);
+    assert(brick::core::audio::WavDecoder::decode(fs, "24bit.wav", samples, sizeof(samples), buffer)
+           == Status::not_supported);
+    assert(brick::core::audio::WavDecoder::decode(fs, "empty.wav", samples, sizeof(samples), buffer) == Status::error);
+    assert(brick::core::audio::WavDecoder::decode(fs, "truncated.wav", samples, sizeof(samples), buffer)
+           == Status::error);
+    assert(brick::core::audio::WavDecoder::decode(fs, "float.wav", nullptr, sizeof(samples), buffer)
+           == Status::invalid_argument);
     assert(fs.open_files() == 0);
 }
 
@@ -407,7 +555,9 @@ int main()
     test_periodic_timer();
     test_bmp_decoder();
     test_bmp_decoder_wide_rows();
+    test_bmp_decoder_placement();
     test_wav_decoder();
+    test_wav_decoder_formats();
     test_audio_player();
     test_screen_canvas();
     test_touch_mapper();

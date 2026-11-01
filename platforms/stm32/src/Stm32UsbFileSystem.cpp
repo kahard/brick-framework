@@ -14,7 +14,20 @@
 namespace
 {
 brick::platform::stm32::f1::Stm32UsbHost* g_usb_host = nullptr;
+
+DRESULT to_dresult(brick::Status status)
+{
+    switch (status)
+    {
+        case brick::Status::ok:
+            return RES_OK;
+        case brick::Status::not_ready:
+            return RES_NOTRDY;
+        default:
+            return RES_ERROR;
+    }
 }
+}  // namespace
 
 extern "C" DSTATUS disk_initialize(BYTE)
 {
@@ -26,16 +39,16 @@ extern "C" DSTATUS disk_status(BYTE)
 }
 extern "C" DRESULT disk_read(BYTE, BYTE* buffer, DWORD sector, UINT count)
 {
-    return g_usb_host != nullptr && g_usb_host->read_blocks(static_cast<std::uint32_t>(sector), buffer, count) ?
-               RES_OK :
-               RES_NOTRDY;
+    if (g_usb_host == nullptr)
+        return RES_NOTRDY;
+    return to_dresult(g_usb_host->read_blocks(static_cast<std::uint32_t>(sector), buffer, count));
 }
 extern "C" DRESULT disk_write(BYTE, const BYTE* buffer, DWORD sector, UINT count)
 {
-    return g_usb_host != nullptr
-                   && g_usb_host->write_blocks(static_cast<std::uint32_t>(sector), const_cast<BYTE*>(buffer), count) ?
-               RES_OK :
-               RES_NOTRDY;
+    if (g_usb_host == nullptr)
+        return RES_NOTRDY;
+    // USBH_MSC_Write takes a non-const buffer but does not modify it.
+    return to_dresult(g_usb_host->write_blocks(static_cast<std::uint32_t>(sector), const_cast<BYTE*>(buffer), count));
 }
 extern "C" DRESULT disk_ioctl(BYTE, BYTE, void*)
 {

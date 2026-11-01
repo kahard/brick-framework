@@ -5,6 +5,19 @@
 namespace brick::platform::stm32::f1
 {
 
+namespace
+{
+
+    // HPRT, the host port control and status register of the OTG FS core.
+    constexpr std::uintptr_t kHostPortRegisterOffset = 0x440U;
+    constexpr std::uint32_t  kHostChannels           = 8;
+    constexpr std::uint32_t  kUsbIrqPriority         = 5;
+    constexpr std::uint32_t  kVbusOffMs              = 100;
+    constexpr std::uint32_t  kVbusSettleMs           = 250;
+    constexpr std::uint32_t  kEnumerationRetryMs     = 3000;
+
+}  // namespace
+
 Stm32UsbHost* Stm32UsbHost::active_ = nullptr;
 
 void Stm32UsbHost::user_callback_(USBH_HandleTypeDef*, uint8_t event)
@@ -26,20 +39,16 @@ Status Stm32UsbHost::begin()
         power.Mode  = GPIO_MODE_OUTPUT_PP;
         power.Speed = GPIO_SPEED_FREQ_HIGH;
         HAL_GPIO_Init(config_.power_port, &power);
-        // Give the external VBUS switch a defined off/on cycle. Some
-        // pendrives keep their controller in reset unless VBUS is present
-        // before the OTG host core starts probing the port.
-        HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_RESET);
-        HAL_Delay(100);
-        HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_SET);
-        HAL_Delay(250);
     }
+    // Some pendrives keep their controller in reset unless VBUS is present
+    // before the OTG host core starts probing the port.
+    cycle_vbus_();
 
     __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
-    HAL_NVIC_SetPriority(OTG_FS_IRQn, 5, 0);
+    HAL_NVIC_SetPriority(OTG_FS_IRQn, kUsbIrqPriority, 0);
     HAL_NVIC_EnableIRQ(OTG_FS_IRQn);
     hcd_.Instance                 = USB_OTG_FS;
-    hcd_.Init.Host_channels       = 8;
+    hcd_.Init.Host_channels       = kHostChannels;
     hcd_.Init.speed               = HCD_SPEED_FULL;
     hcd_.Init.dma_enable          = DISABLE;
     hcd_.Init.phy_itface          = HCD_PHY_EMBEDDED;
@@ -61,72 +70,78 @@ Status Stm32UsbHost::begin()
 
 void Stm32UsbHost::process()
 {
-    if (active_ != nullptr)
-    {
-        // On some STM32F105 revisions the HCD connect callback is not emitted
-        // reliably, although HPRT.PCSTS is already asserted. Feed the host
-        // state machine from the port status as a fallback.
-        const bool port_present =
-            (reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS) + 0x440U)[0]
-             & USB_OTG_HPRT_PCSTS)
-            != 0U;
-        const bool previous_port_present = port_present_;
-        port_present_                    = port_present;
-        if (port_present && !previous_port_present)
-        {
-            // Reinitialize the middleware on every new physical connection.
-            // This releases control/class pipes left by the previous device.
-            class_active_ = false;
-            USBH_Init(&host_, user_callback_, config_.host_id);
-            host_.pData = &hcd_;
-            USBH_RegisterClass(&host_, USBH_MSC_CLASS);
-            USBH_Start(&host_);
-            USBH_LL_Connect(&host_);
-            // The F105 can miss the port-enabled interrupt when the HCD is
-            // restarted while a device is already attached. Feed this event
-            // explicitly so enumeration does not remain in WAIT_ATTACHMENT.
-            USBH_LL_PortEnabled(&host_);
-            connected_   = true;
-            attach_tick_ = HAL_GetTick();
-        }
-        else if (!port_present && previous_port_present)
-        {
-            // A plain middleware disconnect is not sufficient on the F105
-            // OTG FS core: after a removal the next attach could inherit a
-            // halted host channel. Stop and reinitialize the HCD, and cycle
-            // VBUS so the device starts from a clean electrical state.
-            // The HAL disconnect callback may already have notified USBH, so
-            // do not call USBH_LL_Disconnect a second time here.
-            HAL_HCD_Stop(&hcd_);
-            HAL_HCD_DeInit(&hcd_);
-            HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_RESET);
-            HAL_Delay(100);
-            HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_SET);
-            HAL_Delay(250);
-            HAL_HCD_Init(&hcd_);
-            connected_    = false;
-            class_active_ = false;
-        }
-        USBH_Process(&host_);
+    if (active_ == nullptr)
+        return;
+    // On some STM32F105 revisions the HCD connect callback is not emitted
+    // reliably, although HPRT.PCSTS is already asserted. Feed the host
+    // state machine from the port status as a fallback.
+    const bool port_present          = port_connected();
+    const bool previous_port_present = port_present_;
+    port_present_                    = port_present;
+    if (port_present && !previous_port_present)
+        restart_enumeration_();
+    else if (!port_present && previous_port_present)
+        recover_after_removal_();
+    USBH_Process(&host_);
 
-        // If the physical port is present but MSC did not become active,
-        // retry enumeration in-place. This handles devices for which the
-        // first reset/descriptor exchange is lost without requiring a
-        // second physical unplug/plug cycle.
-        if (port_present && !class_active_ && (HAL_GetTick() - attach_tick_) > 3000U)
-        {
-            class_active_ = false;
-            HAL_HCD_Stop(&hcd_);
-            USBH_Init(&host_, user_callback_, config_.host_id);
-            host_.pData = &hcd_;
-            USBH_RegisterClass(&host_, USBH_MSC_CLASS);
-            USBH_Start(&host_);
-            USBH_LL_Connect(&host_);
-            USBH_LL_PortEnabled(&host_);
-            connected_   = true;
-            attach_tick_ = HAL_GetTick();
-        }
+    // If the physical port is present but MSC did not become active, retry
+    // enumeration in place. This handles devices for which the first
+    // reset/descriptor exchange is lost, without a second unplug/plug cycle.
+    if (port_present && !class_active_ && HAL_GetTick() - attach_tick_ > kEnumerationRetryMs)
+    {
+        HAL_HCD_Stop(&hcd_);
+        restart_enumeration_();
     }
+}
+
+void Stm32UsbHost::restart_enumeration_()
+{
+    // Reinitialize the middleware on every new physical connection. This
+    // releases control/class pipes left by the previous device.
+    class_active_ = false;
+    USBH_Init(&host_, user_callback_, config_.host_id);
+    host_.pData = &hcd_;
+    USBH_RegisterClass(&host_, USBH_MSC_CLASS);
+    USBH_Start(&host_);
+    USBH_LL_Connect(&host_);
+    // The F105 can miss the port-enabled interrupt when the HCD is restarted
+    // while a device is already attached. Feed this event explicitly so
+    // enumeration does not remain in WAIT_ATTACHMENT.
+    USBH_LL_PortEnabled(&host_);
+    connected_   = true;
+    attach_tick_ = HAL_GetTick();
+}
+
+void Stm32UsbHost::recover_after_removal_()
+{
+    // A plain middleware disconnect is not sufficient on the F105 OTG FS
+    // core: after a removal the next attach could inherit a halted host
+    // channel. Stop and reinitialize the HCD, and cycle VBUS so the device
+    // starts from a clean electrical state. The HAL disconnect callback may
+    // already have notified USBH, so USBH_LL_Disconnect is not called again.
+    HAL_HCD_Stop(&hcd_);
+    HAL_HCD_DeInit(&hcd_);
+    cycle_vbus_();
+    HAL_HCD_Init(&hcd_);
+    connected_    = false;
+    class_active_ = false;
+}
+
+void Stm32UsbHost::cycle_vbus_()
+{
+    if (config_.power_port == nullptr)
+        return;
+    HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_RESET);
+    HAL_Delay(kVbusOffMs);
+    HAL_GPIO_WritePin(config_.power_port, config_.power_pin, GPIO_PIN_SET);
+    HAL_Delay(kVbusSettleMs);
+}
+
+bool Stm32UsbHost::port_connected() const
+{
+    const auto* host_port = reinterpret_cast<volatile const std::uint32_t*>(reinterpret_cast<std::uintptr_t>(USB_OTG_FS)
+                                                                            + kHostPortRegisterOffset);
+    return (*host_port & USB_OTG_HPRT_PCSTS) != 0U;
 }
 
 bool Stm32UsbHost::storage_ready() const
@@ -134,14 +149,18 @@ bool Stm32UsbHost::storage_ready() const
     return class_active_ && USBH_MSC_IsReady(const_cast<USBH_HandleTypeDef*>(&host_)) != 0;
 }
 
-bool Stm32UsbHost::read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count)
+Status Stm32UsbHost::read_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count)
 {
-    return storage_ready() && USBH_MSC_Read(&host_, 0, block, data, count) == USBH_OK;
+    if (!storage_ready())
+        return Status::not_ready;
+    return USBH_MSC_Read(&host_, 0, block, data, count) == USBH_OK ? Status::ok : Status::error;
 }
 
-bool Stm32UsbHost::write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count)
+Status Stm32UsbHost::write_blocks(std::uint32_t block, std::uint8_t* data, std::uint32_t count)
 {
-    return storage_ready() && USBH_MSC_Write(&host_, 0, block, data, count) == USBH_OK;
+    if (!storage_ready())
+        return Status::not_ready;
+    return USBH_MSC_Write(&host_, 0, block, data, count) == USBH_OK ? Status::ok : Status::error;
 }
 
 }  // namespace brick::platform::stm32::f1

@@ -15,6 +15,12 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   `Screen::create_canvas()` rysuje w pikselach wywołującego,
 - konstruktor `MipiDsiDisplay` przyjmuje `IMemoryProvider`,
 - `Stm32UsbHost::read_blocks()` / `write_blocks()` zwracają `Status`,
+- sterowniki STM32F1 biorą całe okablowanie z konfiguracji (`GpioPin`,
+  instancje peryferiów, timingi panelu SSD1963) i nie mają domyślnych pinów
+  żadnej płytki; `SpiNorFlash` implementuje `INorFlash`,
+- `Stm32UsbFileSystem` jest `IRemovableFileSystem`, a `mount()` nie czeka
+  na urządzenie (zwraca `not_ready` / `busy`),
+- `IRemovableFileSystem::probe()` przyjmuje też katalog,
 - definicje płytek z repozytorium `brick-boards` są częścią frameworka (`boards/`).
 
 ### Added
@@ -24,6 +30,10 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 - `IMemoryProvider` i `MemoryBlock`, `ISerialPort`, `IRemovableFileSystem`,
   `PcFileAssetSource`, przenośne adaptery LVGL w `libs/lvgl`,
 - `DragSlider`, profile kolorów RGB565 i interfejs podświetlenia,
+- `SerialLogger` i `NullLogger`, `BeepSequence` (sygnalizacja piknięciami
+  bez blokowania), `Screen::fill_area()`, interfejs `INorFlash`,
+- STM32F1: `Stm32I2cBus`, `Stm32SpiBus`, `Stm32Uart`, `Stm32HalTime`,
+- symulator PC: buzzer, EEPROM i flash NOR w `SimulatorBoard`,
 - płytka ESP-12F ST7789 (ESP8266), karta SD i podświetlenie CYD, dotyk
   i obrót DMA2D dla JC8012,
 - adaptery STM32F1: SSD1963, dotyk rezystancyjny i FT5x06, EEPROM I2C,

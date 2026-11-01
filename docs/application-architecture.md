@@ -116,6 +116,8 @@ struct filled by the target; they are never read from a board header inside
 | `ILogger` | `PcLogger` - stdout |
 | `IFileSystem` | `PcFileSystem` - a directory on disk (e.g. a copy of the SD card) |
 | memory for pixel buffers | `PcMemory` - aligned heap blocks |
+| `IBuzzer` | `PcBuzzer` - counts beeps |
+| `IByteStorage`, `INorFlash` | `PcByteStorage`, `PcNorFlash` - blank memory (the flash answers with a W25Q64 ID) |
 
 `boards/pc/SimulatorBoard.h` assembles them like a real board, with the
 screen size and feature set given as template parameters, so a CYD

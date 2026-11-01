@@ -23,6 +23,7 @@ add_library(brick_core STATIC
     libs/core/src/AssetBundle.cpp
     libs/core/src/AssetStreamer.cpp
     libs/core/src/BmpDecoder.cpp
+    libs/core/src/DragSlider.cpp
     libs/core/src/PeriodicAudioPlayer.cpp
     libs/core/src/PeriodicTimer.cpp
     libs/core/src/TouchMapper.cpp

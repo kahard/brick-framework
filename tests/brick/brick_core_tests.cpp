@@ -17,6 +17,7 @@
 #include "brick/core/audio/WavDecoder.h"
 #include "brick/core/display/Screen.h"
 #include "brick/core/image/BmpDecoder.h"
+#include "brick/core/input/DragSlider.h"
 #include "brick/core/input/TouchMapper.h"
 #include "brick/core/timing/PeriodicTimer.h"
 #include "brick/interfaces/display/DisplayCapabilities.h"
@@ -433,6 +434,47 @@ void test_touch_mapper()
     assert(swapped_point.y == 49);
 }
 
+brick::interfaces::display::TouchPoint touch_at(std::int16_t x, brick::interfaces::display::TouchState state)
+{
+    brick::interfaces::display::TouchPoint point{};
+    point.x     = x;
+    point.state = state;
+    return point;
+}
+
+void test_drag_slider()
+{
+    using brick::interfaces::display::TouchState;
+    brick::core::input::DragSlider slider(319, 400);
+    assert(slider.position() == 160);
+
+    // A drag moves the slider by the finger's movement, clamped to 0..319.
+    assert(!slider.update(touch_at(100, TouchState::pressed), 1000));
+    assert(slider.update(touch_at(150, TouchState::moved), 1010) && slider.position() == 210);
+    assert(!slider.update(touch_at(150, TouchState::moved), 1020));
+    assert(slider.update(touch_at(400, TouchState::moved), 1030) && slider.position() == 319);
+    assert(!slider.update(touch_at(400, TouchState::released), 1040));
+    // A move without a press first only starts the drag.
+    assert(!slider.update(touch_at(10, TouchState::moved), 1050));
+    assert(slider.update(touch_at(-5, TouchState::moved), 1060) && slider.position() == 309);
+    assert(!slider.update(touch_at(0, TouchState::released), 1070));
+
+    // Taps 300 ms apart centre it; a third tap does not count as another double tap.
+    assert(!slider.update(touch_at(20, TouchState::pressed), 5000));
+    assert(slider.update(touch_at(20, TouchState::pressed), 5300) && slider.position() == 160);
+    assert(slider.update(touch_at(30, TouchState::moved), 5310) && slider.position() == 170);
+    assert(!slider.update(touch_at(30, TouchState::pressed), 5400) && slider.position() == 170);
+    // Taps 500 ms apart do not.
+    assert(!slider.update(touch_at(30, TouchState::pressed), 5900) && slider.position() == 170);
+
+    // A double tap across the millisecond counter wrap, the first tap at 0.
+    brick::core::input::DragSlider wrapping(99, 400);
+    assert(!wrapping.update(touch_at(0, TouchState::pressed), 0));
+    assert(wrapping.update(touch_at(9, TouchState::moved), 10) && wrapping.position() == 59);
+    assert(!wrapping.update(touch_at(9, TouchState::pressed), 0xFFFFFF00U));
+    assert(wrapping.update(touch_at(9, TouchState::pressed), 0x40U) && wrapping.position() == 50);
+}
+
 void test_asset_streamer()
 {
     using brick::interfaces::display::DisplayRect;
@@ -561,6 +603,7 @@ int main()
     test_audio_player();
     test_screen_canvas();
     test_touch_mapper();
+    test_drag_slider();
     test_asset_streamer();
     test_asset_bundle();
     test_asset_source_streamer();

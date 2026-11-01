@@ -88,6 +88,9 @@ private:
     Status                send_command_(std::uint8_t command, const std::uint8_t* data, std::size_t length);
     Status                send_init_sequence_();
     Status                begin_rgb_panel_();
+    Status                create_semaphores_();
+    Status                create_rgb_panel_();
+    void                  reset_panel_();
 
     St7701sRgbPanelConfig        config_;
     esp_lcd_panel_handle_t       panel_              = nullptr;

@@ -68,6 +68,27 @@ Status MipiDsiDisplay::begin()
         return Status::ok;
     if (config_.width == 0 || config_.height == 0)
         return Status::invalid_argument;
+    if (const Status status = create_bus_(); !is_ok(status))
+        return status;
+    if (const Status status = create_dpi_panel_(); !is_ok(status))
+        return status;
+    reset_panel_();
+    if (const esp_err_t err = esp_lcd_panel_init(panel_); err != ESP_OK)
+        return to_status(err);
+    if (const Status status = send_init_sequence_(); !is_ok(status))
+        return status;
+    if (const Status status = apply_rotation_(); !is_ok(status))
+        return status;
+    if (const Status status = register_callbacks_(); !is_ok(status))
+        return status;
+    if (esp_lcd_panel_disp_on_off(panel_, true) != ESP_OK)
+        ESP_LOGW(TAG, "panel display-on command is not supported; relying on panel init sequence");
+    initialized_ = true;
+    return Status::ok;
+}
+
+Status MipiDsiDisplay::create_bus_()
+{
     if (config_.mipi_dsi_ldo_channel >= 0 && config_.mipi_dsi_ldo_voltage_mv > 0)
     {
         esp_ldo_channel_config_t ldo_config = { .chan_id    = config_.mipi_dsi_ldo_channel,
@@ -80,15 +101,18 @@ Status MipiDsiDisplay::begin()
     bus_config.num_data_lanes           = config_.data_lanes;
     bus_config.phy_clk_src              = MIPI_DSI_PHY_CLK_SRC_DEFAULT;
     bus_config.lane_bit_rate_mbps       = config_.lane_bit_rate_mbps;
-    auto err                            = esp_lcd_new_dsi_bus(&bus_config, &bus_);
-    if (err != ESP_OK)
+    if (const esp_err_t err = esp_lcd_new_dsi_bus(&bus_config, &bus_); err != ESP_OK)
         return to_status(err);
+    // Panel commands and their parameters are 8 bit.
     esp_lcd_dbi_io_config_t io_config = {};
     io_config.virtual_channel         = 0;
     io_config.lcd_cmd_bits            = 8;
     io_config.lcd_param_bits          = 8;
-    if ((err = esp_lcd_new_panel_io_dbi(bus_, &io_config, &io_)) != ESP_OK)
-        return to_status(err);
+    return to_status(esp_lcd_new_panel_io_dbi(bus_, &io_config, &io_));
+}
+
+Status MipiDsiDisplay::create_dpi_panel_()
+{
     esp_lcd_dpi_panel_config_t dpi_config     = {};
     dpi_config.virtual_channel                = 0;
     dpi_config.dpi_clk_src                    = MIPI_DSI_DPI_CLK_SRC_DEFAULT;
@@ -96,7 +120,7 @@ Status MipiDsiDisplay::begin()
     dpi_config.pixel_format                   = LCD_COLOR_PIXEL_FORMAT_RGB565;
     dpi_config.in_color_format                = LCD_COLOR_FMT_RGB565;
     dpi_config.out_color_format               = LCD_COLOR_FMT_RGB565;
-    dpi_config.num_fbs                        = 2;
+    dpi_config.num_fbs                        = kDpiFrameBufferCount;
     dpi_config.flags.use_dma2d                = true;
     dpi_config.video_timing.h_size            = config_.width;
     dpi_config.video_timing.v_size            = config_.height;
@@ -106,28 +130,31 @@ Status MipiDsiDisplay::begin()
     dpi_config.video_timing.vsync_pulse_width = config_.vsync_pulse_width;
     dpi_config.video_timing.vsync_back_porch  = config_.vsync_back_porch;
     dpi_config.video_timing.vsync_front_porch = config_.vsync_front_porch;
-    if ((err = esp_lcd_new_panel_dpi(bus_, &dpi_config, &panel_)) != ESP_OK)
+    if (const esp_err_t err = esp_lcd_new_panel_dpi(bus_, &dpi_config, &panel_); err != ESP_OK)
         return to_status(err);
-    if (esp_lcd_dpi_panel_get_frame_buffer(panel_, 2, reinterpret_cast<void**>(&dpi_frame_buffers_[0]),
+    if (esp_lcd_dpi_panel_get_frame_buffer(panel_, kDpiFrameBufferCount,
+                                           reinterpret_cast<void**>(&dpi_frame_buffers_[0]),
                                            reinterpret_cast<void**>(&dpi_frame_buffers_[1]))
             != ESP_OK
         || dpi_frame_buffers_[0] == nullptr || dpi_frame_buffers_[1] == nullptr)
         return Status::error;
-    if (config_.reset_gpio != GPIO_NUM_NC)
-    {
-        gpio_set_direction(config_.reset_gpio, GPIO_MODE_OUTPUT);
-        gpio_set_level(config_.reset_gpio, 1);
-        vTaskDelay(pdMS_TO_TICKS(5));
-        gpio_set_level(config_.reset_gpio, 0);
-        vTaskDelay(pdMS_TO_TICKS(5));
-        gpio_set_level(config_.reset_gpio, 1);
-    }
-    if ((err = esp_lcd_panel_init(panel_)) != ESP_OK)
-        return to_status(err);
-    if (const Status status = send_init_sequence_(); !is_ok(status))
-        return status;
-    if (const Status status = apply_rotation_(); !is_ok(status))
-        return status;
+    return Status::ok;
+}
+
+void MipiDsiDisplay::reset_panel_()
+{
+    if (config_.reset_gpio == GPIO_NUM_NC)
+        return;
+    gpio_set_direction(config_.reset_gpio, GPIO_MODE_OUTPUT);
+    gpio_set_level(config_.reset_gpio, 1);
+    vTaskDelay(pdMS_TO_TICKS(kResetPulseMs));
+    gpio_set_level(config_.reset_gpio, 0);
+    vTaskDelay(pdMS_TO_TICKS(kResetPulseMs));
+    gpio_set_level(config_.reset_gpio, 1);
+}
+
+Status MipiDsiDisplay::register_callbacks_()
+{
     color_trans_done_ = xSemaphoreCreateBinary();
     refresh_done_     = xSemaphoreCreateBinary();
     if (color_trans_done_ == nullptr || refresh_done_ == nullptr)
@@ -135,12 +162,7 @@ Status MipiDsiDisplay::begin()
     esp_lcd_dpi_panel_event_callbacks_t callbacks = {};
     callbacks.on_color_trans_done                 = on_color_trans_done_;
     callbacks.on_refresh_done                     = on_refresh_done_;
-    if ((err = esp_lcd_dpi_panel_register_event_callbacks(panel_, &callbacks, this)) != ESP_OK)
-        return to_status(err);
-    if (esp_lcd_panel_disp_on_off(panel_, true) != ESP_OK)
-        ESP_LOGW(TAG, "panel display-on command is not supported; relying on panel init sequence");
-    initialized_ = true;
-    return Status::ok;
+    return to_status(esp_lcd_dpi_panel_register_event_callbacks(panel_, &callbacks, this));
 }
 
 brick::interfaces::display::DisplaySize MipiDsiDisplay::size() const

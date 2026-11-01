@@ -61,6 +61,10 @@ public:
     Status wait_for_transfer_complete(std::uint32_t timeout_ms) override;
 
 private:
+    Status                create_bus_();
+    Status                create_dpi_panel_();
+    void                  reset_panel_();
+    Status                register_callbacks_();
     Status                send_init_sequence_();
     Status                apply_rotation_();
     static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void*);
@@ -88,11 +92,14 @@ private:
     std::uint16_t                               logical_width_    = 0;
     std::uint16_t                               logical_height_   = 0;
     brick::interfaces::memory::IMemoryProvider& memory_;
-    std::uint16_t*                              rotation_source_         = nullptr;
-    std::uint16_t*                              rotation_target_         = nullptr;
-    ppa_client_handle_t                         ppa_client_              = nullptr;
-    std::uint8_t*                               dpi_frame_buffers_[2]    = {};
-    std::uint8_t                                dpi_active_frame_buffer_ = 0;
+    std::uint16_t*                              rotation_source_     = nullptr;
+    std::uint16_t*                              rotation_target_     = nullptr;
+    ppa_client_handle_t                         ppa_client_          = nullptr;
+    static constexpr std::uint8_t               kDpiFrameBufferCount = 2;
+    static constexpr std::uint32_t              kResetPulseMs        = 5;
+
+    std::uint8_t* dpi_frame_buffers_[kDpiFrameBufferCount] = {};
+    std::uint8_t  dpi_active_frame_buffer_                 = 0;
 
     static constexpr const char* TAG = "brick_mipi_dsi";
 };

@@ -143,6 +143,16 @@ struct Simulator::Window
     }
 };
 
+namespace
+{
+
+    std::int16_t to_display(int window_coordinate, std::uint32_t scale)
+    {
+        return static_cast<std::int16_t>(window_coordinate / static_cast<int>(scale));
+    }
+
+}  // namespace
+
 #else
 
 struct Simulator::Window
@@ -233,66 +243,81 @@ bool Simulator::step()
 #if BRICK_PC_HAS_SDL2
     if (window_ != nullptr)
     {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
-        {
-            const auto to_display = [this](int value) {  // brick-rules: allow(lambda) host-only simulator code
-                return static_cast<std::int16_t>(value / static_cast<int>(window_->scale));
-            };
-            switch (event.type)
-            {
-                case SDL_QUIT:
-                    return false;
-                case SDL_KEYDOWN:
-                case SDL_KEYUP:
-                    if (event.key.keysym.sym == SDLK_ESCAPE)
-                        return false;
-                    if (event.key.keysym.sym == SDLK_SPACE && button_ != nullptr)
-                        button_->set_pressed(event.type == SDL_KEYDOWN);
-                    break;
-                case SDL_MOUSEBUTTONDOWN:
-                case SDL_MOUSEBUTTONUP:
-                    window_->mouse = event.type == SDL_MOUSEBUTTONDOWN;
-                    if (touch_ != nullptr)
-                        touch_->set(window_->mouse, to_display(event.button.x), to_display(event.button.y));
-                    break;
-                case SDL_MOUSEMOTION:
-                    if (window_->mouse && touch_ != nullptr)
-                        touch_->set(true, to_display(event.motion.x), to_display(event.motion.y));
-                    break;
-                default:
-                    break;
-            }
-        }
-        const auto size = display_.size();
-        if (window_->texture == nullptr || window_->width != size.width || window_->height != size.height)
-        {
-            if (window_->texture != nullptr)
-                SDL_DestroyTexture(window_->texture);
-            window_->texture = SDL_CreateTexture(window_->renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING,
-                                                 size.width, size.height);
-            window_->width   = size.width;
-            window_->height  = size.height;
-            window_->shown   = 0xFFFFFFFFU;
-            SDL_SetWindowSize(window_->window, static_cast<int>(size.width * window_->scale),
-                              static_cast<int>(size.height * window_->scale));
-        }
-        if (window_->shown != display_.frame_counter())
-        {
-            SDL_UpdateTexture(window_->texture, nullptr, display_.screen(), size.width * 2);
-            window_->shown = display_.frame_counter();
-        }
-        const std::uint8_t level =
-            backlight_ != nullptr ? static_cast<std::uint8_t>(backlight_->brightness_percent() * 255U / 100U) : 255U;
-        SDL_SetTextureColorMod(window_->texture, level, level, level);
-        SDL_RenderClear(window_->renderer);
-        SDL_RenderCopy(window_->renderer, window_->texture, nullptr, nullptr);
-        SDL_RenderPresent(window_->renderer);
+        if (!handle_events())
+            return false;
+        repaint();
     }
 #endif
     ++updates_;
     return true;
 }
+
+#if BRICK_PC_HAS_SDL2
+
+bool Simulator::handle_events()
+{
+    SDL_Event event;
+    while (SDL_PollEvent(&event))
+    {
+        switch (event.type)
+        {
+            case SDL_QUIT:
+                return false;
+            case SDL_KEYDOWN:
+            case SDL_KEYUP:
+                if (event.key.keysym.sym == SDLK_ESCAPE)
+                    return false;
+                if (event.key.keysym.sym == SDLK_SPACE && button_ != nullptr)
+                    button_->set_pressed(event.type == SDL_KEYDOWN);
+                break;
+            case SDL_MOUSEBUTTONDOWN:
+            case SDL_MOUSEBUTTONUP:
+                window_->mouse = event.type == SDL_MOUSEBUTTONDOWN;
+                if (touch_ != nullptr)
+                    touch_->set(window_->mouse, to_display(event.button.x, window_->scale),
+                                to_display(event.button.y, window_->scale));
+                break;
+            case SDL_MOUSEMOTION:
+                if (window_->mouse && touch_ != nullptr)
+                    touch_->set(true, to_display(event.motion.x, window_->scale),
+                                to_display(event.motion.y, window_->scale));
+                break;
+            default:
+                break;
+        }
+    }
+    return true;
+}
+
+void Simulator::repaint()
+{
+    const auto size = display_.size();
+    if (window_->texture == nullptr || window_->width != size.width || window_->height != size.height)
+    {
+        if (window_->texture != nullptr)
+            SDL_DestroyTexture(window_->texture);
+        window_->texture = SDL_CreateTexture(window_->renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING,
+                                             size.width, size.height);
+        window_->width   = size.width;
+        window_->height  = size.height;
+        window_->shown   = 0xFFFFFFFFU;
+        SDL_SetWindowSize(window_->window, static_cast<int>(size.width * window_->scale),
+                          static_cast<int>(size.height * window_->scale));
+    }
+    if (window_->shown != display_.frame_counter())
+    {
+        SDL_UpdateTexture(window_->texture, nullptr, display_.screen(), size.width * 2);
+        window_->shown = display_.frame_counter();
+    }
+    const std::uint8_t level =
+        backlight_ != nullptr ? static_cast<std::uint8_t>(backlight_->brightness_percent() * 255U / 100U) : 255U;
+    SDL_SetTextureColorMod(window_->texture, level, level, level);
+    SDL_RenderClear(window_->renderer);
+    SDL_RenderCopy(window_->renderer, window_->texture, nullptr, nullptr);
+    SDL_RenderPresent(window_->renderer);
+}
+
+#endif
 
 bool Simulator::finish()
 {

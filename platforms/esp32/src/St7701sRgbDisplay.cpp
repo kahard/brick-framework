@@ -287,12 +287,30 @@ Status St7701sRgbDisplay::send_init_sequence_()
 
 Status St7701sRgbDisplay::begin_rgb_panel_()
 {
-    if (config_.frame_buffer_count == 0 || config_.frame_buffer_count > 3)
+    constexpr std::uint32_t kMaxFrameBuffers = 3;
+    if (config_.frame_buffer_count == 0 || config_.frame_buffer_count > kMaxFrameBuffers)
     {
         ESP_LOGE(TAG, "Unsupported framebuffer count: %u", config_.frame_buffer_count);
         return Status::invalid_argument;
     }
+    if (const Status status = create_semaphores_(); !is_ok(status))
+        return status;
+    if (const Status status = create_rgb_panel_(); !is_ok(status))
+        return status;
+    reset_panel_();
+    esp_err_t err = esp_lcd_panel_reset(panel_);
+    if (err == ESP_OK)
+        err = esp_lcd_panel_init(panel_);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "RGB panel init failed: %s", esp_err_to_name(err));
+        return to_status(err);
+    }
+    return Status::ok;
+}
 
+Status St7701sRgbDisplay::create_semaphores_()
+{
     vsync_semaphore_ = xSemaphoreCreateBinary();
     if (vsync_semaphore_ == nullptr)
     {
@@ -305,34 +323,41 @@ Status St7701sRgbDisplay::begin_rgb_panel_()
         ESP_LOGE(TAG, "Transfer semaphore allocation failed");
         return Status::no_memory;
     }
+    return Status::ok;
+}
 
-    esp_lcd_rgb_panel_config_t panel_config    = {};
-    panel_config.clk_src                       = LCD_CLK_SRC_PLL160M;
-    panel_config.timings.pclk_hz               = config_.pixel_clock_hz;
-    panel_config.timings.h_res                 = config_.width;
-    panel_config.timings.v_res                 = config_.height;
-    panel_config.timings.hsync_pulse_width     = config_.hsync_pulse_width;
-    panel_config.timings.hsync_back_porch      = config_.hsync_back_porch;
-    panel_config.timings.hsync_front_porch     = config_.hsync_front_porch;
-    panel_config.timings.vsync_pulse_width     = config_.vsync_pulse_width;
-    panel_config.timings.vsync_back_porch      = config_.vsync_back_porch;
-    panel_config.timings.vsync_front_porch     = config_.vsync_front_porch;
-    panel_config.timings.flags.pclk_active_neg = config_.pclk_active_neg;
-    panel_config.data_width                    = 16;
-    panel_config.bits_per_pixel                = 16;
-    panel_config.num_fbs                       = config_.frame_buffer_count;
-    panel_config.bounce_buffer_size_px         = config_.frame_buffer_count > 1 ? 0 : config_.width * 10;
-    panel_config.flags.fb_in_psram             = 1;
-    panel_config.hsync_gpio_num                = config_.hsync_gpio;
-    panel_config.vsync_gpio_num                = config_.vsync_gpio;
-    panel_config.de_gpio_num                   = config_.de_gpio;
-    panel_config.pclk_gpio_num                 = config_.pclk_gpio;
-    panel_config.disp_gpio_num                 = GPIO_NUM_NC;
+Status St7701sRgbDisplay::create_rgb_panel_()
+{
+    // RGB565 over a 16-bit parallel bus. With a single frame buffer, a bounce
+    // buffer of a few lines in internal RAM keeps PSRAM reads off the timing path.
+    constexpr std::uint32_t    kBusBits           = 16;
+    constexpr std::uint32_t    kBounceBufferLines = 10;
+    esp_lcd_rgb_panel_config_t panel_config       = {};
+    panel_config.clk_src                          = LCD_CLK_SRC_PLL160M;
+    panel_config.timings.pclk_hz                  = config_.pixel_clock_hz;
+    panel_config.timings.h_res                    = config_.width;
+    panel_config.timings.v_res                    = config_.height;
+    panel_config.timings.hsync_pulse_width        = config_.hsync_pulse_width;
+    panel_config.timings.hsync_back_porch         = config_.hsync_back_porch;
+    panel_config.timings.hsync_front_porch        = config_.hsync_front_porch;
+    panel_config.timings.vsync_pulse_width        = config_.vsync_pulse_width;
+    panel_config.timings.vsync_back_porch         = config_.vsync_back_porch;
+    panel_config.timings.vsync_front_porch        = config_.vsync_front_porch;
+    panel_config.timings.flags.pclk_active_neg    = config_.pclk_active_neg;
+    panel_config.data_width                       = kBusBits;
+    panel_config.bits_per_pixel                   = kBusBits;
+    panel_config.num_fbs                          = config_.frame_buffer_count;
+    panel_config.bounce_buffer_size_px = config_.frame_buffer_count > 1 ? 0 : config_.width * kBounceBufferLines;
+    panel_config.flags.fb_in_psram     = 1;
+    panel_config.hsync_gpio_num        = config_.hsync_gpio;
+    panel_config.vsync_gpio_num        = config_.vsync_gpio;
+    panel_config.de_gpio_num           = config_.de_gpio;
+    panel_config.pclk_gpio_num         = config_.pclk_gpio;
+    panel_config.disp_gpio_num         = GPIO_NUM_NC;
     for (std::size_t index = 0; index < config_.data_gpios.size(); ++index)
         panel_config.data_gpio_nums[index] = config_.data_gpios[index];
 
-    auto err = esp_lcd_new_rgb_panel(&panel_config, &panel_);
-    if (err != ESP_OK)
+    if (const esp_err_t err = esp_lcd_new_rgb_panel(&panel_config, &panel_); err != ESP_OK)
     {
         ESP_LOGE(TAG, "RGB panel creation failed: %s", esp_err_to_name(err));
         return to_status(err);
@@ -340,29 +365,25 @@ Status St7701sRgbDisplay::begin_rgb_panel_()
     esp_lcd_rgb_panel_event_callbacks_t callbacks = {};
     callbacks.on_color_trans_done                 = on_color_trans_done_;
     callbacks.on_vsync                            = on_vsync_;
-    err = esp_lcd_rgb_panel_register_event_callbacks(panel_, &callbacks, this);
-    if (err != ESP_OK)
+    if (const esp_err_t err = esp_lcd_rgb_panel_register_event_callbacks(panel_, &callbacks, this); err != ESP_OK)
     {
         ESP_LOGE(TAG, "RGB panel callback registration failed: %s", esp_err_to_name(err));
         return to_status(err);
     }
-    if (config_.reset_gpio != GPIO_NUM_NC)
-    {
-        gpio_set_direction(config_.reset_gpio, GPIO_MODE_OUTPUT);
-        gpio_set_level(config_.reset_gpio, 0);
-        vTaskDelay(pdMS_TO_TICKS(5));
-        gpio_set_level(config_.reset_gpio, 1);
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-    err = esp_lcd_panel_reset(panel_);
-    if (err == ESP_OK)
-        err = esp_lcd_panel_init(panel_);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "RGB panel init failed: %s", esp_err_to_name(err));
-        return to_status(err);
-    }
     return Status::ok;
+}
+
+void St7701sRgbDisplay::reset_panel_()
+{
+    constexpr std::uint32_t kResetPulseMs    = 5;
+    constexpr std::uint32_t kResetRecoveryMs = 20;
+    if (config_.reset_gpio == GPIO_NUM_NC)
+        return;
+    gpio_set_direction(config_.reset_gpio, GPIO_MODE_OUTPUT);
+    gpio_set_level(config_.reset_gpio, 0);
+    vTaskDelay(pdMS_TO_TICKS(kResetPulseMs));
+    gpio_set_level(config_.reset_gpio, 1);
+    vTaskDelay(pdMS_TO_TICKS(kResetRecoveryMs));
 }
 
 }  // namespace brick::platform::esp32::s3

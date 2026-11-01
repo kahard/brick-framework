@@ -83,6 +83,9 @@ private:
     struct Window;
 
     void apply_script();
+    // Window only: false when the user closed it.
+    bool handle_events();
+    void repaint();
 
     SimulatorOptions        options_;
     PcFrameBufferDisplay&   display_;

@@ -88,7 +88,9 @@ if(BRICK_BUILD_PC)
       platforms/pc/src/PcFrameBufferDisplay.cpp
       platforms/pc/src/PcSockets.cpp
       platforms/pc/src/PcWifi.cpp
-      platforms/pc/src/Simulator.cpp)
+      platforms/pc/src/Simulator.cpp
+      platforms/pc/src/WebScreen.cpp
+      platforms/pc/src/WebSocketFrames.cpp)
   add_library(BRICK::PlatformPC ALIAS brick_platform_pc)
   target_compile_features(brick_platform_pc PUBLIC cxx_std_17)
   target_compile_options(brick_platform_pc PRIVATE -Wall -Wextra -Werror)
@@ -142,5 +144,10 @@ if(BRICK_BUILD_TESTS)
     brick_add_simulator(brick_pc_network_tests tests/pc/pc_network_tests.cpp)
     target_compile_options(brick_pc_network_tests PRIVATE -Wall -Wextra -Werror)
     add_test(NAME brick_pc_network_tests COMMAND brick_pc_network_tests)
+    brick_add_simulator(brick_pc_web_screen_tests tests/pc/pc_web_screen_tests.cpp)
+    target_compile_options(brick_pc_web_screen_tests PRIVATE -Wall -Wextra -Werror)
+    # The WebSocket helpers are internal to the platform; the test checks them directly.
+    target_include_directories(brick_pc_web_screen_tests PRIVATE platforms/pc/src)
+    add_test(NAME brick_pc_web_screen_tests COMMAND brick_pc_web_screen_tests)
   endif()
 endif()

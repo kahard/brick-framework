@@ -109,9 +109,9 @@ struct filled by the target; they are never read from a board header inside
 | Interface | PC implementation |
 |---|---|
 | `IDisplayDevice`, `IFrameBufferDisplay` | `PcFrameBufferDisplay` - RGB565 frame buffers in memory |
-| `ITouchscreen` | `PcTouchscreen` - fed by the window (mouse) or by a script |
-| `IButton` | `PcButton` - keyboard key in the window, or scripted |
-| `IBacklight` | `PcBacklight` - dims the window image |
+| `ITouchscreen` | `PcTouchscreen` - fed by the window or the browser (mouse, finger) or by a script |
+| `IButton` | `PcButton` - keyboard key or button in the window or the browser, or scripted |
+| `IBacklight` | `PcBacklight` - dims the window or browser image |
 | `ITimeProvider`, `IClock` | `PcTime` - `std::chrono::steady_clock` |
 | `ILogger` | `PcLogger` - stdout |
 | `IFileSystem` | `PcFileSystem` - a directory on disk (e.g. a copy of the SD card) |
@@ -129,14 +129,27 @@ application gets a 320x240 simulated screen and a JC8012 application an
 
 The window uses SDL2 when CMake finds it; without SDL2 (or with
 `--headless`) the simulator runs without a window, which is how CI runs
-application smoke tests. Command-line options of every PC entry point:
+application smoke tests. With `--web` the screen goes to a web browser
+instead of a window: `WebScreen`, a small HTTP + WebSocket server on its own
+thread (no external libraries), serves a page that draws the display on a
+canvas and sends mouse, finger and key input back. Only the rows that changed
+since the browser's last image are sent, so a text screen costs a few
+kilobytes per change. It listens on this computer only unless `--web-lan` is
+given. Command-line options of every PC entry point:
 
 ```text
 --headless              no window
+--web [PORT]            screen in a web browser instead of a window (default port 8080)
+--web-lan               let other devices on the network open the web screen
 --frames N              stop after N application updates
+--manual-time [MS]      deterministic time, each update advances MS
 --screenshot FILE.ppm   save the last frame
---touch X,Y@MS          inject a touch at time MS (repeatable)
+--touch X,Y@MS[+DUR]    inject a touch at time MS (repeatable)
+--press MS[+DUR]        press the button at time MS (repeatable)
 --fs DIR                root directory for IFileSystem
+--serial-in FILE        bytes the serial port receives
+--offline               no internet: DNS lookups and connections fail
+--wifi SSID[:PASS[:RSSI]]  a network the simulated Wi-Fi finds (repeatable)
 ```
 
 Mocks and fakes for unit tests (counting displays, scripted touch screens,

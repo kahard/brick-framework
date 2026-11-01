@@ -1,10 +1,12 @@
 #include "brick/platform/pc/Simulator.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <thread>
 
 #if BRICK_PC_HAS_SDL2
 #    define SDL_MAIN_HANDLED
@@ -16,6 +18,11 @@ namespace brick::platform::pc
 
 namespace
 {
+
+    constexpr std::uint32_t kDefaultWebPort = 8080;
+    constexpr std::uint32_t kMaxPort        = 65535;
+    /// Pause of a web-screen run between updates: real time without a busy loop.
+    constexpr std::chrono::milliseconds kWebStep{ 5 };
 
     void print_usage(const char* program)
     {
@@ -31,6 +38,8 @@ namespace
                     "  --press MS[+DUR]        press the button at MS for DUR ms (repeatable)\n"
                     "  --offline               no internet: DNS lookups and connections fail\n"
                     "  --wifi SSID[:PASS[:RSSI]]  a network the simulated Wi-Fi finds (repeatable)\n"
+                    "  --web [PORT]            show the screen in a web browser instead of a window (default 8080)\n"
+                    "  --web-lan               let other devices on the network open the web screen\n"
                     "Window: mouse = touch, space = button, Esc = quit.\n",
                     program);
     }
@@ -124,6 +133,15 @@ bool SimulatorOptions::parse(int argc, char** argv, SimulatorOptions& options)
         }
         else if (std::strcmp(option, "--offline") == 0)
             options.offline = true;
+        else if (std::strcmp(option, "--web") == 0)
+        {
+            std::uint32_t port = kDefaultWebPort;
+            if (value != nullptr && value[0] != '-')
+                ok = parse_u32(argv[++index], port) && port > 0 && port <= kMaxPort;
+            options.web_port = static_cast<std::uint16_t>(port);
+        }
+        else if (std::strcmp(option, "--web-lan") == 0)
+            options.web_lan = true;
         else if (std::strcmp(option, "--wifi") == 0 && value != nullptr)
         {
             PcWifiNetwork network;
@@ -198,9 +216,29 @@ bool Simulator::has_window() const
     return window_ != nullptr;
 }
 
+bool Simulator::start_web()
+{
+    web_ = std::make_unique<WebScreen>();
+    if (!web_->start(options_.web_port, options_.web_lan, title_))
+    {
+        std::fprintf(stderr, "Cannot open the web screen on port %u\n", static_cast<unsigned>(options_.web_port));
+        web_.reset();
+        return false;
+    }
+    if (options_.web_lan)
+        std::printf("Web screen on port %u of every network interface: http://<this computer>:%u/\n",
+                    static_cast<unsigned>(web_->port()), static_cast<unsigned>(web_->port()));
+    else
+        std::printf("Web screen: http://localhost:%u/ (Ctrl+C stops)\n", static_cast<unsigned>(web_->port()));
+    std::fflush(stdout);
+    return true;
+}
+
 bool Simulator::begin()
 {
-    if (options_.headless)
+    if (options_.web_port != 0 && !start_web())
+        return false;
+    if (options_.headless || web_ != nullptr)
         return true;
 #if BRICK_PC_HAS_SDL2
     SDL_SetMainReady();
@@ -265,6 +303,14 @@ bool Simulator::step()
     if (options_.manual_time && updates_ != 0)
         time_.advance_ms(options_.step_ms);
     apply_script();
+    if (web_ != nullptr)
+    {
+        // The image of the previous update; the browsers' input for the next one.
+        web_->publish(display_, backlight_ != nullptr ? backlight_->brightness_percent() : 100U);
+        web_->apply_input(touch_, button_);
+        if (!options_.manual_time)
+            std::this_thread::sleep_for(kWebStep);
+    }
 #if BRICK_PC_HAS_SDL2
     if (window_ != nullptr)
     {
@@ -347,6 +393,7 @@ void Simulator::repaint()
 bool Simulator::finish()
 {
     window_.reset();
+    web_.reset();
     if (options_.screenshot.empty())
         return true;
     if (!write_ppm(display_, options_.screenshot))

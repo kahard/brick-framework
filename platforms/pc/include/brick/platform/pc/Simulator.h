@@ -11,6 +11,7 @@
 #include "brick/platform/pc/PcInput.h"
 #include "brick/platform/pc/PcTime.h"
 #include "brick/platform/pc/PcWifi.h"
+#include "brick/platform/pc/WebScreen.h"
 
 namespace brick::platform::pc
 {
@@ -43,8 +44,10 @@ struct SimulatorOptions
     std::string                serial_input;  ///< file whose bytes the serial port receives
     std::vector<ScriptedTouch> touches;
     std::vector<ScriptedPress> presses;
-    bool                       offline = false;  ///< no internet: lookups and connections fail
-    std::vector<PcWifiNetwork> wifi_networks;    ///< what a Wi-Fi scan finds; empty = PcWifi defaults
+    bool                       offline  = false;  ///< no internet: lookups and connections fail
+    std::uint16_t              web_port = 0;      ///< serve the screen to a browser on this port; 0 = off
+    bool                       web_lan  = false;  ///< web screen on every network interface, not only this PC
+    std::vector<PcWifiNetwork> wifi_networks;     ///< what a Wi-Fi scan finds; empty = PcWifi defaults
 
     /// Parses the common simulator options; returns false (after printing
     /// usage) on --help or an invalid option.
@@ -52,8 +55,9 @@ struct SimulatorOptions
 };
 
 /// Drives a simulated board: shows the display in a window (SDL2, when
-/// available), maps mouse and keyboard to touch and button, replays scripted
-/// input and stops after the requested number of frames.
+/// available) or in a web browser (--web), maps mouse, finger and keyboard to
+/// touch and button, replays scripted input and stops after the requested
+/// number of frames.
 class Simulator final
 {
 public:
@@ -86,21 +90,23 @@ private:
     struct Window;
 
     void apply_script();
+    bool start_web();
     // Window only: false when the user closed it.
     bool handle_events();
     void repaint();
 
-    SimulatorOptions        options_;
-    PcFrameBufferDisplay&   display_;
-    PcTime&                 time_;
-    std::string             title_;
-    PcTouchscreen*          touch_     = nullptr;
-    PcButton*               button_    = nullptr;
-    PcBacklight*            backlight_ = nullptr;
-    std::unique_ptr<Window> window_;
-    std::uint32_t           updates_         = 0;
-    bool                    script_touching_ = false;
-    bool                    script_pressing_ = false;
+    SimulatorOptions           options_;
+    PcFrameBufferDisplay&      display_;
+    PcTime&                    time_;
+    std::string                title_;
+    PcTouchscreen*             touch_     = nullptr;
+    PcButton*                  button_    = nullptr;
+    PcBacklight*               backlight_ = nullptr;
+    std::unique_ptr<Window>    window_;
+    std::unique_ptr<WebScreen> web_;
+    std::uint32_t              updates_         = 0;
+    bool                       script_touching_ = false;
+    bool                       script_pressing_ = false;
 };
 
 /// Runs an application with Status initialize() and update() under the

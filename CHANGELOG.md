@@ -49,6 +49,9 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   `esp_wifi_remote` + `esp_hosted`), `EspEthernet` (EMAC + PHY RMII),
   `EspDnsResolver`, `EspTcpSocket`; ESP8266: `Esp8266Wifi`,
   `Esp8266DnsResolver`, `Esp8266TcpSocket`,
+- symulator PC w przeglądarce: `--web [PORT]` uruchamia wbudowany serwer
+  HTTP + WebSocket (`WebScreen`), który pokazuje ekran na stronie i przyjmuje
+  dotyk i przycisk z przeglądarki; `--web-lan` udostępnia go w sieci lokalnej,
 - płytki: flaga `wifi` (CYD, Panel 480, JC1060, JC8012, ESP-12F) i `ethernet`
   (JC1060, IP101), domyślnie wyłączone; `SimulatorBoard` ma symulowane
   Wi-Fi (`--wifi`) i sieć komputera jako Ethernet (`--offline`),

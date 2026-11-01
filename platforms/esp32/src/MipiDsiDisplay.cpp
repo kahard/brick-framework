@@ -161,7 +161,8 @@ Status MipiDsiDisplay::register_callbacks_()
         return Status::no_memory;
     esp_lcd_dpi_panel_event_callbacks_t callbacks = {};
     callbacks.on_color_trans_done                 = on_color_trans_done_;
-    callbacks.on_refresh_done                     = on_refresh_done_;
+    // ESP-IDF 5.5 renamed on_refresh_done (same union member and signature).
+    callbacks.on_frame_buf_complete = on_refresh_done_;
     return to_status(esp_lcd_dpi_panel_register_event_callbacks(panel_, &callbacks, this));
 }
 

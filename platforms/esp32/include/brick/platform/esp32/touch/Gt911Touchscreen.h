@@ -39,12 +39,18 @@ public:
 
 private:
     static constexpr std::size_t kMaxTouches = 5;
+    static constexpr std::size_t kPointBytes = 8;
     static constexpr TickType_t  kTimeout    = pdMS_TO_TICKS(100);
 
-    Status probe_();
-    Status read_calibration_();
-    Status write_register_(std::uint16_t reg, std::uint8_t value);
-    Status read_register_(std::uint16_t reg, std::uint8_t* data, std::size_t length);
+    void        reset_controller_();
+    Status      begin_i2c_();
+    Status      read_sample_(std::uint8_t* raw, std::size_t& touch_count);
+    std::size_t report_touches_(const std::uint8_t* raw, std::size_t touch_count,
+                                brick::interfaces::display::TouchPoint* points, std::size_t capacity);
+    Status      probe_();
+    Status      read_calibration_();
+    Status      write_register_(std::uint16_t reg, std::uint8_t value);
+    Status      read_register_(std::uint16_t reg, std::uint8_t* data, std::size_t length);
 
     Gt911Config                                                     config_;
     brick::core::input::TouchMapper                                 mapper_{ {}, {} };

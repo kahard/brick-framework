@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" BRICK_VERSION LIMIT_COUNT 1)
-project(brick_framework VERSION ${BRICK_VERSION} LANGUAGES CXX)
+# project() accepts only the numeric part of 0.3.0-dev or 0.3.0-rc.1.
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" BRICK_VERSION_NUMBER "${BRICK_VERSION}")
+project(brick_framework VERSION ${BRICK_VERSION_NUMBER} LANGUAGES CXX)
 
 # Tests default to ON only when BRICK is the top-level project, not when an
 # application pulls it in with add_subdirectory().

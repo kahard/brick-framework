@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -135,6 +136,32 @@ public:
         return draw(
             { 0, 0, static_cast<std::int32_t>(display_size.width), static_cast<std::int32_t>(display_size.height) },
             buffer);
+    }
+
+    /// Fills an area of the display with color, in strips as tall as the
+    /// caller's pixels allow (at least one row of the area).
+    Status fill_area(brick::interfaces::display::DisplayRect area, std::uint16_t color, std::uint16_t* pixels,
+                     std::size_t capacity)
+    {
+        if (area.empty() || pixels == nullptr || capacity < static_cast<std::size_t>(area.width))
+            return Status::invalid_argument;
+        const auto strip_rows = static_cast<std::int32_t>(
+            std::min(capacity / static_cast<std::size_t>(area.width), static_cast<std::size_t>(area.height)));
+        for (std::int32_t row = 0; row < area.height; row += strip_rows)
+        {
+            const brick::interfaces::display::DisplayRect strip{ area.x, area.y + row, area.width,
+                                                                 std::min(strip_rows, area.height - row) };
+            if (const Status status = create_canvas(strip, pixels, capacity).clear(color).present(); !is_ok(status))
+                return status;
+        }
+        return Status::ok;
+    }
+
+    template <std::size_t Capacity>
+    Status fill_area(brick::interfaces::display::DisplayRect area, std::uint16_t color,
+                     std::array<std::uint16_t, Capacity>& pixels)
+    {
+        return fill_area(area, color, pixels.data(), Capacity);
     }
 
     Status fill(brick::interfaces::display::WritablePixelBuffer& buffer, std::uint16_t color) const

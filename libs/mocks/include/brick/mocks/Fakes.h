@@ -15,6 +15,8 @@
 #include <vector>
 
 #include "brick/interfaces/audio/IAudioOutput.h"
+#include "brick/interfaces/audio/IBuzzer.h"
+#include "brick/interfaces/communication/ISerialPort.h"
 #include "brick/interfaces/display/AssetDescriptor.h"
 #include "brick/interfaces/display/IAssetReader.h"
 #include "brick/interfaces/display/IDisplayDevice.h"
@@ -267,6 +269,41 @@ public:
         std::string                       text;
     };
     std::vector<Line> lines;
+};
+
+/// Buzzer that keeps every switch, and fails with `result` when it is set.
+class FakeBuzzer final : public brick::interfaces::audio::IBuzzer
+{
+public:
+    Status begin() override { return Status::ok; }
+    Status set_enabled(bool on) override
+    {
+        if (!is_ok(result))
+            return result;
+        enabled = on;
+        switches.push_back(on);
+        return Status::ok;
+    }
+    Status beep(std::uint16_t) override { return set_enabled(true); }
+
+    bool              enabled = false;
+    std::vector<bool> switches;
+    Status            result = Status::ok;
+};
+
+/// Serial port that keeps what is written and receives nothing.
+class FakeSerialPort final : public brick::interfaces::communication::ISerialPort
+{
+public:
+    Status      begin() override { return Status::ok; }
+    std::size_t read(std::uint8_t*, std::size_t) override { return 0; }
+    std::size_t write(const std::uint8_t* data, std::size_t length) override
+    {
+        written.append(reinterpret_cast<const char*>(data), length);
+        return length;
+    }
+
+    std::string written;
 };
 
 }  // namespace brick::mocks

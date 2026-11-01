@@ -13,12 +13,14 @@
 #include <string>
 #include <vector>
 
+#include "brick/core/audio/BeepSequence.h"
 #include "brick/core/audio/PeriodicAudioPlayer.h"
 #include "brick/core/audio/WavDecoder.h"
 #include "brick/core/display/Screen.h"
 #include "brick/core/image/BmpDecoder.h"
 #include "brick/core/input/DragSlider.h"
 #include "brick/core/input/TouchMapper.h"
+#include "brick/core/logging/SerialLogger.h"
 #include "brick/core/timing/PeriodicTimer.h"
 #include "brick/interfaces/display/DisplayCapabilities.h"
 #include "brick/interfaces/display/DisplayRect.h"
@@ -403,6 +405,11 @@ void test_screen_canvas()
     // present() reports why a canvas is invalid.
     assert(screen.create_canvas(1, pixels).clear(0).present() == Status::no_memory);
     assert(screen.create_canvas({ 0, 0, 0, 4 }, pixels).present() == Status::invalid_argument);
+
+    // fill_area() draws a 16x10 area through 64 pixels: strips of 4, 4 and 2 rows.
+    assert(screen.fill_area({ 2, 20, 16, 10 }, 0x07E0, pixels) == Status::ok);
+    assert(pixels[0] == 0x07E0 && display.last_area.y == 28 && display.last_area.height == 2);
+    assert(screen.fill_area({ 0, 0, 65, 1 }, 0, pixels) == Status::invalid_argument);
 }
 
 void test_touch_mapper()
@@ -440,6 +447,63 @@ brick::interfaces::display::TouchPoint touch_at(std::int16_t x, brick::interface
     point.x     = x;
     point.state = state;
     return point;
+}
+
+void test_beep_sequence()
+{
+    brick::mocks::FakeBuzzer         buzzer;
+    brick::core::audio::BeepSequence beeps(buzzer, 80, 120);
+    assert(beeps.start(2, 1000) == Status::ok && buzzer.enabled && beeps.active());
+    assert(beeps.update(1079) == Status::ok && buzzer.enabled);
+    assert(beeps.update(1080) == Status::ok && !buzzer.enabled);
+    assert(beeps.update(1199) == Status::ok && !buzzer.enabled);
+    assert(beeps.update(1200) == Status::ok && buzzer.enabled);
+    assert(beeps.update(1280) == Status::ok && !buzzer.enabled && !beeps.active());
+    assert(beeps.update(5000) == Status::ok && buzzer.switches.size() == 4);
+
+    // Timing across the wrap of the millisecond counter.
+    assert(beeps.start(1, 0xFFFFFFF0U) == Status::ok && buzzer.enabled);
+    assert(beeps.update(0x10U) == Status::ok && buzzer.enabled);
+    assert(beeps.update(0x40U) == Status::ok && !buzzer.enabled && !beeps.active());
+
+    // Two beeps repeated after a 1 s pause: on 0-80, 200-280, again from 1280.
+    assert(beeps.start(2, 0, 1000) == Status::ok && buzzer.enabled);
+    for (const std::uint32_t now : { 80U, 200U, 280U })
+        assert(beeps.update(now) == Status::ok);
+    assert(!buzzer.enabled && beeps.active());
+    assert(beeps.update(1279) == Status::ok && !buzzer.enabled);
+    assert(beeps.update(1280) == Status::ok && buzzer.enabled);
+
+    // A failing buzzer ends the sequence.
+    buzzer.result = Status::not_ready;
+    assert(beeps.start(3, 0) == Status::not_ready && !beeps.active());
+}
+
+void log_line(brick::core::logging::SerialLogger& logger, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    logger.write(brick::interfaces::logging::Level::warning, "app", format, args);
+    va_end(args);
+}
+
+void test_serial_logger()
+{
+    brick::mocks::FakeSerialPort       port;
+    brick::core::logging::SerialLogger logger(port);
+    logger.info("board", "started %d of %d", 3, 4);
+    assert(port.written == "I (board) started 3 of 4\r\n");
+
+    port.written.clear();
+    logger.debug("board", "hidden");
+    assert(port.written.empty());
+
+    // A long line is cut but still ends the line.
+    port.written.clear();
+    log_line(logger, "%0200d", 7);
+    assert(port.written.size() == brick::core::logging::SerialLogger::kLineBytes);
+    assert(port.written.compare(0, 9, "W (app) 0") == 0);
+    assert(port.written.compare(port.written.size() - 2, 2, "\r\n") == 0);
 }
 
 void test_drag_slider()
@@ -604,6 +668,8 @@ int main()
     test_screen_canvas();
     test_touch_mapper();
     test_drag_slider();
+    test_beep_sequence();
+    test_serial_logger();
     test_asset_streamer();
     test_asset_bundle();
     test_asset_source_streamer();

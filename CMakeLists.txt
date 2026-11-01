@@ -24,10 +24,12 @@ add_library(brick_core STATIC
     libs/core/src/AudioBuffer.cpp
     libs/core/src/AssetBundle.cpp
     libs/core/src/AssetStreamer.cpp
+    libs/core/src/BeepSequence.cpp
     libs/core/src/BmpDecoder.cpp
     libs/core/src/DragSlider.cpp
     libs/core/src/PeriodicAudioPlayer.cpp
     libs/core/src/PeriodicTimer.cpp
+    libs/core/src/SerialLogger.cpp
     libs/core/src/TouchMapper.cpp
     libs/core/src/WavDecoder.cpp)
 add_library(BRICK::Core ALIAS brick_core)

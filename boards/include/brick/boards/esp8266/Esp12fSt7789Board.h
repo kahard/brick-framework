@@ -2,6 +2,7 @@
 
 #include "brick/boards/common/Capabilities.h"
 #include "brick/boards/common/Logger.h"
+#include "brick/boards/common/OptionalFeatures.h"
 #include "brick/boards/common/Peripheral.h"
 #include "brick/boards/esp8266/esp12f_st7789/Profile.h"
 #include "brick/interfaces/board/IBoard.h"
@@ -9,6 +10,7 @@
 #include "brick/platform/esp8266/ArduinoTime.h"
 #include "brick/platform/esp8266/GpioButton.h"
 #include "brick/platform/esp8266/St7789TftDisplay.h"
+#include "brick/platform/esp8266/network/Esp8266Wifi.h"
 
 namespace brick::boards
 {
@@ -17,8 +19,11 @@ namespace brick::boards
 /// and override only the flags a project needs to change.
 struct Esp12fSt7789DefaultFeatures
 {
-    static constexpr bool display   = true;
-    static constexpr bool button    = true;
+    static constexpr bool display = true;
+    static constexpr bool button  = true;
+    /// Wi-Fi radio (station and hotspot), started by begin(); off unless a
+    /// project enables it.
+    static constexpr bool wifi      = false;
     static constexpr bool logging   = true;
     static constexpr int  log_level = 0;
 };
@@ -32,13 +37,15 @@ public:
     {
         display_.emplace(esp12f_st7789::display_config());
         button_.emplace(esp12f_st7789::button_config());
+        wifi_.emplace();
     }
 
     static constexpr brick::interfaces::board::BoardDescriptor descriptor_static()
     {
         using brick::boards::common::capability_if;
         using brick::interfaces::board::Capability;
-        return { "ESP-12F ST7789 240x240", "ESP8266", capability_if(Features::display, Capability::display) };
+        return { "ESP-12F ST7789 240x240", "ESP8266",
+                 capability_if(Features::display, Capability::display) | capability_if(kWifi, Capability::wifi) };
     }
 
     brick::interfaces::board::BoardDescriptor descriptor() const override { return descriptor_static(); }
@@ -47,7 +54,7 @@ public:
     /// failure (Status::ok when all started).
     Status begin() override
     {
-        const Status results[] = { display_.begin(), button_.begin() };
+        const Status results[] = { display_.begin(), button_.begin(), wifi_.begin() };
         for (const Status status : results)
             if (!is_ok(status))
                 return status;
@@ -65,6 +72,7 @@ public:
 
     brick::platform::esp8266::St7789TftDisplay& display() { return display_.get(); }
     brick::platform::esp8266::GpioButton&       button() { return button_.get(); }
+    brick::platform::esp8266::Esp8266Wifi&      wifi() { return wifi_.get(); }
     brick::interfaces::time::ITimeProvider&     time() { return time_; }
     brick::interfaces::logging::ILogger&        logger() { return logger_.get(); }
 
@@ -72,12 +80,15 @@ private:
     template <bool Enabled, typename T>
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
 
+    static constexpr bool kWifi = brick::boards::common::wifi_enabled<Features>;
+
     brick::platform::esp8266::ArduinoTime time_;
     brick::boards::common::Logger<Features::logging, brick::platform::esp8266::ArduinoSerialLogger,
                                   brick::platform::esp8266::NullLogger>
                                                                               logger_;
     Peripheral<Features::display, brick::platform::esp8266::St7789TftDisplay> display_;
     Peripheral<Features::button, brick::platform::esp8266::GpioButton>        button_;
+    Peripheral<kWifi, brick::platform::esp8266::Esp8266Wifi>                  wifi_;
 };
 
 using Esp12fSt7789Board = Esp12fSt7789BoardTemplate<>;

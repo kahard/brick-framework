@@ -2,6 +2,7 @@
 
 #include "brick/boards/common/Capabilities.h"
 #include "brick/boards/common/Logger.h"
+#include "brick/boards/common/OptionalFeatures.h"
 #include "brick/boards/common/Peripheral.h"
 #include "brick/boards/esp32/wroom32/cyd/Profile.h"
 #include "brick/interfaces/board/IBoard.h"
@@ -10,6 +11,7 @@
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/Ili9341SpiDisplay.h"
 #include "brick/platform/esp32/PwmBacklight.h"
+#include "brick/platform/esp32/network/EspWifi.h"
 #include "brick/platform/esp32/touch/Xpt2046Touchscreen.h"
 #include "brick/platform/esp32/wroom32/CydSdSpiFileSystem.h"
 #include "brick/platform/esp32/wroom32/CydSpi3PinMux.h"
@@ -27,8 +29,11 @@ struct CydDefaultFeatures
     static constexpr bool backlight      = true;
     static constexpr bool sd             = false;
     static constexpr bool requires_psram = false;
-    static constexpr bool logging        = true;
-    static constexpr int  log_level      = 0;
+    /// Wi-Fi radio (station and hotspot), started by begin(). It needs about
+    /// 50 KB of RAM, so it is off unless a project enables it.
+    static constexpr bool wifi      = false;
+    static constexpr bool logging   = true;
+    static constexpr int  log_level = 0;
 };
 
 /// ESP32-2432S028R "Cheap Yellow Display". begin() starts the display,
@@ -51,6 +56,7 @@ public:
         display_.emplace(cyd::display_config());
         backlight_.emplace(cyd::kBacklightGpio);
         touch_.emplace(cyd::touch_config());
+        wifi_.emplace();
         if constexpr (Features::sd)
         {
             spi3_pin_mux_.emplace(cyd::spi3_pin_mux_config());
@@ -68,7 +74,7 @@ public:
                  capability_if(Features::display, Capability::display)
                      | capability_if(Features::touch, Capability::touchscreen)
                      | capability_if(Features::backlight, Capability::backlight)
-                     | capability_if(Features::sd, Capability::sd_card) };
+                     | capability_if(Features::sd, Capability::sd_card) | capability_if(kWifi, Capability::wifi) };
     }
 
     brick::interfaces::board::BoardDescriptor descriptor() const override { return descriptor_static(); }
@@ -77,7 +83,7 @@ public:
     /// failure (Status::ok when all started).
     Status begin() override
     {
-        const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin() };
+        const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin(), wifi_.begin() };
         for (const Status status : results)
             if (!is_ok(status))
                 return status;
@@ -109,12 +115,15 @@ public:
     brick::interfaces::display::IBacklight&              backlight() { return backlight_.get(); }
     brick::platform::esp32::wroom32::CydSdSpiFileSystem& sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&              time() { return time_; }
+    brick::platform::esp32::EspWifi&                     wifi() { return wifi_.get(); }
     brick::interfaces::memory::IMemoryProvider&          memory() { return memory_; }
     brick::interfaces::logging::ILogger&                 logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
+
+    static constexpr bool kWifi = brick::boards::common::wifi_enabled<Features>;
 
     brick::platform::esp32::FreeRtosTime time_;
     brick::platform::esp32::EspMemory    memory_;
@@ -127,6 +136,7 @@ private:
     Peripheral<Features::touch, brick::platform::esp32::touch::Xpt2046Touchscreen>               touch_;
     Peripheral<Features::touch && Features::sd, brick::platform::esp32::wroom32::CydTouchscreen> muxed_touch_;
     Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSdSpiFileSystem>                sd_;
+    Peripheral<kWifi, brick::platform::esp32::EspWifi>                                           wifi_;
 };
 
 using CydBoard = CydBoardTemplate<>;

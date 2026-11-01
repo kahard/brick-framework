@@ -2,6 +2,7 @@
 
 #include "brick/boards/common/Capabilities.h"
 #include "brick/boards/common/Logger.h"
+#include "brick/boards/common/OptionalFeatures.h"
 #include "brick/boards/common/Peripheral.h"
 #include "brick/boards/esp32/s3/panel480/Profile.h"
 #include "brick/interfaces/board/IBoard.h"
@@ -9,6 +10,7 @@
 #include "brick/platform/esp32/EspMemory.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/SdSpiFileSystem.h"
+#include "brick/platform/esp32/network/EspWifi.h"
 #include "brick/platform/esp32/s3/St7701sRgbDisplay.h"
 #include "brick/platform/esp32/touch/Gt911Touchscreen.h"
 
@@ -19,9 +21,12 @@ namespace brick::boards
 /// override only the flags a project needs to change.
 struct Panel480DefaultFeatures
 {
-    static constexpr bool display   = true;
-    static constexpr bool touch     = true;
-    static constexpr bool sd        = false;
+    static constexpr bool display = true;
+    static constexpr bool touch   = true;
+    static constexpr bool sd      = false;
+    /// Wi-Fi radio (station and hotspot), started by begin(). It needs about
+    /// 50 KB of RAM, so it is off unless a project enables it.
+    static constexpr bool wifi      = false;
     static constexpr bool logging   = true;
     static constexpr int  log_level = 0;
 };
@@ -39,6 +44,7 @@ public:
         display_.emplace(display_config);
         touch_.emplace(panel480::touch_config());
         sd_.emplace(panel480::sd_config());
+        wifi_.emplace();
     }
 
     /// Display configuration with two frame buffers, for the constructor.
@@ -54,7 +60,7 @@ public:
         return { "480x480 panel", "ESP32-S3",
                  capability_if(Features::display, Capability::display)
                      | capability_if(Features::touch, Capability::touchscreen)
-                     | capability_if(Features::sd, Capability::sd_card) };
+                     | capability_if(Features::sd, Capability::sd_card) | capability_if(kWifi, Capability::wifi) };
     }
 
     brick::interfaces::board::BoardDescriptor descriptor() const override { return descriptor_static(); }
@@ -63,7 +69,7 @@ public:
     /// failure (Status::ok when all started).
     Status begin() override
     {
-        const Status results[] = { display_.begin(), touch_.begin() };
+        const Status results[] = { display_.begin(), touch_.begin(), wifi_.begin() };
         for (const Status status : results)
             if (!is_ok(status))
                 return status;
@@ -88,12 +94,15 @@ public:
     brick::platform::esp32::touch::Gt911Touchscreen& touch() { return touch_.get(); }
     brick::platform::esp32::SdSpiFileSystem&         sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&          time() { return time_; }
+    brick::platform::esp32::EspWifi&                 wifi() { return wifi_.get(); }
     brick::interfaces::memory::IMemoryProvider&      memory() { return memory_; }
     brick::interfaces::logging::ILogger&             logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
+
+    static constexpr bool kWifi = brick::boards::common::wifi_enabled<Features>;
 
     brick::platform::esp32::FreeRtosTime time_;
     brick::platform::esp32::EspMemory    memory_;
@@ -103,6 +112,7 @@ private:
     Peripheral<Features::display, brick::platform::esp32::s3::St7701sRgbDisplay> display_;
     Peripheral<Features::touch, brick::platform::esp32::touch::Gt911Touchscreen> touch_;
     Peripheral<Features::sd, brick::platform::esp32::SdSpiFileSystem>            sd_;
+    Peripheral<kWifi, brick::platform::esp32::EspWifi>                           wifi_;
 };
 
 using Panel480Board = Panel480BoardTemplate<>;

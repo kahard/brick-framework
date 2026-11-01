@@ -2,6 +2,7 @@
 
 #include "brick/boards/common/Capabilities.h"
 #include "brick/boards/common/Logger.h"
+#include "brick/boards/common/OptionalFeatures.h"
 #include "brick/boards/common/Peripheral.h"
 #include "brick/boards/esp32/p4/jc1060/Profile.h"
 #include "brick/interfaces/board/IBoard.h"
@@ -9,6 +10,8 @@
 #include "brick/platform/esp32/EspMemory.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/GpioBacklight.h"
+#include "brick/platform/esp32/network/EspEthernet.h"
+#include "brick/platform/esp32/network/EspWifi.h"
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
 #include "brick/platform/esp32/touch/Gt911Touchscreen.h"
@@ -24,6 +27,11 @@ struct Jc1060DefaultFeatures
     static constexpr bool touch     = true;
     static constexpr bool backlight = true;
     static constexpr bool sd        = true;
+    /// Wi-Fi radio (station and hotspot), started by begin(). It needs about
+    /// 50 KB of RAM, so it is off unless a project enables it.
+    static constexpr bool wifi = false;
+    /// IP101 Ethernet port, started by begin(); the link comes up with a cable.
+    static constexpr bool ethernet  = false;
     static constexpr bool logging   = true;
     static constexpr int  log_level = 0;
 };
@@ -40,6 +48,8 @@ public:
         backlight_.emplace(jc1060::kBacklightGpio);
         touch_.emplace(jc1060::touch_config());
         sd_.emplace(jc1060::sd_config());
+        wifi_.emplace();
+        ethernet_.emplace(jc1060::ethernet_config());
     }
 
     static constexpr brick::interfaces::board::BoardDescriptor descriptor_static()
@@ -50,7 +60,8 @@ public:
                  capability_if(Features::display, Capability::display)
                      | capability_if(Features::touch, Capability::touchscreen)
                      | capability_if(Features::backlight, Capability::backlight)
-                     | capability_if(Features::sd, Capability::sd_card) };
+                     | capability_if(Features::sd, Capability::sd_card) | capability_if(kWifi, Capability::wifi)
+                     | capability_if(kEthernet, Capability::ethernet) };
     }
 
     brick::interfaces::board::BoardDescriptor descriptor() const override { return descriptor_static(); }
@@ -59,7 +70,8 @@ public:
     /// failure (Status::ok when all started).
     Status begin() override
     {
-        const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin() };
+        const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin(), wifi_.begin(),
+                                   ethernet_.begin() };
         for (const Status status : results)
             if (!is_ok(status))
                 return status;
@@ -85,12 +97,17 @@ public:
     brick::interfaces::display::IBacklight&          backlight() { return backlight_.get(); }
     brick::platform::esp32::SdmmcFileSystem&         sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&          time() { return time_; }
+    brick::platform::esp32::EspWifi&                 wifi() { return wifi_.get(); }
+    brick::platform::esp32::EspEthernet&             ethernet() { return ethernet_.get(); }
     brick::interfaces::memory::IMemoryProvider&      memory() { return memory_; }
     brick::interfaces::logging::ILogger&             logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
+
+    static constexpr bool kWifi     = brick::boards::common::wifi_enabled<Features>;
+    static constexpr bool kEthernet = brick::boards::common::ethernet_enabled<Features>;
 
     brick::platform::esp32::FreeRtosTime time_;
     brick::platform::esp32::EspMemory    memory_;
@@ -101,6 +118,8 @@ private:
     Peripheral<Features::backlight, brick::platform::esp32::GpioBacklight>       backlight_;
     Peripheral<Features::touch, brick::platform::esp32::touch::Gt911Touchscreen> touch_;
     Peripheral<Features::sd, brick::platform::esp32::SdmmcFileSystem>            sd_;
+    Peripheral<kWifi, brick::platform::esp32::EspWifi>                           wifi_;
+    Peripheral<kEthernet, brick::platform::esp32::EspEthernet>                   ethernet_;
 };
 
 using Jc1060Board = Jc1060BoardTemplate<>;

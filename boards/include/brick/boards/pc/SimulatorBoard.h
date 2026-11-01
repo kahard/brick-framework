@@ -10,7 +10,9 @@
 #include "brick/platform/pc/PcMemory.h"
 #include "brick/platform/pc/PcPeripherals.h"
 #include "brick/platform/pc/PcSerialPort.h"
+#include "brick/platform/pc/PcSockets.h"
 #include "brick/platform/pc/PcTime.h"
+#include "brick/platform/pc/PcWifi.h"
 #include "brick/platform/pc/Simulator.h"
 
 namespace brick::boards
@@ -38,8 +40,9 @@ struct SimulatorBoardConfig
 
 /// Board for the PC simulator. It offers the same accessors as the hardware
 /// boards (display(), touch(), backlight(), button(), buzzer(), sd(),
-/// eeprom(), flash(), time(), logger()) so a target entry point for the PC
-/// looks like the embedded one.
+/// eeprom(), flash(), wifi(), ethernet(), time(), logger()) so a target entry
+/// point for the PC looks like the embedded one. Wi-Fi is simulated (--wifi);
+/// ethernet() is the PC's own network, down with --offline.
 class SimulatorBoard final : public brick::interfaces::board::IBoard
 {
 public:
@@ -51,8 +54,8 @@ public:
     SimulatorBoard(const SimulatorBoardConfig& config, const brick::platform::pc::SimulatorOptions& options)
         : config_(config), time_(options.manual_time), logger_(config.debug_log),
           display_({ config.width, config.height, config.frame_buffers }), sd_(options.fs_root), eeprom_(kEepromBytes),
-          flash_(kFlashId, kFlashBytes), serial_(options.serial_input),
-          simulator_(options, display_, time_, config.name)
+          flash_(kFlashId, kFlashBytes), serial_(options.serial_input), wifi_(time_, options.wifi_networks),
+          ethernet_("ethernet", options.offline), simulator_(options, display_, time_, config.name)
     {
         simulator_.attach(touch_);
         simulator_.attach(button_);
@@ -67,15 +70,16 @@ public:
                      | static_cast<std::uint32_t>(Capability::backlight)
                      | static_cast<std::uint32_t>(Capability::sd_card) | static_cast<std::uint32_t>(Capability::buzzer)
                      | static_cast<std::uint32_t>(Capability::eeprom)
-                     | static_cast<std::uint32_t>(Capability::spi_flash) };
+                     | static_cast<std::uint32_t>(Capability::spi_flash) | static_cast<std::uint32_t>(Capability::wifi)
+                     | static_cast<std::uint32_t>(Capability::ethernet) };
     }
 
     /// Starts every peripheral, even after a failure, and returns the first
     /// failure (Status::ok when all started).
     Status begin() override
     {
-        const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin(),
-                                   button_.begin(),  buzzer_.begin(),    serial_.begin() };
+        const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin(), button_.begin(),
+                                   buzzer_.begin(),  serial_.begin(),    wifi_.begin(),  ethernet_.begin() };
         for (const Status status : results)
             if (!is_ok(status))
                 return status;
@@ -95,6 +99,8 @@ public:
     brick::platform::pc::PcNorFlash&           flash() { return flash_; }
     brick::platform::pc::PcMemory&             memory() { return memory_; }
     brick::platform::pc::PcSerialPort&         serial() { return serial_; }
+    brick::platform::pc::PcWifi&               wifi() { return wifi_; }
+    brick::platform::pc::PcHostNetwork&        ethernet() { return ethernet_; }
     brick::platform::pc::PcTime&               time() { return time_; }
     brick::platform::pc::PcLogger&             logger() { return logger_; }
     brick::platform::pc::Simulator&            simulator() { return simulator_; }
@@ -112,6 +118,8 @@ private:
     brick::platform::pc::PcByteStorage        eeprom_;
     brick::platform::pc::PcNorFlash           flash_;
     brick::platform::pc::PcSerialPort         serial_;
+    brick::platform::pc::PcWifi               wifi_;
+    brick::platform::pc::PcHostNetwork        ethernet_;
     brick::platform::pc::PcMemory             memory_;
     brick::platform::pc::Simulator            simulator_;
 };

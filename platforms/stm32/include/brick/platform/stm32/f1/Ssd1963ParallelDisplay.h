@@ -29,8 +29,8 @@ struct Ssd1963ParallelDisplayConfig
     GPIO_TypeDef* display_enable_port = GPIOB;
     std::uint16_t display_enable_pin  = GPIO_PIN_11;
 
-    // SSD1963 values taken from SSD1963HAL_Display_480_272.h in the
-    // Termotechnika reference firmware.
+    // PLL values for a 480x272 panel, from the panel's reference firmware
+    // (SSD1963HAL_Display_480_272.h).
     std::uint8_t pll_m = 0x01;
     std::uint8_t pll_n = 0x45;
     std::uint8_t pll_k = 0x47;

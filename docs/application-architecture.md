@@ -65,6 +65,8 @@ apps/esp32wroom32/cyd/common/display_touch_smoke/
 `Services.h` is the contract between the application and a target:
 
 ```cpp
+using Status = brick::Status;
+
 struct Services
 {
     brick::interfaces::display::IDisplayDevice& display;
@@ -82,10 +84,13 @@ class Application final
 {
 public:
     explicit Application(const Services& services);
-    bool initialize();   // once, after the board has started
-    bool update();       // one iteration; false requests a stop (PC only)
+    Status initialize();  // once, after the board has started
+    void   update();      // one iteration, never blocks
 };
 ```
+
+The target logs a failed `initialize()` with `to_string(status)`; `update()`
+may also return `bool`, where `false` stops the PC simulator.
 
 The loop belongs to the target entry point: `app_main()` / `loop()` on a
 microcontroller, `brick::platform::pc::run()` in the simulator. This keeps

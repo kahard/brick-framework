@@ -15,6 +15,8 @@ enum class Capability : std::uint32_t
     backlight   = 1u << 5,
     usb_host    = 1u << 6,
     sd_card     = 1u << 7,
+    wifi        = 1u << 8,
+    ethernet    = 1u << 9,
 };
 
 struct BoardDescriptor

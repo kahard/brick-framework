@@ -147,3 +147,6 @@ network hardware.
 - Credentials are not stored by BRICK; an application keeps them (for example
   from its build or its own storage).
 - The fallback hotspot has no web page for entering credentials yet.
+- On the ESP32-P4 panels the ESP32-C6 uses SDMMC slot 1 and the SD card
+  slot 0 of the same controller; Wi-Fi and the SD card together are not
+  tested yet.

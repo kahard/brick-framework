@@ -86,6 +86,8 @@ if(BRICK_BUILD_PC)
   add_library(brick_platform_pc STATIC
       platforms/pc/src/PcFileSystem.cpp
       platforms/pc/src/PcFrameBufferDisplay.cpp
+      platforms/pc/src/PcSockets.cpp
+      platforms/pc/src/PcWifi.cpp
       platforms/pc/src/Simulator.cpp)
   add_library(BRICK::PlatformPC ALIAS brick_platform_pc)
   target_compile_features(brick_platform_pc PUBLIC cxx_std_17)
@@ -95,6 +97,12 @@ if(BRICK_BUILD_PC)
       "${CMAKE_CURRENT_SOURCE_DIR}/platforms/pc/include"
       "${CMAKE_CURRENT_SOURCE_DIR}/boards/include")
   target_link_libraries(brick_platform_pc PUBLIC BRICK::Core)
+  # Sockets: Winsock on Windows; DNS lookups run on a worker thread.
+  find_package(Threads REQUIRED)
+  target_link_libraries(brick_platform_pc PUBLIC Threads::Threads)
+  if(WIN32)
+    target_link_libraries(brick_platform_pc PUBLIC ws2_32)
+  endif()
   set(BRICK_PC_HAS_SDL2 0)
   if(BRICK_PC_SDL2)
     find_package(SDL2 CONFIG QUIET)
@@ -131,5 +139,8 @@ if(BRICK_BUILD_TESTS)
     brick_add_simulator(brick_pc_tests tests/pc/pc_platform_tests.cpp)
     target_compile_options(brick_pc_tests PRIVATE -Wall -Wextra -Werror)
     add_test(NAME brick_pc_tests COMMAND brick_pc_tests WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    brick_add_simulator(brick_pc_network_tests tests/pc/pc_network_tests.cpp)
+    target_compile_options(brick_pc_network_tests PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME brick_pc_network_tests COMMAND brick_pc_network_tests)
   endif()
 endif()

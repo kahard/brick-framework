@@ -10,6 +10,7 @@
 #include "brick/platform/pc/PcFrameBufferDisplay.h"
 #include "brick/platform/pc/PcInput.h"
 #include "brick/platform/pc/PcTime.h"
+#include "brick/platform/pc/PcWifi.h"
 
 namespace brick::platform::pc
 {
@@ -42,6 +43,8 @@ struct SimulatorOptions
     std::string                serial_input;  ///< file whose bytes the serial port receives
     std::vector<ScriptedTouch> touches;
     std::vector<ScriptedPress> presses;
+    bool                       offline = false;  ///< no internet: lookups and connections fail
+    std::vector<PcWifiNetwork> wifi_networks;    ///< what a Wi-Fi scan finds; empty = PcWifi defaults
 
     /// Parses the common simulator options; returns false (after printing
     /// usage) on --help or an invalid option.

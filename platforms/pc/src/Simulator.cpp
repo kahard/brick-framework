@@ -29,6 +29,8 @@ namespace
                     "  --serial-in FILE        bytes the serial port receives\n"
                     "  --touch X,Y@MS[+DUR]    touch at MS milliseconds for DUR ms (repeatable)\n"
                     "  --press MS[+DUR]        press the button at MS for DUR ms (repeatable)\n"
+                    "  --offline               no internet: DNS lookups and connections fail\n"
+                    "  --wifi SSID[:PASS[:RSSI]]  a network the simulated Wi-Fi finds (repeatable)\n"
                     "Window: mouse = touch, space = button, Esc = quit.\n",
                     program);
     }
@@ -54,6 +56,21 @@ namespace
         at_ms       = at;
         duration_ms = duration;
         return true;
+    }
+
+    /// SSID[:PASSWORD[:RSSI]]; the SSID and password must not contain ':'.
+    bool parse_wifi(const char* text, PcWifiNetwork& network)
+    {
+        const std::string value(text);
+        const std::size_t first  = value.find(':');
+        const std::size_t second = first == std::string::npos ? std::string::npos : value.find(':', first + 1);
+        network.ssid             = value.substr(0, first);
+        if (first != std::string::npos)
+            network.password =
+                value.substr(first + 1, second == std::string::npos ? std::string::npos : second - first - 1);
+        if (second != std::string::npos)
+            network.rssi_dbm = static_cast<std::int8_t>(std::strtol(value.c_str() + second + 1, nullptr, 10));
+        return !network.ssid.empty() && network.ssid.size() <= 32;
     }
 
     bool parse_touch(const char* text, ScriptedTouch& touch)
@@ -104,6 +121,14 @@ bool SimulatorOptions::parse(int argc, char** argv, SimulatorOptions& options)
             ScriptedPress press;
             ok = parse_timing(argv[++index], press.at_ms, press.duration_ms);
             options.presses.push_back(press);
+        }
+        else if (std::strcmp(option, "--offline") == 0)
+            options.offline = true;
+        else if (std::strcmp(option, "--wifi") == 0 && value != nullptr)
+        {
+            PcWifiNetwork network;
+            ok = parse_wifi(argv[++index], network);
+            options.wifi_networks.push_back(network);
         }
         else
             ok = false;

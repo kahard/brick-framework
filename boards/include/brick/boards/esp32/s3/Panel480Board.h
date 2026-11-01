@@ -59,11 +59,15 @@ public:
 
     brick::interfaces::board::BoardDescriptor descriptor() const override { return descriptor_static(); }
 
-    bool begin() override
+    /// Starts every peripheral, even after a failure, and returns the first
+    /// failure (Status::ok when all started).
+    Status begin() override
     {
-        bool ok = display_.begin();
-        ok      = touch_.begin() && ok;
-        return ok;
+        const Status results[] = { display_.begin(), touch_.begin() };
+        for (const Status status : results)
+            if (!is_ok(status))
+                return status;
+        return Status::ok;
     }
 
     brick::interfaces::display::IDisplayDevice* display_device() override

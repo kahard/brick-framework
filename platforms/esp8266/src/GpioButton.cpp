@@ -7,11 +7,11 @@ GpioButton::GpioButton(GpioButtonConfig config) : config_(config)
 {
 }
 
-bool GpioButton::begin()
+Status GpioButton::begin()
 {
     pinMode(config_.gpio, config_.pin_mode);
     initialized_ = true;
-    return true;
+    return Status::ok;
 }
 
 bool GpioButton::is_pressed() const

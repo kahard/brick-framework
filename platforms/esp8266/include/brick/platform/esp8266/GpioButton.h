@@ -21,7 +21,7 @@ class GpioButton final : public brick::interfaces::input::IButton
 public:
     explicit GpioButton(GpioButtonConfig config);
 
-    bool begin() override;
+    Status begin() override;
 
     bool is_pressed() const override;
 

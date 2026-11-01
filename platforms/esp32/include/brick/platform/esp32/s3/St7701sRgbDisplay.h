@@ -6,6 +6,7 @@
 
 #include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/display/IFrameBufferDisplay.h"
+#include "brick/platform/esp32/EspStatus.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_attr.h"
@@ -64,29 +65,29 @@ public:
     explicit St7701sRgbDisplay(St7701sRgbPanelConfig config);
     ~St7701sRgbDisplay() override;
 
-    bool                                            begin() override;
+    Status                                          begin() override;
     brick::interfaces::display::DisplaySize         size() const override;
     brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool         set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool         draw_buffer(brick::interfaces::display::DisplayRect        area,
+    Status       set_rotation(brick::interfaces::display::Rotation rotation) override;
+    Status       draw_buffer(brick::interfaces::display::DisplayRect        area,
                              const brick::interfaces::display::PixelBuffer& buffer) override;
-    bool         wait_for_transfer_complete(std::uint32_t timeout_ms) override;
-    bool         wait_for_vsync(std::uint32_t timeout_ms) override;
+    Status       wait_for_transfer_complete(std::uint32_t timeout_ms) override;
+    Status       wait_for_vsync(std::uint32_t timeout_ms) override;
     std::uint8_t frame_buffer_count() const override;
-    bool         get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
-    bool         present_frame_buffer(std::uint8_t index) override;
+    Status       get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
+    Status       present_frame_buffer(std::uint8_t index) override;
 
 private:
     static bool IRAM_ATTR on_vsync_(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t* event_data,
                                     void* user_ctx);
     static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t                panel,
                                                const esp_lcd_rgb_panel_event_data_t* event_data, void* user_ctx);
-    bool                  begin_spi_();
-    bool                  write_9bit_(std::uint16_t value);
-    bool                  send_command_(std::uint8_t command, const std::uint8_t* data, std::size_t length);
-    bool                  send_init_sequence_();
-    bool                  begin_rgb_panel_();
+    Status                begin_spi_();
+    Status                write_9bit_(std::uint16_t value);
+    Status                send_command_(std::uint8_t command, const std::uint8_t* data, std::size_t length);
+    Status                send_init_sequence_();
+    Status                begin_rgb_panel_();
 
     St7701sRgbPanelConfig        config_;
     esp_lcd_panel_handle_t       panel_              = nullptr;

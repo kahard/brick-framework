@@ -6,6 +6,7 @@
 
 #include "brick/core/input/TouchMapper.h"
 #include "brick/interfaces/display/ITouchscreen.h"
+#include "brick/platform/esp32/EspStatus.h"
 #include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "esp_err.h"
@@ -32,18 +33,18 @@ class Gt911Touchscreen final : public brick::interfaces::display::ITouchscreen
 {
 public:
     explicit Gt911Touchscreen(Gt911Config config);
-    bool begin() override;
+    Status begin() override;
 
-    bool read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
+    Status read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
 
 private:
     static constexpr std::size_t kMaxTouches = 5;
     static constexpr TickType_t  kTimeout    = pdMS_TO_TICKS(100);
 
-    bool probe_();
-    bool read_calibration_();
-    bool write_register_(std::uint16_t reg, std::uint8_t value);
-    bool read_register_(std::uint16_t reg, std::uint8_t* data, std::size_t length);
+    Status probe_();
+    Status read_calibration_();
+    Status write_register_(std::uint16_t reg, std::uint8_t value);
+    Status read_register_(std::uint16_t reg, std::uint8_t* data, std::size_t length);
 
     Gt911Config                                                     config_;
     brick::core::input::TouchMapper                                 mapper_{ {}, {} };

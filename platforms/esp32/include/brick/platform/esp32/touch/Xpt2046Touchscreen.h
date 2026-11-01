@@ -6,6 +6,7 @@
 
 #include "brick/core/input/TouchMapper.h"
 #include "brick/interfaces/display/ITouchscreen.h"
+#include "brick/platform/esp32/EspStatus.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_err.h"
@@ -33,11 +34,11 @@ class Xpt2046Touchscreen final : public brick::interfaces::display::ITouchscreen
 public:
     explicit Xpt2046Touchscreen(Xpt2046Config config);
     ~Xpt2046Touchscreen() override;
-    bool begin() override;
-    bool read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
+    Status begin() override;
+    Status read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
 
 private:
-    bool read_sample_(std::uint8_t command, std::uint16_t& value);
+    Status read_sample_(std::uint8_t command, std::uint16_t& value);
 
     Xpt2046Config                          config_;
     spi_device_handle_t                    spi_device_ = nullptr;

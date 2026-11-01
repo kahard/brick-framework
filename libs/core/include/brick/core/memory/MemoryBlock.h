@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "brick/Status.h"
 #include "brick/interfaces/memory/IMemoryProvider.h"
 
 namespace brick::core::memory
@@ -19,15 +20,15 @@ public:
     MemoryBlock(const MemoryBlock&)            = delete;
     MemoryBlock& operator=(const MemoryBlock&) = delete;
 
-    /// Fails when a block is already held or the provider refuses.
-    [[nodiscard]] bool allocate(std::size_t bytes, brick::interfaces::memory::MemoryKind kind,
-                                std::size_t alignment = 64)
+    /// Status::invalid_argument when a block is already held or bytes is 0,
+    /// Status::no_memory when the provider refuses.
+    Status allocate(std::size_t bytes, brick::interfaces::memory::MemoryKind kind, std::size_t alignment = 64)
     {
         if (data_ != nullptr || bytes == 0)
-            return false;
+            return Status::invalid_argument;
         data_ = static_cast<std::uint8_t*>(provider_.allocate(bytes, kind, alignment));
         size_ = data_ != nullptr ? bytes : 0;
-        return data_ != nullptr;
+        return data_ != nullptr ? Status::ok : Status::no_memory;
     }
 
     void release()

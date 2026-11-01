@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "brick/platform/esp32/EspStatus.h"
 #include "brick/platform/esp32/VfsDirectory.h"
 #include "driver/spi_common.h"
 #include "esp_log.h"
@@ -45,10 +46,10 @@ bool SdSpiFileSystem::probe(const char* path)
     return ok;
 }
 
-bool SdSpiFileSystem::mount()
+Status SdSpiFileSystem::mount()
 {
     if (mounted_)
-        return true;
+        return Status::ok;
     spi_bus_config_t bus = {};
     bus.mosi_io_num      = config_.mosi;
     bus.miso_io_num      = config_.miso;
@@ -59,7 +60,7 @@ bool SdSpiFileSystem::mount()
     if (result != ESP_OK && result != ESP_ERR_INVALID_STATE)
     {
         ESP_LOGE(kTag, "SPI bus init failed: %s", esp_err_to_name(result));
-        return false;
+        return to_status(result);
     }
     bus_initialized_                        = result == ESP_OK;
     sdmmc_host_t host                       = SDSPI_HOST_DEFAULT();
@@ -76,11 +77,11 @@ bool SdSpiFileSystem::mount()
     if (result != ESP_OK)
     {
         ESP_LOGE(kTag, "SD mount failed: %s", esp_err_to_name(result));
-        return false;
+        return to_status(result);
     }
     mounted_ = true;
     ESP_LOGI(kTag, "SD mounted at %s", config_.mount_point);
-    return true;
+    return Status::ok;
 }
 
 std::size_t SdSpiFileSystem::list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity)
@@ -88,7 +89,7 @@ std::size_t SdSpiFileSystem::list_files(const char* path, interfaces::storage::F
     return list_vfs_files(path, entries, capacity);
 }
 
-bool SdSpiFileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
+Status SdSpiFileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
 {
     return open_vfs_file(files_, *this, path, mode, file);
 }

@@ -26,26 +26,28 @@ St7701sRgbDisplay::~St7701sRgbDisplay()
         spi_bus_free(config_.spi_host);
 }
 
-bool St7701sRgbDisplay::begin()
+Status St7701sRgbDisplay::begin()
 {
     if (initialized_)
-        return true;
+        return Status::ok;
     if (config_.width == 0 || config_.height == 0)
-        return false;
+        return Status::invalid_argument;
 
     ESP_LOGI(TAG, "begin ST7701S RGB %ux%u pclk=%luHz", config_.width, config_.height,
              static_cast<unsigned long>(config_.pixel_clock_hz));
-    if (!begin_spi_() || !send_init_sequence_())
-        return false;
-    if (!begin_rgb_panel_())
-        return false;
+    if (const Status status = begin_spi_(); !is_ok(status))
+        return status;
+    if (const Status status = send_init_sequence_(); !is_ok(status))
+        return status;
+    if (const Status status = begin_rgb_panel_(); !is_ok(status))
+        return status;
     if (config_.backlight_gpio != GPIO_NUM_NC)
     {
         gpio_set_direction(config_.backlight_gpio, GPIO_MODE_OUTPUT);
         gpio_set_level(config_.backlight_gpio, config_.backlight_active_high ? 1 : 0);
     }
     initialized_ = true;
-    return true;
+    return Status::ok;
 }
 
 brick::interfaces::display::DisplaySize St7701sRgbDisplay::size() const
@@ -79,41 +81,43 @@ brick::interfaces::display::DisplayCapabilities St7701sRgbDisplay::capabilities(
     };
 }
 
-bool St7701sRgbDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
+Status St7701sRgbDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
 {
     if (rotation != brick::interfaces::display::Rotation::rotate_0)
     {
         ESP_LOGW(TAG, "ST7701S RGB profile supports only rotation 0");
-        return false;
+        return Status::not_supported;
     }
-    return true;
+    return Status::ok;
 }
 
-bool St7701sRgbDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
-                                    const brick::interfaces::display::PixelBuffer& buffer)
+Status St7701sRgbDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
+                                      const brick::interfaces::display::PixelBuffer& buffer)
 {
-    if (!initialized_ || panel_ == nullptr || area.empty() || area.x < 0 || area.y < 0
-        || area.x + area.width > config_.width || area.y + area.height > config_.height || !buffer.valid()
+    if (!initialized_ || panel_ == nullptr)
+        return Status::not_ready;
+    if (area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width
+        || area.y + area.height > config_.height || !buffer.valid()
         || buffer.width != static_cast<std::uint32_t>(area.width)
         || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format()
         || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
-        return false;
-    return esp_lcd_panel_draw_bitmap(panel_, area.x, area.y, area.x + area.width, area.y + area.height, buffer.data)
-           == ESP_OK;
+        return Status::invalid_argument;
+    return to_status(
+        esp_lcd_panel_draw_bitmap(panel_, area.x, area.y, area.x + area.width, area.y + area.height, buffer.data));
 }
 
-bool St7701sRgbDisplay::wait_for_transfer_complete(std::uint32_t timeout_ms)
+Status St7701sRgbDisplay::wait_for_transfer_complete(std::uint32_t timeout_ms)
 {
     if (transfer_semaphore_ == nullptr)
-        return true;
-    return xSemaphoreTake(transfer_semaphore_, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+        return Status::ok;
+    return xSemaphoreTake(transfer_semaphore_, pdMS_TO_TICKS(timeout_ms)) == pdTRUE ? Status::ok : Status::timeout;
 }
 
-bool St7701sRgbDisplay::wait_for_vsync(std::uint32_t timeout_ms)
+Status St7701sRgbDisplay::wait_for_vsync(std::uint32_t timeout_ms)
 {
     if (vsync_semaphore_ == nullptr)
-        return false;
-    return xSemaphoreTake(vsync_semaphore_, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+        return Status::not_ready;
+    return xSemaphoreTake(vsync_semaphore_, pdMS_TO_TICKS(timeout_ms)) == pdTRUE ? Status::ok : Status::timeout;
 }
 
 std::uint8_t St7701sRgbDisplay::frame_buffer_count() const
@@ -121,36 +125,35 @@ std::uint8_t St7701sRgbDisplay::frame_buffer_count() const
     return config_.frame_buffer_count;
 }
 
-bool St7701sRgbDisplay::get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer)
+Status St7701sRgbDisplay::get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer)
 {
-    if (!initialized_ || panel_ == nullptr || index >= config_.frame_buffer_count)
-        return false;
+    if (!initialized_ || panel_ == nullptr)
+        return Status::not_ready;
+    if (index >= config_.frame_buffer_count)
+        return Status::invalid_argument;
 
     void* frame_buffers[3] = {};
-    if (esp_lcd_rgb_panel_get_frame_buffer(panel_, config_.frame_buffer_count, &frame_buffers[0], &frame_buffers[1],
-                                           &frame_buffers[2])
-        != ESP_OK)
-        return false;
+    if (const esp_err_t err = esp_lcd_rgb_panel_get_frame_buffer(panel_, config_.frame_buffer_count, &frame_buffers[0],
+                                                                 &frame_buffers[1], &frame_buffers[2]);
+        err != ESP_OK)
+        return to_status(err);
     void* frame_buffer = frame_buffers[index];
     if (frame_buffer == nullptr)
-        return false;
+        return Status::error;
 
     buffer = {
         static_cast<std::uint8_t*>(frame_buffer),    config_.width,  config_.height,
         static_cast<std::size_t>(config_.width) * 2, pixel_format(), true,
     };
-    return true;
+    return Status::ok;
 }
 
-bool St7701sRgbDisplay::present_frame_buffer(std::uint8_t index)
+Status St7701sRgbDisplay::present_frame_buffer(std::uint8_t index)
 {
-    if (!initialized_ || panel_ == nullptr || index >= config_.frame_buffer_count)
-        return false;
-
     brick::interfaces::display::WritablePixelBuffer buffer;
-    if (!get_frame_buffer(index, buffer))
-        return false;
-    return esp_lcd_panel_draw_bitmap(panel_, 0, 0, config_.width, config_.height, buffer.data) == ESP_OK;
+    if (const Status status = get_frame_buffer(index, buffer); !is_ok(status))
+        return status;
+    return to_status(esp_lcd_panel_draw_bitmap(panel_, 0, 0, config_.width, config_.height, buffer.data));
 }
 
 bool IRAM_ATTR St7701sRgbDisplay::on_vsync_(esp_lcd_panel_handle_t                panel,
@@ -177,7 +180,7 @@ bool IRAM_ATTR St7701sRgbDisplay::on_color_trans_done_(esp_lcd_panel_handle_t   
     return high_priority_task_woken == pdTRUE;
 }
 
-bool St7701sRgbDisplay::begin_spi_()
+Status St7701sRgbDisplay::begin_spi_()
 {
     spi_bus_config_t bus = {};
     bus.sclk_io_num      = config_.spi_sclk_gpio;
@@ -190,7 +193,7 @@ bool St7701sRgbDisplay::begin_spi_()
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
     {
         ESP_LOGE(TAG, "SPI bus init failed: %s", esp_err_to_name(err));
-        return false;
+        return to_status(err);
     }
     spi_ready_ = err == ESP_OK;
 
@@ -203,12 +206,12 @@ bool St7701sRgbDisplay::begin_spi_()
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "ST7701S SPI device init failed: %s", esp_err_to_name(err));
-        return false;
+        return to_status(err);
     }
-    return true;
+    return Status::ok;
 }
 
-bool St7701sRgbDisplay::write_9bit_(std::uint16_t value)
+Status St7701sRgbDisplay::write_9bit_(std::uint16_t value)
 {
     spi_transaction_ext_t transaction = {};
     transaction.base.flags            = SPI_TRANS_VARIABLE_CMD;
@@ -218,30 +221,31 @@ bool St7701sRgbDisplay::write_9bit_(std::uint16_t value)
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "ST7701S SPI write failed: %s", esp_err_to_name(err));
-        return false;
+        return to_status(err);
     }
-    return true;
+    return Status::ok;
 }
 
-bool St7701sRgbDisplay::send_command_(std::uint8_t command, const std::uint8_t* data, std::size_t length)
+Status St7701sRgbDisplay::send_command_(std::uint8_t command, const std::uint8_t* data, std::size_t length)
 {
-    if (!write_9bit_(command))
-        return false;
+    if (const Status status = write_9bit_(command); !is_ok(status))
+        return status;
     for (std::size_t index = 0; index < length; ++index)
     {
-        if (!write_9bit_(static_cast<std::uint16_t>(data[index]) | 0x100))
-            return false;
+        // Bit 8 set: a parameter byte rather than a command.
+        if (const Status status = write_9bit_(static_cast<std::uint16_t>(data[index]) | 0x100); !is_ok(status))
+            return status;
     }
-    return true;
+    return Status::ok;
 }
 
-bool St7701sRgbDisplay::send_init_sequence_()
+Status St7701sRgbDisplay::send_init_sequence_()
 {
     std::size_t index = 0;
     while (index < config_.init_sequence_size)
     {
         if (config_.init_sequence_size - index < 2)
-            return false;
+            return Status::invalid_argument;
         const auto command = config_.init_sequence[index++];
         const auto count   = config_.init_sequence[index++];
         if (count == 0xFF)
@@ -249,10 +253,12 @@ bool St7701sRgbDisplay::send_init_sequence_()
             vTaskDelay(pdMS_TO_TICKS(command));
             continue;
         }
-        if (config_.init_sequence_size - index < count || !send_command_(command, config_.init_sequence + index, count))
+        if (config_.init_sequence_size - index < count)
+            return Status::invalid_argument;
+        if (const Status status = send_command_(command, config_.init_sequence + index, count); !is_ok(status))
         {
             ESP_LOGE(TAG, "ST7701S init command 0x%02X failed", command);
-            return false;
+            return status;
         }
         index += count;
         vTaskDelay(1);
@@ -262,36 +268,42 @@ bool St7701sRgbDisplay::send_init_sequence_()
     constexpr std::uint8_t direction[] = { 0x00 };
     const std::uint8_t     madctl[]    = { static_cast<std::uint8_t>((config_.mirror_x ? 0x04 : 0x00)
                                                               | (config_.mirror_y ? 0x10 : 0x00)) };
-    if (!send_command_(0xFF, bank0, sizeof(bank0)) || !send_command_(0xC7, direction, sizeof(direction))
-        || !send_command_(0x36, madctl, sizeof(madctl))
-        || !send_command_(config_.invert_colors ? 0x21 : 0x20, nullptr, 0))
-        return false;
+    if (const Status status = send_command_(0xFF, bank0, sizeof(bank0)); !is_ok(status))
+        return status;
+    if (const Status status = send_command_(0xC7, direction, sizeof(direction)); !is_ok(status))
+        return status;
+    if (const Status status = send_command_(0x36, madctl, sizeof(madctl)); !is_ok(status))
+        return status;
+    if (const Status status = send_command_(config_.invert_colors ? 0x21 : 0x20, nullptr, 0); !is_ok(status))
+        return status;
     vTaskDelay(pdMS_TO_TICKS(120));
-    if (!send_command_(0x11, nullptr, 0) || !send_command_(0x29, nullptr, 0))
-        return false;
+    if (const Status status = send_command_(0x11, nullptr, 0); !is_ok(status))  // sleep out
+        return status;
+    if (const Status status = send_command_(0x29, nullptr, 0); !is_ok(status))  // display on
+        return status;
     vTaskDelay(pdMS_TO_TICKS(10));
-    return true;
+    return Status::ok;
 }
 
-bool St7701sRgbDisplay::begin_rgb_panel_()
+Status St7701sRgbDisplay::begin_rgb_panel_()
 {
     if (config_.frame_buffer_count == 0 || config_.frame_buffer_count > 3)
     {
         ESP_LOGE(TAG, "Unsupported framebuffer count: %u", config_.frame_buffer_count);
-        return false;
+        return Status::invalid_argument;
     }
 
     vsync_semaphore_ = xSemaphoreCreateBinary();
     if (vsync_semaphore_ == nullptr)
     {
         ESP_LOGE(TAG, "VSYNC semaphore allocation failed");
-        return false;
+        return Status::no_memory;
     }
     transfer_semaphore_ = xSemaphoreCreateBinary();
     if (transfer_semaphore_ == nullptr)
     {
         ESP_LOGE(TAG, "Transfer semaphore allocation failed");
-        return false;
+        return Status::no_memory;
     }
 
     esp_lcd_rgb_panel_config_t panel_config    = {};
@@ -323,7 +335,7 @@ bool St7701sRgbDisplay::begin_rgb_panel_()
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "RGB panel creation failed: %s", esp_err_to_name(err));
-        return false;
+        return to_status(err);
     }
     esp_lcd_rgb_panel_event_callbacks_t callbacks = {};
     callbacks.on_color_trans_done                 = on_color_trans_done_;
@@ -332,7 +344,7 @@ bool St7701sRgbDisplay::begin_rgb_panel_()
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "RGB panel callback registration failed: %s", esp_err_to_name(err));
-        return false;
+        return to_status(err);
     }
     if (config_.reset_gpio != GPIO_NUM_NC)
     {
@@ -348,9 +360,9 @@ bool St7701sRgbDisplay::begin_rgb_panel_()
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "RGB panel init failed: %s", esp_err_to_name(err));
-        return false;
+        return to_status(err);
     }
-    return true;
+    return Status::ok;
 }
 
 }  // namespace brick::platform::esp32::s3

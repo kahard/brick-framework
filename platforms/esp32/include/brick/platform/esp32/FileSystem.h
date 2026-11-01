@@ -16,9 +16,9 @@ namespace brick::platform::esp32
 class FileSystem final : public interfaces::storage::IFileSystem
 {
 public:
-    bool        mount() override;
+    Status      mount() override;
     std::size_t list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity) override;
-    bool        open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
+    Status      open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
 
     /// Matches max_files of the FAT mount.
     static constexpr std::size_t kMaxOpenFiles = 5;

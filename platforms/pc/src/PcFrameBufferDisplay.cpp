@@ -21,10 +21,10 @@ PcFrameBufferDisplay::PcFrameBufferDisplay(PcDisplayConfig config) : config_(con
     resize();
 }
 
-bool PcFrameBufferDisplay::begin()
+Status PcFrameBufferDisplay::begin()
 {
     started_ = config_.width != 0 && config_.height != 0;
-    return started_;
+    return started_ ? Status::ok : Status::invalid_argument;
 }
 
 DisplaySize PcFrameBufferDisplay::size() const
@@ -38,11 +38,11 @@ PixelFormat PcFrameBufferDisplay::pixel_format() const
     return PixelFormat::rgb565;
 }
 
-bool PcFrameBufferDisplay::set_rotation(Rotation rotation)
+Status PcFrameBufferDisplay::set_rotation(Rotation rotation)
 {
     rotation_ = rotation;
     resize();
-    return true;
+    return Status::ok;
 }
 
 DisplayCapabilities PcFrameBufferDisplay::capabilities() const
@@ -67,14 +67,16 @@ DisplayCapabilities PcFrameBufferDisplay::capabilities() const
     return result;
 }
 
-bool PcFrameBufferDisplay::draw_buffer(DisplayRect area, const PixelBuffer& buffer)
+Status PcFrameBufferDisplay::draw_buffer(DisplayRect area, const PixelBuffer& buffer)
 {
+    if (!started_)
+        return Status::not_ready;
     const auto display_size = size();
-    if (!started_ || !buffer.valid() || buffer.format != PixelFormat::rgb565 || area.empty() || area.x < 0 || area.y < 0
+    if (!buffer.valid() || buffer.format != PixelFormat::rgb565 || area.empty() || area.x < 0 || area.y < 0
         || area.x + area.width > display_size.width || area.y + area.height > display_size.height
         || buffer.width < static_cast<std::uint32_t>(area.width)
         || buffer.height < static_cast<std::uint32_t>(area.height))
-        return false;
+        return Status::invalid_argument;
     for (std::int32_t row = 0; row < area.height; ++row)
     {
         const std::uint8_t* source      = buffer.data + static_cast<std::size_t>(row) * buffer.stride_bytes;
@@ -83,13 +85,13 @@ bool PcFrameBufferDisplay::draw_buffer(DisplayRect area, const PixelBuffer& buff
         std::memcpy(destination, source, static_cast<std::size_t>(area.width) * 2U);
     }
     ++frame_counter_;
-    return true;
+    return Status::ok;
 }
 
-bool PcFrameBufferDisplay::wait_for_vsync(std::uint32_t timeout_ms)
+Status PcFrameBufferDisplay::wait_for_vsync(std::uint32_t timeout_ms)
 {
     (void)timeout_ms;
-    return config_.frame_buffers != 0;
+    return config_.frame_buffers != 0 ? Status::ok : Status::not_supported;
 }
 
 std::uint8_t PcFrameBufferDisplay::frame_buffer_count() const
@@ -97,10 +99,10 @@ std::uint8_t PcFrameBufferDisplay::frame_buffer_count() const
     return config_.frame_buffers;
 }
 
-bool PcFrameBufferDisplay::get_frame_buffer(std::uint8_t index, WritablePixelBuffer& buffer)
+Status PcFrameBufferDisplay::get_frame_buffer(std::uint8_t index, WritablePixelBuffer& buffer)
 {
     if (index >= frame_buffers_.size())
-        return false;
+        return Status::invalid_argument;
     const auto display_size = size();
     buffer.data             = reinterpret_cast<std::uint8_t*>(frame_buffers_[index].data());
     buffer.width            = display_size.width;
@@ -108,16 +110,18 @@ bool PcFrameBufferDisplay::get_frame_buffer(std::uint8_t index, WritablePixelBuf
     buffer.stride_bytes     = static_cast<std::size_t>(display_size.width) * 2U;
     buffer.format           = PixelFormat::rgb565;
     buffer.dma_capable      = true;
-    return true;
+    return Status::ok;
 }
 
-bool PcFrameBufferDisplay::present_frame_buffer(std::uint8_t index)
+Status PcFrameBufferDisplay::present_frame_buffer(std::uint8_t index)
 {
-    if (!started_ || index >= frame_buffers_.size())
-        return false;
+    if (!started_)
+        return Status::not_ready;
+    if (index >= frame_buffers_.size())
+        return Status::invalid_argument;
     screen_ = frame_buffers_[index];
     ++frame_counter_;
-    return true;
+    return Status::ok;
 }
 
 void PcFrameBufferDisplay::resize()

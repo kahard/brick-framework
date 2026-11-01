@@ -1,5 +1,7 @@
 #include "brick/platform/esp32/PwmAudioOutput.h"
 
+#include "brick/platform/esp32/EspStatus.h"
+
 namespace brick::platform::esp32
 {
 
@@ -8,18 +10,18 @@ PwmAudioOutput::PwmAudioOutput(int pin, int channel, int carrier_hz)
 {
 }
 
-bool PwmAudioOutput::begin()
+Status PwmAudioOutput::begin()
 {
     if (initialized_)
-        return true;
+        return Status::ok;
     ledc_timer_config_t timer_config = {};
     timer_config.speed_mode          = mode_;
     timer_config.duty_resolution     = LEDC_TIMER_8_BIT;
     timer_config.timer_num           = LEDC_TIMER_0;
     timer_config.freq_hz             = carrier_hz_;
     timer_config.clk_cfg             = LEDC_AUTO_CLK;
-    if (ledc_timer_config(&timer_config) != ESP_OK)
-        return false;
+    if (const esp_err_t err = ledc_timer_config(&timer_config); err != ESP_OK)
+        return to_status(err);
     ledc_channel_config_t channel_config = {};
     channel_config.gpio_num              = pin_;
     channel_config.speed_mode            = mode_;
@@ -28,10 +30,10 @@ bool PwmAudioOutput::begin()
     channel_config.timer_sel             = LEDC_TIMER_0;
     channel_config.duty                  = 128;
     channel_config.hpoint                = 0;
-    if (ledc_channel_config(&channel_config) != ESP_OK)
-        return false;
+    if (const esp_err_t err = ledc_channel_config(&channel_config); err != ESP_OK)
+        return to_status(err);
     initialized_ = true;
-    return true;
+    return Status::ok;
 }
 
 void PwmAudioOutput::write_sample(std::uint8_t sample)

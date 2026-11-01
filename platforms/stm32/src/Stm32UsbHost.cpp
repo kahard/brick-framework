@@ -15,7 +15,7 @@ void Stm32UsbHost::user_callback_(USBH_HandleTypeDef*, uint8_t event)
     active_->class_active_ = event == HOST_USER_CLASS_ACTIVE;
 }
 
-bool Stm32UsbHost::begin()
+Status Stm32UsbHost::begin()
 {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -48,15 +48,15 @@ bool Stm32UsbHost::begin()
     hcd_.Init.vbus_sensing_enable = DISABLE;
     hcd_.Init.use_dedicated_ep1   = DISABLE;
     if (HAL_HCD_Init(&hcd_) != HAL_OK)
-        return false;
+        return Status::error;
 
     active_ = this;
     if (USBH_Init(&host_, user_callback_, config_.host_id) != USBH_OK)
-        return false;
+        return Status::error;
     host_.pData = &hcd_;
     if (USBH_RegisterClass(&host_, USBH_MSC_CLASS) != USBH_OK)
-        return false;
-    return USBH_Start(&host_) == USBH_OK;
+        return Status::error;
+    return USBH_Start(&host_) == USBH_OK ? Status::ok : Status::error;
 }
 
 void Stm32UsbHost::process()
@@ -196,6 +196,7 @@ extern "C" void HAL_HCD_PortEnabled_Callback(HCD_HandleTypeDef*)
 extern "C" void HAL_HCD_HC_NotifyURBChange_Callback(HCD_HandleTypeDef* hhcd, uint8_t chnum, HCD_URBStateTypeDef state)
 {
     (void)chnum;
+    (void)state;
     (void)hhcd;
 }
 

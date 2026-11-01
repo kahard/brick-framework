@@ -20,13 +20,13 @@ public:
     PcFile(const PcFile&)            = delete;
     PcFile& operator=(const PcFile&) = delete;
 
-    bool open(const std::string& host_path, const char* mode);
-    void close();
-    bool is_open() const { return file_ != nullptr; }
+    Status open(const std::string& host_path, const char* mode);
+    void   close();
+    bool   is_open() const { return file_ != nullptr; }
 
     std::size_t read(void* buffer, std::size_t size, std::size_t count) override;
     std::size_t write(const void* buffer, std::size_t size, std::size_t count) override;
-    bool        seek(long offset, int origin) override;
+    Status      seek(long offset, int origin) override;
 
 private:
     FILE* file_ = nullptr;
@@ -40,10 +40,10 @@ class PcFileSystem final : public brick::interfaces::storage::IRemovableFileSyst
 public:
     explicit PcFileSystem(std::string root, std::string mount_point = "/sdcard");
 
-    bool        mount() override;
+    Status      mount() override;
     std::size_t list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
                            std::size_t capacity) override;
-    bool        open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
+    Status      open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
 
     bool        mounted() const override { return mounted_; }
     void        unmount() override { mounted_ = false; }

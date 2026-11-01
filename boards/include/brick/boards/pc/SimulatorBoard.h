@@ -60,14 +60,16 @@ public:
                      | static_cast<std::uint32_t>(Capability::sd_card) };
     }
 
-    bool begin() override
+    /// Starts every peripheral, even after a failure, and returns the first
+    /// failure (Status::ok when all started).
+    Status begin() override
     {
-        bool ok = display_.begin();
-        ok      = backlight_.begin() && ok;
-        ok      = touch_.begin() && ok;
-        ok      = button_.begin() && ok;
-        ok      = serial_.begin() && ok;
-        return ok;
+        const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin(), button_.begin(),
+                                   serial_.begin() };
+        for (const Status status : results)
+            if (!is_ok(status))
+                return status;
+        return Status::ok;
     }
 
     brick::interfaces::display::IDisplayDevice* display_device() override { return &display_; }

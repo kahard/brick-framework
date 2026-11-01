@@ -1,6 +1,7 @@
 #pragma once
 
 #include "brick/interfaces/storage/IByteStorage.h"
+#include "brick/platform/stm32/f1/HalStatus.h"
 #include "stm32f1xx_hal.h"
 
 namespace brick::platform::stm32::f1
@@ -19,8 +20,8 @@ class I2cEeprom final : public brick::interfaces::storage::IByteStorage
 {
 public:
     explicit I2cEeprom(I2cEepromConfig config);
-    bool read(std::uint32_t address, void* data, std::size_t size) override;
-    bool write(std::uint32_t address, const void* data, std::size_t size) override;
+    Status read(std::uint32_t address, void* data, std::size_t size) override;
+    Status write(std::uint32_t address, const void* data, std::size_t size) override;
 
 private:
     I2cEepromConfig config_;

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "brick/Status.h"
 #include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/display/IFrameBufferDisplay.h"
 
@@ -27,18 +28,18 @@ class PcFrameBufferDisplay final : public brick::interfaces::display::IDisplayDe
 public:
     explicit PcFrameBufferDisplay(PcDisplayConfig config);
 
-    bool                                    begin() override;
+    Status                                  begin() override;
     brick::interfaces::display::DisplaySize size() const override;
     brick::interfaces::display::PixelFormat pixel_format() const override;
-    bool                                    set_rotation(brick::interfaces::display::Rotation rotation) override;
+    Status                                  set_rotation(brick::interfaces::display::Rotation rotation) override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool                                            draw_buffer(brick::interfaces::display::DisplayRect        area,
+    Status                                          draw_buffer(brick::interfaces::display::DisplayRect        area,
                                                                 const brick::interfaces::display::PixelBuffer& buffer) override;
-    bool                                            wait_for_vsync(std::uint32_t timeout_ms) override;
+    Status                                          wait_for_vsync(std::uint32_t timeout_ms) override;
 
     std::uint8_t frame_buffer_count() const override;
-    bool         get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
-    bool         present_frame_buffer(std::uint8_t index) override;
+    Status       get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
+    Status       present_frame_buffer(std::uint8_t index) override;
 
     /// Visible image, size().width * size().height RGB565 pixels, row-major.
     const std::uint16_t* screen() const { return screen_.data(); }

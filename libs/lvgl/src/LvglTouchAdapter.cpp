@@ -31,7 +31,7 @@ void LvglTouchAdapter::read_callback_(lv_indev_t* indev, lv_indev_data_t* data)
 
     std::array<brick::interfaces::display::TouchPoint, 1> points{};
     std::size_t                                           count = 0;
-    if (!adapter->touchscreen_.read(points.data(), points.size(), count) || count == 0)
+    if (!is_ok(adapter->touchscreen_.read(points.data(), points.size(), count)) || count == 0)
     {
         data->state = LV_INDEV_STATE_RELEASED;
         return;

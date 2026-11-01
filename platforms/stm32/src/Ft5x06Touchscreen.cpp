@@ -9,10 +9,10 @@ Ft5x06Touchscreen::Ft5x06Touchscreen(Ft5x06TouchscreenConfig config) : config_(c
 {
 }
 
-bool Ft5x06Touchscreen::begin()
+Status Ft5x06Touchscreen::begin()
 {
     if (config_.i2c == nullptr)
-        return false;
+        return Status::error;
     configure_pin_(config_.interrupt_port, config_.interrupt_pin, GPIO_MODE_INPUT);
     configure_pin_(config_.reset_port, config_.reset_pin, GPIO_MODE_OUTPUT_PP);
     configure_pin_(config_.wake_port, config_.wake_pin, GPIO_MODE_OUTPUT_PP);
@@ -24,19 +24,19 @@ bool Ft5x06Touchscreen::begin()
     HAL_Delay(50);
     write_pin_(config_.reset_port, config_.reset_pin, true);
     HAL_Delay(100);
-    return true;
+    return Status::ok;
 }
 
-bool Ft5x06Touchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count)
+Status Ft5x06Touchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count)
 {
     count = 0;
     if (points == nullptr || capacity == 0 || config_.i2c == nullptr)
-        return false;
+        return Status::error;
     std::uint8_t data[9]{};
     if (HAL_I2C_Mem_Read(config_.i2c, static_cast<std::uint16_t>(config_.address) << 1, 0xF9, I2C_MEMADD_SIZE_8BIT,
                          data, sizeof(data), 100)
         != HAL_OK)
-        return false;
+        return Status::error;
     const auto touches = std::min<std::uint8_t>(data[3], 1);
     if (touches == 0)
     {
@@ -46,7 +46,7 @@ bool Ft5x06Touchscreen::read(brick::interfaces::display::TouchPoint* points, std
             count           = 1;
         }
         was_pressed_ = false;
-        return true;
+        return Status::ok;
     }
     const auto raw_x = static_cast<std::uint16_t>(((data[5] & 0x0F) << 8) | data[6]);
     const auto raw_y = static_cast<std::uint16_t>(((data[7] & 0x0F) << 8) | data[8]);
@@ -60,7 +60,7 @@ bool Ft5x06Touchscreen::read(brick::interfaces::display::TouchPoint* points, std
         was_pressed_ ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
     was_pressed_ = true;
     count        = 1;
-    return true;
+    return Status::ok;
 }
 
 void Ft5x06Touchscreen::write_pin_(GPIO_TypeDef* port, std::uint16_t pin, bool high) const

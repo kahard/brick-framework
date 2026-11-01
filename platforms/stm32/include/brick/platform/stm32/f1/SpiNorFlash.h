@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "brick/platform/stm32/f1/HalStatus.h"
 #include "stm32f1xx_hal.h"
 
 namespace brick::platform::stm32::f1
@@ -19,11 +20,11 @@ class SpiNorFlash
 {
 public:
     explicit SpiNorFlash(SpiNorFlashConfig config);
-    bool read_jedec_id(std::uint8_t id[3]);
-    bool read(std::uint32_t address, void* data, std::size_t size);
+    Status read_jedec_id(std::uint8_t id[3]);
+    Status read(std::uint32_t address, void* data, std::size_t size);
 
 private:
-    bool              transfer_(const std::uint8_t* command, std::size_t command_size, void* data, std::size_t size);
+    Status            transfer_(const std::uint8_t* command, std::size_t command_size, void* data, std::size_t size);
     SpiNorFlashConfig config_;
 };
 

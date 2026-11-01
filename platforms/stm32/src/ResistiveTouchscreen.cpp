@@ -14,7 +14,7 @@ ResistiveTouchscreen::ResistiveTouchscreen(ResistiveTouchscreenConfig config) : 
 {
 }
 
-bool ResistiveTouchscreen::begin()
+Status ResistiveTouchscreen::begin()
 {
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -28,17 +28,17 @@ bool ResistiveTouchscreen::begin()
     adc_.Init.ExternalTrigConv      = ADC_SOFTWARE_START;
     adc_.Init.DataAlign             = ADC_DATAALIGN_RIGHT;
     adc_.Init.NbrOfConversion       = 1;
-    if (HAL_ADC_Init(&adc_) != HAL_OK)
-        return false;
-    return HAL_ADCEx_Calibration_Start(&adc_) == HAL_OK;
+    if (const HAL_StatusTypeDef result = HAL_ADC_Init(&adc_); result != HAL_OK)
+        return to_status(result);
+    return to_status(HAL_ADCEx_Calibration_Start(&adc_));
 }
 
-bool ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity,
-                                std::size_t& count)
+Status ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity,
+                                  std::size_t& count)
 {
     count = 0;
     if (points == nullptr || capacity == 0)
-        return false;
+        return Status::invalid_argument;
     if (!layers_connected_())
     {
         if (was_pressed_)
@@ -47,13 +47,13 @@ bool ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, 
             count           = 1;
         }
         was_pressed_ = false;
-        return true;
+        return Status::ok;
     }
 
     std::uint16_t raw_x = 0;
     std::uint16_t raw_y = 0;
-    if (!sample_position_(raw_x, raw_y))
-        return false;
+    if (const Status status = sample_position_(raw_x, raw_y); !is_ok(status))
+        return status;
     auto& point = points[0];
     point.id    = 0;
     point.raw_x = raw_x;
@@ -64,7 +64,7 @@ bool ResistiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, 
         was_pressed_ ? brick::interfaces::display::TouchState::moved : brick::interfaces::display::TouchState::pressed;
     was_pressed_ = true;
     count        = 1;
-    return true;
+    return Status::ok;
 }
 
 bool ResistiveTouchscreen::layers_connected_()
@@ -76,10 +76,10 @@ bool ResistiveTouchscreen::layers_connected_()
     GPIOC->BSRR          = static_cast<std::uint32_t>(kY1) << 16;
     GPIOB->BSRR          = static_cast<std::uint32_t>(kY2) << 16;
     std::uint16_t sample = 0;
-    return sample_adc_(ADC_CHANNEL_14, sample) && sample < config_.pressed_threshold;
+    return is_ok(sample_adc_(ADC_CHANNEL_14, sample)) && sample < config_.pressed_threshold;
 }
 
-bool ResistiveTouchscreen::sample_position_(std::uint16_t& raw_x, std::uint16_t& raw_y)
+Status ResistiveTouchscreen::sample_position_(std::uint16_t& raw_x, std::uint16_t& raw_y)
 {
     configure_pin_(GPIOC, kX1, GPIO_MODE_OUTPUT_PP);
     configure_pin_(GPIOB, kX2, GPIO_MODE_OUTPUT_PP);
@@ -87,8 +87,8 @@ bool ResistiveTouchscreen::sample_position_(std::uint16_t& raw_x, std::uint16_t&
     configure_pin_(GPIOB, kY2, GPIO_MODE_INPUT);
     GPIOC->BSRR = kX1;
     GPIOB->BSRR = static_cast<std::uint32_t>(kX2) << 16;
-    if (!sample_adc_(ADC_CHANNEL_15, raw_x))
-        return false;
+    if (const Status status = sample_adc_(ADC_CHANNEL_15, raw_x); !is_ok(status))
+        return status;
 
     configure_pin_(GPIOC, kX1, GPIO_MODE_ANALOG);
     configure_pin_(GPIOB, kX2, GPIO_MODE_INPUT);
@@ -99,19 +99,22 @@ bool ResistiveTouchscreen::sample_position_(std::uint16_t& raw_x, std::uint16_t&
     return sample_adc_(ADC_CHANNEL_14, raw_y);
 }
 
-bool ResistiveTouchscreen::sample_adc_(std::uint32_t channel, std::uint16_t& value)
+Status ResistiveTouchscreen::sample_adc_(std::uint32_t channel, std::uint16_t& value)
 {
     ADC_ChannelConfTypeDef channel_config{};
     channel_config.Channel      = channel;
     channel_config.Rank         = ADC_REGULAR_RANK_1;
     channel_config.SamplingTime = ADC_SAMPLETIME_28CYCLES_5;
-    if (HAL_ADC_ConfigChannel(&adc_, &channel_config) != HAL_OK || HAL_ADC_Start(&adc_) != HAL_OK)
-        return false;
-    const bool ready = HAL_ADC_PollForConversion(&adc_, 10) == HAL_OK;
+    if (const HAL_StatusTypeDef result = HAL_ADC_ConfigChannel(&adc_, &channel_config); result != HAL_OK)
+        return to_status(result);
+    if (const HAL_StatusTypeDef result = HAL_ADC_Start(&adc_); result != HAL_OK)
+        return to_status(result);
+    const HAL_StatusTypeDef conversion = HAL_ADC_PollForConversion(&adc_, 10);
+    const bool              ready      = conversion == HAL_OK;
     if (ready)
         value = static_cast<std::uint16_t>(HAL_ADC_GetValue(&adc_));
     HAL_ADC_Stop(&adc_);
-    return ready;
+    return to_status(conversion);
 }
 
 void ResistiveTouchscreen::configure_pin_(GPIO_TypeDef* port, std::uint16_t pin, std::uint32_t mode,

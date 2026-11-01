@@ -12,8 +12,8 @@ class CydTouchscreen final : public brick::interfaces::display::ITouchscreen
 public:
     CydTouchscreen(touch::Xpt2046Touchscreen& touchscreen, CydSpi3PinMux& pin_mux);
 
-    bool begin() override;
-    bool read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
+    Status begin() override;
+    Status read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
 
 private:
     touch::Xpt2046Touchscreen& touchscreen_;

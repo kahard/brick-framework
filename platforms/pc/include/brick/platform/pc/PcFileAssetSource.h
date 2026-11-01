@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "brick/Status.h"
 #include "brick/interfaces/display/AssetDescriptor.h"
 
 namespace brick::platform::pc
@@ -20,23 +21,23 @@ class PcFileAssetSource final : public brick::interfaces::display::IAssetSource
 public:
     explicit PcFileAssetSource(std::string path) : path_(std::move(path)) {}
 
-    bool begin()
+    Status begin()
     {
         std::ifstream file(path_, std::ios::binary);
         if (!file)
-            return false;
+            return Status::not_found;
         data_.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-        return !data_.empty();
+        return data_.empty() ? Status::error : Status::ok;
     }
 
-    bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
-              std::size_t bytes) override
+    Status read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
+                std::size_t bytes) override
     {
         if (destination == nullptr || offset > asset.size || bytes > asset.size - offset || asset.offset > data_.size()
             || asset.offset + offset + bytes > data_.size())
-            return false;
+            return Status::invalid_argument;
         std::memcpy(destination, data_.data() + asset.offset + offset, bytes);
-        return true;
+        return Status::ok;
     }
 
     std::size_t size() const { return data_.size(); }

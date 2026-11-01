@@ -25,13 +25,13 @@ Gsl3680Touchscreen::~Gsl3680Touchscreen()
         i2c_del_master_bus(bus_);
 }
 
-bool Gsl3680Touchscreen::begin()
+Status Gsl3680Touchscreen::begin()
 {
     if (started_)
-        return true;
+        return Status::ok;
     if (config_.sda_gpio == GPIO_NUM_NC || config_.scl_gpio == GPIO_NUM_NC || config_.display_size.width == 0
         || config_.display_size.height == 0)
-        return false;
+        return Status::invalid_argument;
 
     i2c_master_bus_config_t bus_config      = {};
     bus_config.clk_source                   = I2C_CLK_SRC_DEFAULT;
@@ -40,8 +40,8 @@ bool Gsl3680Touchscreen::begin()
     bus_config.scl_io_num                   = config_.scl_gpio;
     bus_config.glitch_ignore_cnt            = 7;
     bus_config.flags.enable_internal_pullup = true;
-    if (i2c_new_master_bus(&bus_config, &bus_) != ESP_OK)
-        return false;
+    if (const esp_err_t err = i2c_new_master_bus(&bus_config, &bus_); err != ESP_OK)
+        return to_status(err);
 
     esp_lcd_panel_io_i2c_config_t io_config = {};
     io_config.dev_addr                      = ESP_LCD_TOUCH_IO_I2C_GSL3680_ADDRESS;
@@ -51,8 +51,8 @@ bool Gsl3680Touchscreen::begin()
     io_config.lcd_param_bits                = 8;
     io_config.flags.disable_control_phase   = 1;
     io_config.scl_speed_hz                  = config_.clock_hz;
-    if (esp_lcd_new_panel_io_i2c(bus_, &io_config, &io_) != ESP_OK)
-        return false;
+    if (const esp_err_t err = esp_lcd_new_panel_io_i2c(bus_, &io_config, &io_); err != ESP_OK)
+        return to_status(err);
 
     esp_lcd_touch_io_gsl3680_config_t gsl_config = {};
     gsl_config.dev_addr                          = ESP_LCD_TOUCH_IO_I2C_GSL3680_ADDRESS;
@@ -67,25 +67,28 @@ bool Gsl3680Touchscreen::begin()
     touch_config.flags.mirror_x                  = config_.mirror_x;
     touch_config.flags.mirror_y                  = config_.mirror_y;
     touch_config.flags.swap_xy                   = config_.swap_xy;
-    if (esp_lcd_touch_new_i2c_gsl3680(io_, &touch_config, &touch_) != ESP_OK)
-        return false;
+    if (const esp_err_t err = esp_lcd_touch_new_i2c_gsl3680(io_, &touch_config, &touch_); err != ESP_OK)
+        return to_status(err);
     started_ = true;
     ESP_LOGI(TAG, "GSL3680 initialized: %ux%u", config_.display_size.width, config_.display_size.height);
-    return true;
+    return Status::ok;
 }
 
-bool Gsl3680Touchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count)
+Status Gsl3680Touchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity,
+                                std::size_t& count)
 {
     count = 0;
-    if (!started_ || touch_ == nullptr || points == nullptr || capacity == 0)
-        return false;
-    if (esp_lcd_touch_read_data(touch_) != ESP_OK)
-        return false;
+    if (!started_ || touch_ == nullptr)
+        return Status::not_ready;
+    if (points == nullptr || capacity == 0)
+        return Status::invalid_argument;
+    if (const esp_err_t err = esp_lcd_touch_read_data(touch_); err != ESP_OK)
+        return to_status(err);
 
     esp_lcd_touch_point_data_t data[5]     = {};
     std::uint8_t               point_count = 0;
-    if (esp_lcd_touch_get_data(touch_, data, &point_count, 5) != ESP_OK)
-        return false;
+    if (const esp_err_t err = esp_lcd_touch_get_data(touch_, data, &point_count, 5); err != ESP_OK)
+        return to_status(err);
     std::array<bool, 5> seen{};
     for (std::size_t i = 0; i < point_count && count < capacity; ++i)
     {
@@ -114,7 +117,7 @@ bool Gsl3680Touchscreen::read(brick::interfaces::display::TouchPoint* points, st
     for (std::size_t i = 0; i < count; ++i)
         if (points[i].state != brick::interfaces::display::TouchState::released)
             last_points_[points[i].id] = points[i];
-    return true;
+    return Status::ok;
 }
 
 }  // namespace brick::platform::esp32::touch

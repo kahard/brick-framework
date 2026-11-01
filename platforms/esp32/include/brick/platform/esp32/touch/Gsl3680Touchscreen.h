@@ -6,6 +6,7 @@
 
 #include "brick/interfaces/display/DisplayTypes.h"
 #include "brick/interfaces/display/ITouchscreen.h"
+#include "brick/platform/esp32/EspStatus.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "esp_lcd_panel_io.h"
@@ -33,8 +34,8 @@ public:
     explicit Gsl3680Touchscreen(Gsl3680Config config);
     ~Gsl3680Touchscreen() override;
 
-    bool begin() override;
-    bool read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
+    Status begin() override;
+    Status read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
 
 private:
     Gsl3680Config                                         config_;

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "brick/Status.h"
 #include "brick/interfaces/communication/ISerialPort.h"
 
 namespace brick::platform::pc
@@ -21,17 +22,17 @@ class PcSerialPort final : public brick::interfaces::communication::ISerialPort
 public:
     explicit PcSerialPort(std::string input_file = {}) : input_file_(std::move(input_file)) {}
 
-    bool begin() override
+    Status begin() override
     {
         if (input_file_.empty())
-            return true;
+            return Status::ok;
         std::ifstream file(input_file_, std::ios::binary);
         if (!file)
-            return false;
+            return Status::not_found;
         const std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         for (const char byte : bytes)
             input_.push_back(static_cast<std::uint8_t>(byte));
-        return true;
+        return Status::ok;
     }
 
     std::size_t read(std::uint8_t* buffer, std::size_t capacity) override

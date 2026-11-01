@@ -38,12 +38,12 @@ public:
     SdmmcFile(const SdmmcFile&)            = delete;
     SdmmcFile& operator=(const SdmmcFile&) = delete;
 
-    bool        open(const char* path, const char* mode);
+    Status      open(const char* path, const char* mode);
     void        close();
     bool        is_open() const { return handle_ != nullptr; }
     std::size_t read(void* buffer, std::size_t size, std::size_t count) override;
     std::size_t write(const void* buffer, std::size_t size, std::size_t count) override;
-    bool        seek(long offset, int origin) override;
+    Status      seek(long offset, int origin) override;
 
 private:
     std::FILE* handle_ = nullptr;
@@ -53,12 +53,12 @@ class SdmmcFileSystem final : public interfaces::storage::IRemovableFileSystem
 {
 public:
     explicit SdmmcFileSystem(SdmmcFileSystemConfig config = {}) : config_(config) {}
-    bool        mount() override;
+    Status      mount() override;
     void        unmount() override;
     bool        mounted() const override { return mounted_; }
     bool        probe(const char* path) override;
     std::size_t list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity) override;
-    bool        open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
+    Status      open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
 
     /// Matches max_files of the FAT mount.
     static constexpr std::size_t kMaxOpenFiles = 5;

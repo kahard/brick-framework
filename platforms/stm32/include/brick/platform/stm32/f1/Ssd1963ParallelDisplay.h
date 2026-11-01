@@ -41,23 +41,23 @@ class Ssd1963ParallelDisplay final : public brick::interfaces::display::IDisplay
 public:
     explicit Ssd1963ParallelDisplay(Ssd1963ParallelDisplayConfig config);
 
-    bool                                            begin() override;
+    Status                                          begin() override;
     brick::interfaces::display::DisplaySize         size() const override;
     brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
-                     const brick::interfaces::display::PixelBuffer& buffer) override;
+    Status set_rotation(brick::interfaces::display::Rotation rotation) override;
+    Status draw_buffer(brick::interfaces::display::DisplayRect        area,
+                       const brick::interfaces::display::PixelBuffer& buffer) override;
 
 private:
-    void configure_output_(GPIO_TypeDef* port, std::uint16_t pins) const;
-    void write_pin_(GPIO_TypeDef* port, std::uint16_t pin, bool high) const;
-    void write_bus_(std::uint8_t value) const;
-    void pulse_write_() const;
-    void command_(std::uint8_t value) const;
-    void data_(std::uint8_t value) const;
-    bool initialize_controller_();
-    bool set_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height) const;
+    void   configure_output_(GPIO_TypeDef* port, std::uint16_t pins) const;
+    void   write_pin_(GPIO_TypeDef* port, std::uint16_t pin, bool high) const;
+    void   write_bus_(std::uint8_t value) const;
+    void   pulse_write_() const;
+    void   command_(std::uint8_t value) const;
+    void   data_(std::uint8_t value) const;
+    Status initialize_controller_();
+    Status set_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height) const;
 
     Ssd1963ParallelDisplayConfig config_;
     bool                         started_ = false;

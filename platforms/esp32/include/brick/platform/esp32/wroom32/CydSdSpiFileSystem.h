@@ -16,13 +16,13 @@ public:
     CydSdSpiFileSystem(SdSpiFileSystemConfig config, CydSpi3PinMux& pin_mux);
     ~CydSdSpiFileSystem() override;
 
-    bool        mount() override;
+    Status      mount() override;
     void        unmount() override;
     bool        mounted() const override;
     bool        probe(const char* path) override;
     std::size_t list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
                            std::size_t capacity) override;
-    bool        open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
+    Status      open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
 
 protected:
     void close(brick::interfaces::storage::IFile& file) override;
@@ -33,13 +33,13 @@ private:
     class File final : public brick::interfaces::storage::IFile
     {
     public:
-        bool open(SdSpiFileSystem& filesystem, CydSpi3PinMux& pin_mux, const char* path, const char* mode);
-        void close();
-        bool is_open() const { return file_.is_open(); }
+        Status open(SdSpiFileSystem& filesystem, CydSpi3PinMux& pin_mux, const char* path, const char* mode);
+        void   close();
+        bool   is_open() const { return file_.is_open(); }
 
         std::size_t read(void* buffer, std::size_t size, std::size_t count) override;
         std::size_t write(const void* buffer, std::size_t size, std::size_t count) override;
-        bool        seek(long offset, int origin) override;
+        Status      seek(long offset, int origin) override;
 
     private:
         brick::interfaces::storage::FileHandle file_;

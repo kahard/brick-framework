@@ -29,8 +29,8 @@ class Ft5x06Touchscreen final : public brick::interfaces::display::ITouchscreen
 {
 public:
     explicit Ft5x06Touchscreen(Ft5x06TouchscreenConfig config);
-    bool begin() override;
-    bool read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
+    Status begin() override;
+    Status read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override;
 
 private:
     void write_pin_(GPIO_TypeDef* port, std::uint16_t pin, bool high) const;

@@ -3,10 +3,10 @@
 namespace brick::platform::stm32::f1
 {
 
-bool Stm32Buzzer::begin()
+Status Stm32Buzzer::begin()
 {
     if (config_.port == nullptr)
-        return false;
+        return Status::invalid_argument;
     if (config_.port == GPIOB)
         __HAL_RCC_GPIOB_CLK_ENABLE();
     else if (config_.port == GPIOA)
@@ -23,22 +23,22 @@ bool Stm32Buzzer::begin()
     return set_enabled(false);
 }
 
-bool Stm32Buzzer::set_enabled(bool enabled)
+Status Stm32Buzzer::set_enabled(bool enabled)
 {
     if (!initialized_)
-        return false;
+        return Status::not_ready;
     const bool level = enabled == config_.active_high;
     if (level)
         config_.port->BSRR = config_.pin;
     else
         config_.port->BSRR = static_cast<std::uint32_t>(config_.pin) << 16;
-    return true;
+    return Status::ok;
 }
 
-bool Stm32Buzzer::beep(std::uint16_t duration_ms)
+Status Stm32Buzzer::beep(std::uint16_t duration_ms)
 {
-    if (!set_enabled(true))
-        return false;
+    if (const Status status = set_enabled(true); !is_ok(status))
+        return status;
     HAL_Delay(duration_ms);
     return set_enabled(false);
 }

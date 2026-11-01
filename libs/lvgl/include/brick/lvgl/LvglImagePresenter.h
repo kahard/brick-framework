@@ -15,7 +15,7 @@ public:
 
     void set_target(lv_obj_t* target);
 
-    bool present(const std::uint8_t* data, std::uint32_t width, std::uint32_t height) override;
+    Status present(const std::uint8_t* data, std::uint32_t width, std::uint32_t height) override;
 
 private:
     lv_obj_t*    target_;

@@ -7,13 +7,13 @@ Ssd1963ParallelDisplay::Ssd1963ParallelDisplay(Ssd1963ParallelDisplayConfig conf
 {
 }
 
-bool Ssd1963ParallelDisplay::begin()
+Status Ssd1963ParallelDisplay::begin()
 {
     if (started_)
-        return true;
+        return Status::ok;
     if (config_.data_port == nullptr || config_.data_mask == 0 || config_.rs_port == nullptr
         || config_.wr_port == nullptr || config_.cs_port == nullptr)
-        return false;
+        return Status::invalid_argument;
     configure_output_(config_.data_port, config_.data_mask);
     configure_output_(config_.rs_port, config_.rs_pin);
     configure_output_(config_.wr_port, config_.wr_pin);
@@ -38,8 +38,9 @@ bool Ssd1963ParallelDisplay::begin()
     HAL_Delay(100);
     write_pin_(config_.reset_port, config_.reset_pin, true);
     HAL_Delay(100);
-    started_ = initialize_controller_();
-    return started_;
+    const Status status = initialize_controller_();
+    started_            = is_ok(status);
+    return status;
 }
 
 brick::interfaces::display::DisplaySize Ssd1963ParallelDisplay::size() const
@@ -68,26 +69,31 @@ brick::interfaces::display::DisplayCapabilities Ssd1963ParallelDisplay::capabili
              brick::interfaces::display::RenderMode::partial };
 }
 
-bool Ssd1963ParallelDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
+Status Ssd1963ParallelDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
 {
-    if (!started_ || rotation != brick::interfaces::display::Rotation::rotate_0)
-        return false;
+    if (!started_)
+        return Status::not_ready;
+    if (rotation != brick::interfaces::display::Rotation::rotate_0)
+        return Status::not_supported;
     command_(0x36);
     data_(0x00);
-    return true;
+    return Status::ok;
 }
 
-bool Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
-                                         const brick::interfaces::display::PixelBuffer& buffer)
+Status Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
+                                           const brick::interfaces::display::PixelBuffer& buffer)
 {
     constexpr std::size_t bytes_per_pixel = 2;
-    if (!started_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width
+    if (!started_)
+        return Status::not_ready;
+    if (area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width
         || area.y + area.height > config_.height || !buffer.valid()
         || buffer.width != static_cast<std::uint32_t>(area.width)
         || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format()
-        || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel
-        || !set_window_(area.x, area.y, area.width, area.height))
-        return false;
+        || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel)
+        return Status::invalid_argument;
+    if (const Status status = set_window_(area.x, area.y, area.width, area.height); !is_ok(status))
+        return status;
 
     command_(0x2C);
     for (std::uint32_t row = 0; row < buffer.height; ++row)
@@ -102,7 +108,7 @@ bool Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRect
             data_(static_cast<std::uint8_t>((value << 3) & 0xF8));
         }
     }
-    return true;
+    return Status::ok;
 }
 
 void Ssd1963ParallelDisplay::configure_output_(GPIO_TypeDef* port, std::uint16_t pins) const
@@ -150,7 +156,7 @@ void Ssd1963ParallelDisplay::data_(std::uint8_t value) const
     write_pin_(config_.cs_port, config_.cs_pin, true);
 }
 
-bool Ssd1963ParallelDisplay::initialize_controller_()
+Status Ssd1963ParallelDisplay::initialize_controller_()
 {
     command_(0x01);
     command_(0x01);
@@ -195,14 +201,17 @@ bool Ssd1963ParallelDisplay::initialize_controller_()
     data_(0x09);
     data_(0x00);
     data_(0x00);
-    return set_window_(0, 0, config_.width, config_.height) && (command_(0x29), true);
+    if (const Status status = set_window_(0, 0, config_.width, config_.height); !is_ok(status))
+        return status;
+    command_(0x29);  // display on
+    return Status::ok;
 }
 
-bool Ssd1963ParallelDisplay::set_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width,
-                                         std::uint16_t height) const
+Status Ssd1963ParallelDisplay::set_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width,
+                                           std::uint16_t height) const
 {
     if (width == 0 || height == 0)
-        return false;
+        return Status::invalid_argument;
     const auto x2 = static_cast<std::uint16_t>(x + width - 1);
     const auto y2 = static_cast<std::uint16_t>(y + height - 1);
     command_(0x2A);
@@ -215,7 +224,7 @@ bool Ssd1963ParallelDisplay::set_window_(std::uint16_t x, std::uint16_t y, std::
     data_(y);
     data_(y2 >> 8);
     data_(y2);
-    return true;
+    return Status::ok;
 }
 
 }  // namespace brick::platform::stm32::f1

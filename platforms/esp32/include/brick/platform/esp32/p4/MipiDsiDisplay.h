@@ -6,6 +6,7 @@
 
 #include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/memory/IMemoryProvider.h"
+#include "brick/platform/esp32/EspStatus.h"
 #include "driver/gpio.h"
 #include "driver/ppa.h"
 #include "esp_lcd_mipi_dsi.h"
@@ -50,27 +51,27 @@ public:
     /// memory provides the PSRAM rotation buffers when a rotation is used.
     MipiDsiDisplay(MipiDsiPanelConfig config, brick::interfaces::memory::IMemoryProvider& memory);
     ~MipiDsiDisplay() override;
-    bool                                            begin() override;
+    Status                                          begin() override;
     brick::interfaces::display::DisplaySize         size() const override;
     brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
-                     const brick::interfaces::display::PixelBuffer& buffer) override;
-    bool wait_for_transfer_complete(std::uint32_t timeout_ms) override;
+    Status set_rotation(brick::interfaces::display::Rotation rotation) override;
+    Status draw_buffer(brick::interfaces::display::DisplayRect        area,
+                       const brick::interfaces::display::PixelBuffer& buffer) override;
+    Status wait_for_transfer_complete(std::uint32_t timeout_ms) override;
 
 private:
-    bool                  send_init_sequence_();
-    bool                  apply_rotation_();
+    Status                send_init_sequence_();
+    Status                apply_rotation_();
     static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void*);
     static bool IRAM_ATTR on_refresh_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void*);
-    bool                  rotated_transfer_(brick::interfaces::display::DisplayRect        area,
+    Status                rotated_transfer_(brick::interfaces::display::DisplayRect        area,
                                             const brick::interfaces::display::PixelBuffer& buffer);
-    bool                  ensure_rotation_buffers_();
+    Status                ensure_rotation_buffers_();
     void                  release_rotation_buffers_();
     void                  rotate_buffer_(const std::uint16_t* source);
-    bool                  ppa_rotate_buffer_(const std::uint16_t* source);
-    bool                  full_frame_transfer_(const brick::interfaces::display::PixelBuffer& buffer);
+    Status                ppa_rotate_buffer_(const std::uint16_t* source);
+    Status                full_frame_transfer_(const brick::interfaces::display::PixelBuffer& buffer);
 
     MipiDsiPanelConfig                   config_;
     brick::interfaces::display::Rotation rotation_         = brick::interfaces::display::Rotation::rotate_0;

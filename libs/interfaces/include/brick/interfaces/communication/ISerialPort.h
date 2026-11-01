@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "brick/Status.h"
+
 namespace brick::interfaces::communication
 {
 
@@ -13,7 +15,7 @@ class ISerialPort
 public:
     virtual ~ISerialPort() = default;
 
-    virtual bool        begin()                                             = 0;
+    virtual Status      begin()                                             = 0;
     virtual std::size_t read(std::uint8_t* buffer, std::size_t capacity)    = 0;
     virtual std::size_t write(const std::uint8_t* data, std::size_t length) = 0;
 };

@@ -1,14 +1,15 @@
 #include "brick/platform/esp32/FileSystem.h"
 
+#include "brick/platform/esp32/EspStatus.h"
 #include "brick/platform/esp32/VfsDirectory.h"
 
 namespace brick::platform::esp32
 {
 
-bool FileSystem::mount()
+Status FileSystem::mount()
 {
     if (mounted_)
-        return true;
+        return Status::ok;
     sdmmc_host_t host                    = SDSPI_HOST_DEFAULT();
     host.slot                            = SPI2_HOST;
     sdspi_device_config_t slot_cfg       = SDSPI_DEVICE_CONFIG_DEFAULT();
@@ -21,11 +22,11 @@ bool FileSystem::mount()
     if (result != ESP_OK)
     {
         ESP_LOGE(TAG, "SD mount: %s", esp_err_to_name(result));
-        return false;
+        return to_status(result);
     }
     mounted_ = true;
     ESP_LOGI(TAG, "SD mounted at /sdcard");
-    return true;
+    return Status::ok;
 }
 
 std::size_t FileSystem::list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity)
@@ -33,7 +34,7 @@ std::size_t FileSystem::list_files(const char* path, interfaces::storage::FileEn
     return list_vfs_files(path, entries, capacity);
 }
 
-bool FileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
+Status FileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
 {
     return open_vfs_file(files_, *this, path, mode, file);
 }

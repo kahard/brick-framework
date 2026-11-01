@@ -55,7 +55,7 @@ public:
         return size == 0 ? 0 : bytes / size;
     }
 
-    bool seek(long offset, int origin) override
+    Status seek(long offset, int origin) override
     {
         long base = 0;
         if (origin == SEEK_CUR)
@@ -64,9 +64,9 @@ public:
             base = static_cast<long>(data_.size());
         const long target = base + offset;
         if (target < 0 || target > static_cast<long>(data_.size()))
-            return false;
+            return Status::invalid_argument;
         position_ = static_cast<std::size_t>(target);
-        return true;
+        return Status::ok;
     }
 
 private:
@@ -78,7 +78,7 @@ private:
 class MemoryFileSystem final : public brick::interfaces::storage::IFileSystem
 {
 public:
-    bool mount() override { return mountable; }
+    Status mount() override { return mountable ? Status::ok : Status::not_found; }
 
     std::size_t list_files(const char*, brick::interfaces::storage::FileEntry* entries, std::size_t capacity) override
     {
@@ -92,15 +92,15 @@ public:
         return count;
     }
 
-    bool open(const char* path, const char*, brick::interfaces::storage::FileHandle& file) override
+    Status open(const char* path, const char*, brick::interfaces::storage::FileHandle& file) override
     {
         file.close();
         const auto it = files.find(path);
         if (it == files.end())
-            return false;
+            return Status::not_found;
         open_.push_back(std::make_unique<MemoryFile>(it->second));
         file.attach(*this, *open_.back());
-        return true;
+        return Status::ok;
     }
 
     /// Files opened and not closed yet.
@@ -132,26 +132,26 @@ public:
     {
     }
 
-    bool                                    begin() override { return true; }
+    Status                                  begin() override { return Status::ok; }
     brick::interfaces::display::DisplaySize size() const override { return size_; }
     brick::interfaces::display::PixelFormat pixel_format() const override
     {
         return brick::interfaces::display::PixelFormat::rgb565;
     }
-    bool set_rotation(brick::interfaces::display::Rotation) override { return true; }
+    Status set_rotation(brick::interfaces::display::Rotation) override { return Status::ok; }
 
-    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
-                     const brick::interfaces::display::PixelBuffer& buffer) override
+    Status draw_buffer(brick::interfaces::display::DisplayRect        area,
+                       const brick::interfaces::display::PixelBuffer& buffer) override
     {
         if (!buffer.valid() || buffer.format != pixel_format()
             || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
-            return false;
+            return Status::invalid_argument;
         last_area       = area;
         last_pixels     = buffer.data;
         last_byte_count = buffer.stride_bytes * buffer.height;
         submitted_areas.push_back(area);
         submitted_byte_counts.push_back(last_byte_count);
-        return true;
+        return Status::ok;
     }
 
     brick::interfaces::display::DisplayRect              last_area{};
@@ -168,17 +168,17 @@ private:
 class ScriptedTouchscreen final : public brick::interfaces::display::ITouchscreen
 {
 public:
-    bool begin() override { return true; }
+    Status begin() override { return Status::ok; }
 
-    bool read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override
+    Status read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count) override
     {
         count = 0;
         if (next_ >= samples.size())
-            return false;
+            return Status::no_data;
         const auto& sample = samples[next_++];
         for (; count < sample.size() && count < capacity; ++count)
             points[count] = sample[count];
-        return true;
+        return Status::ok;
     }
 
     std::vector<std::vector<brick::interfaces::display::TouchPoint>> samples;
@@ -193,15 +193,15 @@ class MemoryAssetReader final : public brick::interfaces::display::IAssetReader
 public:
     explicit MemoryAssetReader(const std::vector<std::uint8_t>& data) : data_(data) {}
 
-    bool read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset, std::uint8_t* destination,
-              std::size_t bytes) override
+    Status read(const brick::interfaces::display::ImageAsset& asset, std::size_t offset, std::uint8_t* destination,
+                std::size_t bytes) override
     {
         if (destination == nullptr || asset.data != data_.data() || offset + bytes > data_.size())
-            return false;
+            return Status::invalid_argument;
         std::memcpy(destination, data_.data() + offset, bytes);
         offsets.push_back(offset);
         sizes.push_back(bytes);
-        return true;
+        return Status::ok;
     }
 
     const std::vector<std::uint8_t>& data_;
@@ -215,16 +215,16 @@ class MemoryAssetSource final : public brick::interfaces::display::IAssetSource
 public:
     explicit MemoryAssetSource(const std::vector<std::uint8_t>& data) : data_(data) {}
 
-    bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
-              std::size_t bytes) override
+    Status read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
+                std::size_t bytes) override
     {
         if (destination == nullptr || offset > asset.size || bytes > asset.size - offset || asset.offset > data_.size()
             || bytes > data_.size() - asset.offset - offset)
-            return false;
+            return Status::invalid_argument;
         std::memcpy(destination, data_.data() + asset.offset + offset, bytes);
         offsets.push_back(offset);
         sizes.push_back(bytes);
-        return true;
+        return Status::ok;
     }
 
     const std::vector<std::uint8_t>& data_;
@@ -236,10 +236,10 @@ public:
 class FakeAudioOutput final : public brick::interfaces::audio::IAudioOutput
 {
 public:
-    bool begin() override
+    Status begin() override
     {
         started = true;
-        return true;
+        return Status::ok;
     }
     void write_sample(std::uint8_t sample) override { samples.push_back(sample); }
     void stop() override { stopped = true; }

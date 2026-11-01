@@ -6,24 +6,27 @@
 namespace brick::core::image
 {
 
-bool BmpDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* destination,
-                        const BmpDecodeOptions& options)
+Status BmpDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* destination,
+                          const BmpDecodeOptions& options)
 {
+    if (destination == nullptr || options.target_width == 0 || options.target_height == 0)
+        return Status::invalid_argument;
     interfaces::storage::FileHandle file;
-    if (!file_system.open(path, "rb", file) || destination == nullptr || options.target_width == 0
-        || options.target_height == 0)
-        return false;
+    if (const Status status = file_system.open(path, "rb", file); !is_ok(status))
+        return status;
 
     std::uint8_t header[54];
     if (file->read(header, 1, sizeof(header)) < sizeof(header) || header[0] != 'B' || header[1] != 'M')
-        return false;
+        return Status::error;
 
     const std::uint32_t pixel_offset   = read_u32(header + 10);
     const std::int32_t  source_width   = read_i32(header + 18);
     std::int32_t        source_height  = read_i32(header + 22);
     const std::uint16_t bits_per_pixel = read_u16(header + 28);
-    if (source_width <= 0 || source_height == 0 || (bits_per_pixel != 24 && bits_per_pixel != 32))
-        return false;
+    if (source_width <= 0 || source_height == 0)
+        return Status::error;
+    if (bits_per_pixel != 24 && bits_per_pixel != 32)
+        return Status::not_supported;
 
     const bool bottom_up = source_height > 0;
     if (source_height < 0)
@@ -46,8 +49,8 @@ bool BmpDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
     for (int source_row = 0; source_row < copy_height; ++source_row)
     {
         const long row_offset = static_cast<long>(pixel_offset) + (skip_rows + source_row) * stride;
-        if (!file->seek(row_offset, SEEK_SET))
-            return false;
+        if (const Status status = file->seek(row_offset, SEEK_SET); !is_ok(status))
+            return status;
         if (options.on_row != nullptr && (source_row & 31) == 0)
             options.on_row(static_cast<std::uint32_t>(source_row));
         const int destination_row = bottom_up ? copy_height - 1 - source_row + y_offset : source_row + y_offset;
@@ -56,7 +59,7 @@ bool BmpDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
             const int         count = std::min(pixels_per_chunk, copy_width - column);
             const std::size_t bytes = static_cast<std::size_t>(count) * bytes_per_pixel;
             if (file->read(chunk, 1, bytes) != bytes)
-                return false;
+                return Status::error;
             for (int index = 0; index < count; ++index, ++column)
             {
                 const std::uint8_t* pixel = chunk + index * bytes_per_pixel;
@@ -69,7 +72,7 @@ bool BmpDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
             }
         }
     }
-    return true;
+    return Status::ok;
 }
 
 std::uint16_t BmpDecoder::read_u16(const std::uint8_t* value)

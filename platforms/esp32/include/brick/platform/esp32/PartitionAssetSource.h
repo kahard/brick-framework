@@ -15,9 +15,9 @@ public:
     explicit PartitionAssetSource(const char* label) : label_(label) {}
     explicit PartitionAssetSource(const esp_partition_t* partition) : partition_(partition) {}
 
-    bool begin();
-    bool read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
-              std::size_t bytes) override;
+    Status begin();
+    Status read(const brick::interfaces::display::AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
+                std::size_t bytes) override;
 
 private:
     const char*            label_     = nullptr;

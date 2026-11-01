@@ -7,21 +7,21 @@ PeriodicAudioPlayer::PeriodicAudioPlayer(interfaces::audio::IAudioOutput& output
 {
 }
 
-bool PeriodicAudioPlayer::begin()
+Status PeriodicAudioPlayer::begin()
 {
     return output_.begin();
 }
 
-bool PeriodicAudioPlayer::play(const AudioBuffer& buffer)
+Status PeriodicAudioPlayer::play(const AudioBuffer& buffer)
 {
-    if (buffer.empty() || !output_.begin())
-    {
-        return false;
-    }
+    if (buffer.empty())
+        return Status::invalid_argument;
+    if (const Status status = output_.begin(); !is_ok(status))
+        return status;
     current_ = &buffer;
     index_   = 0;
     playing_ = true;
-    return true;
+    return Status::ok;
 }
 
 void PeriodicAudioPlayer::tick()

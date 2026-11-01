@@ -45,7 +45,7 @@ extern "C" DRESULT disk_ioctl(BYTE, BYTE, void*)
 namespace brick::platform::stm32::f1
 {
 
-bool Stm32UsbFile::open(const char* path, const char* mode)
+Status Stm32UsbFile::open(const char* path, const char* mode)
 {
     close();
     BYTE flags = FA_READ;
@@ -54,7 +54,7 @@ bool Stm32UsbFile::open(const char* path, const char* mode)
 #if BRICK_STM32_USB_FS_WRITE
         flags = FA_WRITE | FA_CREATE_ALWAYS;
 #else
-        return false;
+        return Status::not_supported;
 #endif
     }
     else if (std::strchr(mode, 'a') != nullptr)
@@ -62,22 +62,22 @@ bool Stm32UsbFile::open(const char* path, const char* mode)
 #if BRICK_STM32_USB_FS_WRITE
         flags = FA_WRITE | FA_OPEN_ALWAYS;
 #else
-        return false;
+        return Status::not_supported;
 #endif
     }
 #if !BRICK_STM32_USB_FS_READ
     if (std::strchr(mode, 'r') != nullptr)
-        return false;
+        return Status::not_supported;
 #endif
-    if (f_open(&file_, path, flags) != FR_OK)
-        return false;
+    if (const FRESULT result = f_open(&file_, path, flags); result != FR_OK)
+        return result == FR_NO_FILE || result == FR_NO_PATH ? Status::not_found : Status::error;
     if (std::strchr(mode, 'a') != nullptr && f_lseek(&file_, f_size(&file_)) != FR_OK)
     {
         f_close(&file_);
-        return false;
+        return Status::error;
     }
     open_ = true;
-    return true;
+    return Status::ok;
 }
 
 void Stm32UsbFile::close()
@@ -113,7 +113,7 @@ std::size_t Stm32UsbFile::write(const void* buffer, std::size_t size, std::size_
 #endif
 }
 
-bool Stm32UsbFile::seek(long offset, int origin)
+Status Stm32UsbFile::seek(long offset, int origin)
 {
     DWORD target = 0;
     if (origin == 0)
@@ -123,14 +123,14 @@ bool Stm32UsbFile::seek(long offset, int origin)
     else if (origin == 2)
         target = f_size(&file_) + static_cast<DWORD>(offset);
     else
-        return false;
-    return f_lseek(&file_, target) == FR_OK;
+        return Status::invalid_argument;
+    return f_lseek(&file_, target) == FR_OK ? Status::ok : Status::error;
 }
 
-bool Stm32UsbFileSystem::mount()
+Status Stm32UsbFileSystem::mount()
 {
     if (mounted_)
-        return true;
+        return Status::ok;
     g_usb_host                = &host_;
     const std::uint32_t start = HAL_GetTick();
     while (!host_.storage_ready() && HAL_GetTick() - start < mount_timeout_ms_)
@@ -138,10 +138,12 @@ bool Stm32UsbFileSystem::mount()
         host_.process();
         HAL_Delay(10);
     }
-    if (!host_.storage_ready() || f_mount(&fatfs_, "", 1) != FR_OK)
-        return false;
+    if (!host_.storage_ready())
+        return Status::timeout;
+    if (f_mount(&fatfs_, "", 1) != FR_OK)
+        return Status::error;
     mounted_ = true;
-    return true;
+    return Status::ok;
 }
 
 void Stm32UsbFileSystem::unmount()
@@ -174,21 +176,23 @@ std::size_t Stm32UsbFileSystem::list_files(const char* path, brick::interfaces::
     return count;
 }
 
-bool Stm32UsbFileSystem::open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file)
+Status Stm32UsbFileSystem::open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file)
 {
     file.close();
-    if (!mounted_ || mode == nullptr)
-        return false;
+    if (!mounted_)
+        return Status::not_ready;
+    if (mode == nullptr)
+        return Status::invalid_argument;
     for (Stm32UsbFile& candidate : files_)
     {
         if (candidate.is_open())
             continue;
-        if (!candidate.open(path, mode))
-            return false;
+        if (const Status status = candidate.open(path, mode); !is_ok(status))
+            return status;
         file.attach(*this, candidate);
-        return true;
+        return Status::ok;
     }
-    return false;
+    return Status::busy;
 }
 
 void Stm32UsbFileSystem::close(brick::interfaces::storage::IFile& file)

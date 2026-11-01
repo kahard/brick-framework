@@ -13,10 +13,10 @@ class PwmBacklight final : public brick::interfaces::display::IBacklight
 public:
     explicit PwmBacklight(int gpio_num) : gpio_num_(gpio_num) {}
 
-    bool begin(std::uint8_t initial_brightness_percent = 100U)
+    Status begin(std::uint8_t initial_brightness_percent = 100U)
     {
         if (initial_brightness_percent > 100U)
-            return false;
+            return Status::invalid_argument;
 
         ledc_timer_config_t timer_config = {};
         timer_config.speed_mode          = LEDC_LOW_SPEED_MODE;
@@ -25,7 +25,7 @@ public:
         timer_config.freq_hz             = 5000;
         timer_config.clk_cfg             = LEDC_AUTO_CLK;
         if (ledc_timer_config(&timer_config) != ESP_OK)
-            return false;
+            return Status::error;
 
         ledc_channel_config_t channel_config = {};
         channel_config.gpio_num              = gpio_num_;
@@ -36,23 +36,25 @@ public:
         channel_config.duty                  = duty_from_percent(initial_brightness_percent);
         channel_config.hpoint                = 0;
         if (ledc_channel_config(&channel_config) != ESP_OK)
-            return false;
+            return Status::error;
 
         brightness_percent_ = initial_brightness_percent;
         initialized_        = true;
-        return true;
+        return Status::ok;
     }
 
-    bool set_brightness_percent(std::uint8_t percent) override
+    Status set_brightness_percent(std::uint8_t percent) override
     {
-        if (!initialized_ || percent > 100U)
-            return false;
+        if (!initialized_)
+            return Status::not_ready;
+        if (percent > 100U)
+            return Status::invalid_argument;
         if (ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty_from_percent(percent)) != ESP_OK)
-            return false;
+            return Status::error;
         if (ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0) != ESP_OK)
-            return false;
+            return Status::error;
         brightness_percent_ = percent;
-        return true;
+        return Status::ok;
     }
 
     std::uint8_t brightness_percent() const override { return brightness_percent_; }

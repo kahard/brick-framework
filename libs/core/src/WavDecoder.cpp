@@ -7,17 +7,19 @@
 namespace brick::core::audio
 {
 
-bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* samples,
-                        std::size_t capacity, AudioBuffer& output)
+Status WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* samples,
+                          std::size_t capacity, AudioBuffer& output)
 {
+    if (samples == nullptr)
+        return Status::invalid_argument;
     interfaces::storage::FileHandle file;
-    if (!file_system.open(path, "rb", file))
-        return false;
+    if (const Status status = file_system.open(path, "rb", file); !is_ok(status))
+        return status;
 
     std::uint8_t header[12];
     if (!read_exact(*file, header, sizeof(header)) || std::memcmp(header, "RIFF", 4) != 0
         || std::memcmp(header + 8, "WAVE", 4) != 0)
-        return false;
+        return Status::error;
 
     std::uint16_t format = 0, channels = 0, bits = 0;
     std::uint32_t sample_rate = 0, data_size = 0;
@@ -36,8 +38,9 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
             // Only the first 16 bytes (PCM fields) are used; extensions are skipped.
             std::uint8_t fmt[16];
             if (chunk_size < sizeof(fmt) || !read_exact(*file, fmt, sizeof(fmt))
-                || (chunk_size > sizeof(fmt) && !file->seek(static_cast<long>(chunk_size - sizeof(fmt)), SEEK_CUR)))
-                return false;
+                || (chunk_size > sizeof(fmt)
+                    && !is_ok(file->seek(static_cast<long>(chunk_size - sizeof(fmt)), SEEK_CUR))))
+                return Status::error;
             format      = read_u16(fmt);
             channels    = read_u16(fmt + 2);
             sample_rate = read_u32(fmt + 4);
@@ -49,36 +52,41 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
         {
             data_offset = position;
             data_size   = chunk_size;
-            if (!file->seek(static_cast<long>(chunk_size), SEEK_CUR))
-                return false;
+            if (!is_ok(file->seek(static_cast<long>(chunk_size), SEEK_CUR)))
+                return Status::error;
             position += static_cast<long>(chunk_size);
             have_data = true;
         }
         else
         {
-            if (!file->seek(static_cast<long>(chunk_size), SEEK_CUR))
-                return false;
+            if (!is_ok(file->seek(static_cast<long>(chunk_size), SEEK_CUR)))
+                return Status::error;
             position += static_cast<long>(chunk_size);
         }
         if (chunk_size & 1U)
         {
-            if (!file->seek(1, SEEK_CUR))
-                return false;
+            if (!is_ok(file->seek(1, SEEK_CUR)))
+                return Status::error;
             ++position;
         }
         if (have_fmt && have_data)
             break;
     }
 
-    if (!have_fmt || !have_data || format != 1 || (channels != 1 && channels != 2) || (bits != 8 && bits != 16)
-        || sample_rate == 0 || data_size == 0)
-        return false;
+    if (!have_fmt || !have_data || sample_rate == 0 || data_size == 0)
+        return Status::error;
+    if (format != 1 || (channels != 1 && channels != 2) || (bits != 8 && bits != 16))
+        return Status::not_supported;
 
     const std::size_t bytes_per_sample = bits / 8;
     const std::size_t bytes_per_frame  = channels * bytes_per_sample;
     const std::size_t frame_count      = data_size / bytes_per_frame;
-    if (frame_count == 0 || samples == nullptr || frame_count > capacity || !file->seek(data_offset, SEEK_SET))
-        return false;
+    if (frame_count == 0)
+        return Status::error;
+    if (frame_count > capacity)
+        return Status::no_memory;
+    if (const Status status = file->seek(data_offset, SEEK_SET); !is_ok(status))
+        return status;
 
     // 256 bytes hold a whole number of frames of every supported format.
     std::uint8_t input[256];
@@ -87,7 +95,7 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
     {
         const std::size_t frames = std::min(remaining, sizeof(input) / bytes_per_frame);
         if (!read_exact(*file, input, frames * bytes_per_frame))
-            return false;
+            return Status::error;
         for (std::size_t i = 0; i < frames; ++i)
         {
             int         mixed = 0;
@@ -105,7 +113,7 @@ bool WavDecoder::decode(interfaces::storage::IFileSystem& file_system, const cha
     }
 
     output.assign(samples, frame_count, sample_rate);
-    return true;
+    return Status::ok;
 }
 
 bool WavDecoder::read_exact(interfaces::storage::IFile& file, void* data, std::size_t size)

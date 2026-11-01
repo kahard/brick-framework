@@ -1,6 +1,7 @@
 #include "brick/platform/pc/PcFileSystem.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstring>
 #include <filesystem>
 #include <system_error>
@@ -14,7 +15,7 @@ PcFile::~PcFile()
     close();
 }
 
-bool PcFile::open(const std::string& host_path, const char* mode)
+Status PcFile::open(const std::string& host_path, const char* mode)
 {
     close();
     // Always use binary mode: target code expects byte-exact reads and writes.
@@ -22,7 +23,9 @@ bool PcFile::open(const std::string& host_path, const char* mode)
     if (binary_mode.find('b') == std::string::npos)
         binary_mode += 'b';
     file_ = std::fopen(host_path.c_str(), binary_mode.c_str());
-    return file_ != nullptr;
+    if (file_ != nullptr)
+        return Status::ok;
+    return errno == ENOENT ? Status::not_found : Status::error;
 }
 
 void PcFile::close()
@@ -42,9 +45,9 @@ std::size_t PcFile::write(const void* buffer, std::size_t size, std::size_t coun
     return std::fwrite(buffer, size, count, file_);
 }
 
-bool PcFile::seek(long offset, int origin)
+Status PcFile::seek(long offset, int origin)
 {
-    return std::fseek(file_, offset, origin) == 0;
+    return std::fseek(file_, offset, origin) == 0 ? Status::ok : Status::invalid_argument;
 }
 
 PcFileSystem::PcFileSystem(std::string root, std::string mount_point)
@@ -52,11 +55,11 @@ PcFileSystem::PcFileSystem(std::string root, std::string mount_point)
 {
 }
 
-bool PcFileSystem::mount()
+Status PcFileSystem::mount()
 {
     std::error_code error;
     mounted_ = std::filesystem::is_directory(root_, error);
-    return mounted_;
+    return mounted_ ? Status::ok : Status::not_found;
 }
 
 std::string PcFileSystem::host_path(const char* path) const
@@ -99,21 +102,23 @@ bool PcFileSystem::probe(const char* path)
     return ok;
 }
 
-bool PcFileSystem::open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file)
+Status PcFileSystem::open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file)
 {
     file.close();
-    if (!mounted_ || mode == nullptr)
-        return false;
+    if (!mounted_)
+        return Status::not_ready;
+    if (mode == nullptr)
+        return Status::invalid_argument;
     for (PcFile& candidate : files_)
     {
         if (candidate.is_open())
             continue;
-        if (!candidate.open(host_path(path), mode))
-            return false;
+        if (const Status status = candidate.open(host_path(path), mode); !is_ok(status))
+            return status;
         file.attach(*this, candidate);
-        return true;
+        return Status::ok;
     }
-    return false;
+    return Status::busy;
 }
 
 void PcFileSystem::close(brick::interfaces::storage::IFile& file)

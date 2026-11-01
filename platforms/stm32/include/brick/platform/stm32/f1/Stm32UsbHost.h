@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "brick/Status.h"
 #include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_hcd.h"
 #include "usbh_core.h"
@@ -21,7 +22,7 @@ class Stm32UsbHost
 public:
     explicit Stm32UsbHost(Stm32UsbHostConfig config = {}) : config_(config) {}
 
-    bool              begin();
+    Status            begin();
     void              process();
     bool              connected() const { return connected_; }
     bool              class_active() const { return class_active_; }

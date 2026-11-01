@@ -25,12 +25,12 @@ public:
     Stm32UsbFile(const Stm32UsbFile&)            = delete;
     Stm32UsbFile& operator=(const Stm32UsbFile&) = delete;
 
-    bool        open(const char* path, const char* mode);
+    Status      open(const char* path, const char* mode);
     void        close();
     bool        is_open() const { return open_; }
     std::size_t read(void* buffer, std::size_t size, std::size_t count) override;
     std::size_t write(const void* buffer, std::size_t size, std::size_t count) override;
-    bool        seek(long offset, int origin) override;
+    Status      seek(long offset, int origin) override;
 
 private:
     FIL  file_{};
@@ -45,12 +45,12 @@ public:
     {
     }
 
-    bool        mount() override;
+    Status      mount() override;
     void        unmount();
     bool        mounted() const { return mounted_; }
     std::size_t list_files(const char* path, brick::interfaces::storage::FileEntry* entries,
                            std::size_t capacity) override;
-    bool        open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
+    Status      open(const char* path, const char* mode, brick::interfaces::storage::FileHandle& file) override;
 
     static constexpr std::size_t kMaxOpenFiles = BRICK_STM32_USB_FS_MAX_OPEN_FILES;
 

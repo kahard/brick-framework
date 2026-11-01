@@ -4,9 +4,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <initializer_list>
 
 #include "brick/interfaces/display/IDisplayDevice.h"
+#include "brick/platform/esp32/EspStatus.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_err.h"
@@ -40,23 +40,21 @@ class Ili9341SpiDisplay final : public brick::interfaces::display::IDisplayDevic
 public:
     explicit Ili9341SpiDisplay(Ili9341SpiDisplayConfig config);
     ~Ili9341SpiDisplay() override;
-    bool                                            begin() override;
+    Status                                          begin() override;
     brick::interfaces::display::DisplaySize         size() const override;
     brick::interfaces::display::PixelFormat         pixel_format() const override;
     brick::interfaces::display::DisplayCapabilities capabilities() const override;
-    bool set_rotation(brick::interfaces::display::Rotation rotation) override;
-    bool draw_buffer(brick::interfaces::display::DisplayRect        area,
-                     const brick::interfaces::display::PixelBuffer& buffer) override;
+    Status set_rotation(brick::interfaces::display::Rotation rotation) override;
+    Status draw_buffer(brick::interfaces::display::DisplayRect        area,
+                       const brick::interfaces::display::PixelBuffer& buffer) override;
 
 private:
-    bool begin_spi_();
-    bool transmit_(bool data, const std::uint8_t* bytes, std::size_t length);
-    bool send_command_(std::uint8_t command);
-    bool send_command_(std::uint8_t command, std::initializer_list<std::uint8_t> args);
-    bool send_command_(std::uint8_t command, const std::uint8_t* args, std::size_t length);
-    bool send_data_(const std::uint8_t* data, std::size_t length);
-    bool set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height);
-    bool initialize_panel_();
+    Status begin_spi_();
+    Status transmit_(bool data, const std::uint8_t* bytes, std::size_t length);
+    Status send_command_(std::uint8_t command, const std::uint8_t* args = nullptr, std::size_t length = 0);
+    Status send_data_(const std::uint8_t* data, std::size_t length);
+    Status set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height);
+    Status initialize_panel_();
 
     Ili9341SpiDisplayConfig      config_;
     spi_device_handle_t          spi_device_         = nullptr;

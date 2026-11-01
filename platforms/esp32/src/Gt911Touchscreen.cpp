@@ -7,13 +7,13 @@ Gt911Touchscreen::Gt911Touchscreen(Gt911Config config) : config_(config)
 {
 }
 
-bool Gt911Touchscreen::begin()
+Status Gt911Touchscreen::begin()
 {
     if (started_)
-        return true;
+        return Status::ok;
     if (config_.sda_gpio == GPIO_NUM_NC || config_.scl_gpio == GPIO_NUM_NC || config_.display_size.width == 0
         || config_.display_size.height == 0)
-        return false;
+        return Status::invalid_argument;
     if (config_.reset_gpio != GPIO_NUM_NC)
     {
         gpio_set_direction(config_.reset_gpio, GPIO_MODE_OUTPUT);
@@ -29,42 +29,53 @@ bool Gt911Touchscreen::begin()
     i2c_config.sda_pullup_en    = GPIO_PULLUP_ENABLE;
     i2c_config.scl_pullup_en    = GPIO_PULLUP_ENABLE;
     i2c_config.master.clk_speed = config_.clock_hz;
-    if (i2c_param_config(config_.port, &i2c_config) != ESP_OK)
-        return false;
-    const auto install_result = i2c_driver_install(config_.port, I2C_MODE_MASTER, 0, 0, 0);
+    if (const esp_err_t err = i2c_param_config(config_.port, &i2c_config); err != ESP_OK)
+        return to_status(err);
+    // ESP_ERR_INVALID_STATE: the driver is already installed for this port.
+    const esp_err_t install_result = i2c_driver_install(config_.port, I2C_MODE_MASTER, 0, 0, 0);
     if (install_result != ESP_OK && install_result != ESP_ERR_INVALID_STATE)
-        return false;
-    if (!probe_())
+        return to_status(install_result);
+    if (const Status status = probe_(); !is_ok(status))
     {
+        // The GT911 answers at 0x5D or 0x14 depending on the INT level at reset.
         if (config_.address != 0x5D)
-            return false;
+            return status;
         config_.address = 0x14;
-        if (!probe_())
-            return false;
+        if (const Status retry = probe_(); !is_ok(retry))
+            return retry;
     }
     if (config_.read_calibration_from_controller
-        && (config_.calibration.raw_x_max == 0 || config_.calibration.raw_y_max == 0) && !read_calibration_())
-        return false;
+        && (config_.calibration.raw_x_max == 0 || config_.calibration.raw_y_max == 0))
+        if (const Status status = read_calibration_(); !is_ok(status))
+            return status;
     mapper_  = brick::core::input::TouchMapper(config_.display_size, config_.calibration);
     started_ = true;
-    return true;
+    return Status::ok;
 }
 
-bool Gt911Touchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count)
+Status Gt911Touchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity, std::size_t& count)
 {
     count = 0;
-    if (!started_ || points == nullptr || capacity == 0)
-        return false;
+    if (!started_)
+        return Status::not_ready;
+    if (points == nullptr || capacity == 0)
+        return Status::invalid_argument;
     std::uint8_t state = 0;
-    if (!read_register_(0x814E, &state, 1) || (state & 0x80) == 0)
-        return (state & 0x80) == 0;
+    if (const Status status = read_register_(0x814E, &state, 1); !is_ok(status))
+        return status;
+    // Bit 7: the controller has a new sample.
+    if ((state & 0x80) == 0)
+        return Status::no_data;
     const auto touch_count = static_cast<std::size_t>(state & 0x07);
-    if (touch_count > kMaxTouches || !write_register_(0x814E, 0))
-        return false;
+    if (touch_count > kMaxTouches)
+        return Status::error;
+    if (const Status status = write_register_(0x814E, 0); !is_ok(status))
+        return status;
     const std::size_t                         bytes = touch_count * 8;
     std::array<std::uint8_t, kMaxTouches * 8> raw{};
-    if (bytes != 0 && !read_register_(0x814F, raw.data(), bytes))
-        return false;
+    if (bytes != 0)
+        if (const Status status = read_register_(0x814F, raw.data(), bytes); !is_ok(status))
+            return status;
     std::array<bool, kMaxTouches> seen{};
     for (std::size_t index = 0; index < touch_count && count < capacity; ++index)
     {
@@ -93,37 +104,37 @@ bool Gt911Touchscreen::read(brick::interfaces::display::TouchPoint* points, std:
     for (std::size_t index = 0; index < count; ++index)
         if (points[index].state != brick::interfaces::display::TouchState::released)
             last_points_[points[index].id] = points[index];
-    return true;
+    return Status::ok;
 }
 
-bool Gt911Touchscreen::probe_()
+Status Gt911Touchscreen::probe_()
 {
     std::uint8_t value = 0;
     return read_register_(0x8047, &value, 1);
 }
 
-bool Gt911Touchscreen::read_calibration_()
+Status Gt911Touchscreen::read_calibration_()
 {
     std::uint8_t data[4] = {};
-    if (!read_register_(0x8048, data, sizeof(data)))
-        return false;
+    if (const Status status = read_register_(0x8048, data, sizeof(data)); !is_ok(status))
+        return status;
     config_.calibration.raw_x_min = config_.calibration.raw_y_min = 0;
     config_.calibration.raw_x_max                                 = static_cast<std::int16_t>(data[0] | (data[1] << 8));
     config_.calibration.raw_y_max                                 = static_cast<std::int16_t>(data[2] | (data[3] << 8));
-    return config_.calibration.raw_x_max > 0 && config_.calibration.raw_y_max > 0;
+    return config_.calibration.raw_x_max > 0 && config_.calibration.raw_y_max > 0 ? Status::ok : Status::error;
 }
 
-bool Gt911Touchscreen::write_register_(std::uint16_t reg, std::uint8_t value)
+Status Gt911Touchscreen::write_register_(std::uint16_t reg, std::uint8_t value)
 {
     const std::uint8_t data[] = { static_cast<std::uint8_t>(reg >> 8), static_cast<std::uint8_t>(reg), value };
-    return i2c_master_write_to_device(config_.port, config_.address, data, sizeof(data), kTimeout) == ESP_OK;
+    return to_status(i2c_master_write_to_device(config_.port, config_.address, data, sizeof(data), kTimeout));
 }
 
-bool Gt911Touchscreen::read_register_(std::uint16_t reg, std::uint8_t* data, std::size_t length)
+Status Gt911Touchscreen::read_register_(std::uint16_t reg, std::uint8_t* data, std::size_t length)
 {
     const std::uint8_t address[] = { static_cast<std::uint8_t>(reg >> 8), static_cast<std::uint8_t>(reg) };
-    return i2c_master_write_read_device(config_.port, config_.address, address, sizeof(address), data, length, kTimeout)
-           == ESP_OK;
+    return to_status(
+        i2c_master_write_read_device(config_.port, config_.address, address, sizeof(address), data, length, kTimeout));
 }
 
 }  // namespace brick::platform::esp32::touch

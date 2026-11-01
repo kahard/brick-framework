@@ -1,4 +1,5 @@
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
+#include "brick/platform/esp32/EspStatus.h"
 #include "brick/platform/esp32/VfsDirectory.h"
 #include "sd_pwr_ctrl_by_on_chip_ldo.h"
 #include <cerrno>
@@ -41,13 +42,15 @@ SdmmcFile::~SdmmcFile()
     close();
 }
 
-bool SdmmcFile::open(const char* path, const char* mode)
+Status SdmmcFile::open(const char* path, const char* mode)
 {
     close();
     handle_ = std::fopen(path, mode);
     if (handle_ == nullptr)
         ESP_LOGE("brick_sdmmc", "fopen failed path=%s mode=%s errno=%d (%s)", path, mode, errno, std::strerror(errno));
-    return handle_ != nullptr;
+    if (handle_ != nullptr)
+        return Status::ok;
+    return errno == ENOENT ? Status::not_found : Status::error;
 }
 
 void SdmmcFile::close()
@@ -67,15 +70,17 @@ std::size_t SdmmcFile::write(const void* buffer, std::size_t size, std::size_t c
     return handle_ == nullptr ? 0 : std::fwrite(buffer, size, count, handle_);
 }
 
-bool SdmmcFile::seek(long offset, int origin)
+Status SdmmcFile::seek(long offset, int origin)
 {
-    return handle_ != nullptr && std::fseek(handle_, offset, origin) == 0;
+    if (handle_ == nullptr)
+        return Status::not_ready;
+    return std::fseek(handle_, offset, origin) == 0 ? Status::ok : Status::invalid_argument;
 }
 
-bool SdmmcFileSystem::mount()
+Status SdmmcFileSystem::mount()
 {
     if (mounted_)
-        return true;
+        return Status::ok;
     ESP_LOGI(TAG, "SDMMC slot=%d clk=%d cmd=%d d0=%d width=%u freq=%lu kHz", config_.host_slot, config_.clk,
              config_.cmd, config_.d0, static_cast<unsigned>(config_.bus_width),
              static_cast<unsigned long>(config_.max_freq_khz));
@@ -87,7 +92,7 @@ bool SdmmcFileSystem::mount()
     if (power_result != ESP_OK)
     {
         ESP_LOGE(TAG, "SDMMC power control failed: %s", esp_err_to_name(power_result));
-        return false;
+        return to_status(power_result);
     }
     host.pwr_ctrl_handle                    = pwr_ctrl_handle_;
     sdmmc_slot_config_t slot                = SDMMC_SLOT_CONFIG_DEFAULT();
@@ -112,11 +117,11 @@ bool SdmmcFileSystem::mount()
         sd_pwr_ctrl_del_on_chip_ldo(pwr_ctrl_handle_);
         pwr_ctrl_handle_ = nullptr;
         ESP_LOGE(TAG, "SDMMC mount failed: %s", esp_err_to_name(result));
-        return false;
+        return to_status(result);
     }
     mounted_ = true;
     ESP_LOGI(TAG, "SDMMC mounted at /sdcard");
-    return true;
+    return Status::ok;
 }
 
 std::size_t SdmmcFileSystem::list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity)
@@ -124,7 +129,7 @@ std::size_t SdmmcFileSystem::list_files(const char* path, interfaces::storage::F
     return list_vfs_files(path, entries, capacity);
 }
 
-bool SdmmcFileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
+Status SdmmcFileSystem::open(const char* path, const char* mode, interfaces::storage::FileHandle& file)
 {
     return open_vfs_file(files_, *this, path, mode, file);
 }

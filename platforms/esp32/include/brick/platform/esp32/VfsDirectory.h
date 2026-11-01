@@ -29,21 +29,22 @@ inline std::size_t list_vfs_files(const char* path, interfaces::storage::FileEnt
 
 /// IFileSystem::open() over a fixed set of file objects that provide
 /// open(path, mode) and is_open().
+/// Status::busy when every file object is open.
 template <typename Files>
-bool open_vfs_file(Files& files, interfaces::storage::IFileSystem& owner, const char* path, const char* mode,
-                   interfaces::storage::FileHandle& handle)
+Status open_vfs_file(Files& files, interfaces::storage::IFileSystem& owner, const char* path, const char* mode,
+                     interfaces::storage::FileHandle& handle)
 {
     handle.close();
     for (auto& file : files)
     {
         if (file.is_open())
             continue;
-        if (!file.open(path, mode))
-            return false;
+        if (const Status status = file.open(path, mode); !is_ok(status))
+            return status;
         handle.attach(owner, file);
-        return true;
+        return Status::ok;
     }
-    return false;
+    return Status::busy;
 }
 
 }  // namespace brick::platform::esp32

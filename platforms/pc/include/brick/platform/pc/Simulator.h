@@ -6,6 +6,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "brick/Status.h"
 #include "brick/platform/pc/PcFrameBufferDisplay.h"
 #include "brick/platform/pc/PcInput.h"
 #include "brick/platform/pc/PcTime.h"
@@ -96,12 +97,12 @@ private:
     bool                    script_pressing_ = false;
 };
 
-/// Runs an application with initialize()/update() under the simulator.
-/// update() may return void or bool (false stops the run).
+/// Runs an application with Status initialize() and update() under the
+/// simulator. update() may return void or bool (false stops the run).
 template <typename Application>
 int run(Application& application, Simulator& simulator)
 {
-    if (!simulator.begin() || !application.initialize())
+    if (!simulator.begin() || !is_ok(application.initialize()))
         return 1;
     while (simulator.step())
     {

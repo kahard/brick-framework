@@ -21,8 +21,8 @@ class CydSpi3PinMux final
 public:
     explicit CydSpi3PinMux(CydSpi3PinMuxConfig config);
 
-    bool select_touch();
-    bool select_sd();
+    void select_touch();
+    void select_sd();
 
 private:
     CydSpi3PinMuxConfig config_;

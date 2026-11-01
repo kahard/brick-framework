@@ -2,6 +2,7 @@
 
 #include <cstddef>
 
+#include "brick/Status.h"
 #include "brick/interfaces/storage/IFile.h"
 
 namespace brick::interfaces::storage
@@ -32,7 +33,7 @@ class IFileSystem
 {
 public:
     virtual ~IFileSystem() = default;
-    virtual bool mount()   = 0;
+    virtual Status mount() = 0;
 
     /// Writes the regular files of directory path into entries (at most
     /// capacity of them) and returns how many there are in total, which can be
@@ -40,9 +41,9 @@ public:
     virtual std::size_t list_files(const char* path, FileEntry* entries, std::size_t capacity) = 0;
 
     /// Opens path with an fopen()-style mode and binds file to it, closing what
-    /// file held before. Fails when the file cannot be opened or every file
-    /// object of the file system is in use.
-    virtual bool open(const char* path, const char* mode, FileHandle& file) = 0;
+    /// file held before. Status::busy when every file object of the file system
+    /// is in use; other codes when the file cannot be opened.
+    virtual Status open(const char* path, const char* mode, FileHandle& file) = 0;
 
 protected:
     friend class FileHandle;

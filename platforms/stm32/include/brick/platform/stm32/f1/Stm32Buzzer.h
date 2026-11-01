@@ -20,9 +20,9 @@ class Stm32Buzzer final : public brick::interfaces::audio::IBuzzer
 public:
     explicit Stm32Buzzer(Stm32BuzzerConfig config = {}) : config_(config) {}
 
-    bool begin() override;
-    bool set_enabled(bool enabled) override;
-    bool beep(std::uint16_t duration_ms) override;
+    Status begin() override;
+    Status set_enabled(bool enabled) override;
+    Status beep(std::uint16_t duration_ms) override;
 
 private:
     Stm32BuzzerConfig config_;

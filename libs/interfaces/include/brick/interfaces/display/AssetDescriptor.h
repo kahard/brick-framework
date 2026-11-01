@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "brick/Status.h"
 #include "brick/interfaces/display/DisplayTypes.h"
 
 namespace brick::interfaces::display
@@ -28,8 +29,8 @@ class IAssetSource
 public:
     virtual ~IAssetSource() = default;
 
-    virtual bool read(const AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
-                      std::size_t bytes) = 0;
+    virtual Status read(const AssetDescriptor& asset, std::size_t offset, std::uint8_t* destination,
+                        std::size_t bytes) = 0;
 };
 
 }  // namespace brick::interfaces::display

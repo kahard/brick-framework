@@ -4,6 +4,8 @@
 #include <optional>
 #include <utility>
 
+#include "brick/Status.h"
+
 namespace brick::boards::common
 {
 
@@ -25,8 +27,8 @@ public:
         value_.emplace(std::forward<Args>(args)...);
     }
 
-    bool begin() { return value_.has_value() && value_->begin(); }
-    T&   get() { return *value_; }
+    Status begin() { return value_.has_value() ? value_->begin() : Status::not_ready; }
+    T&     get() { return *value_; }
 
 private:
     std::optional<T> value_;
@@ -41,7 +43,7 @@ public:
     {
     }
 
-    bool begin() { return true; }
+    Status begin() { return Status::ok; }
 
     template <bool Enabled = false>
     T& get()

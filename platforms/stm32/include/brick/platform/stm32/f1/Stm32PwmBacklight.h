@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "brick/interfaces/display/IBacklight.h"
+#include "brick/platform/stm32/f1/HalStatus.h"
 #include "stm32f1xx_hal.h"
 
 namespace brick::platform::stm32::f1
@@ -23,9 +24,10 @@ class Stm32PwmBacklight final : public brick::interfaces::display::IBacklight
 public:
     explicit Stm32PwmBacklight(Stm32PwmBacklightConfig config = {}) : config_(config) {}
 
-    bool begin() override;
-    bool set_enabled(bool enabled) override;
-    bool set_brightness(std::uint8_t percent) override;
+    Status       begin();
+    Status       set_enabled(bool enabled);
+    Status       set_brightness_percent(std::uint8_t percent) override;
+    std::uint8_t brightness_percent() const override { return brightness_; }
 
 private:
     Stm32PwmBacklightConfig config_;

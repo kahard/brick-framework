@@ -28,12 +28,12 @@ class SdSpiFileSystem final : public interfaces::storage::IRemovableFileSystem
 {
 public:
     explicit SdSpiFileSystem(SdSpiFileSystemConfig config);
-    bool        mount() override;
+    Status      mount() override;
     void        unmount() override;
     bool        mounted() const override { return mounted_; }
     bool        probe(const char* path) override;
     std::size_t list_files(const char* path, interfaces::storage::FileEntry* entries, std::size_t capacity) override;
-    bool        open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
+    Status      open(const char* path, const char* mode, interfaces::storage::FileHandle& file) override;
 
     /// Matches max_files of the FAT mount.
     static constexpr std::size_t kMaxOpenFiles = 5;

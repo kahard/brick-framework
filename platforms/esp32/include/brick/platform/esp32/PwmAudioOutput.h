@@ -13,7 +13,7 @@ class PwmAudioOutput final : public interfaces::audio::IAudioOutput
 public:
     PwmAudioOutput(int pin, int channel, int carrier_hz);
 
-    bool begin() override;
+    Status begin() override;
 
     void write_sample(std::uint8_t sample) override;
 

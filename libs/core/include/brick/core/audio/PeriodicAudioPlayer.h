@@ -14,11 +14,11 @@ class PeriodicAudioPlayer final : public interfaces::audio::IAudioPlayer
 public:
     explicit PeriodicAudioPlayer(interfaces::audio::IAudioOutput& output);
 
-    bool begin() override;
-    bool play(const AudioBuffer& buffer) override;
-    void tick() override;
-    void stop() override;
-    bool playing() const override;
+    Status begin() override;
+    Status play(const AudioBuffer& buffer) override;
+    void   tick() override;
+    void   stop() override;
+    bool   playing() const override;
 
 private:
     interfaces::audio::IAudioOutput& output_;

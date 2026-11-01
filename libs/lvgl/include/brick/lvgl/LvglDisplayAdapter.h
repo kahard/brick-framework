@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "brick/Status.h"
 #include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/display/IFrameBufferDisplay.h"
 #include "lvgl.h"
@@ -23,6 +24,10 @@ public:
                          std::uint32_t buffer_size_bytes);
     lv_display_t* create_framebuffer(brick::interfaces::display::IFrameBufferDisplay& framebuffers);
 
+    /// Status of the last flush. LVGL's flush callback cannot report a failed
+    /// transfer, so it is kept here for diagnostics; the next frame redraws.
+    Status flush_status() const { return flush_status_; }
+
 private:
     static void flush_callback_(lv_display_t* display, const lv_area_t* area, std::uint8_t* pixel_map);
     void        flush_(lv_display_t* display, const lv_area_t& area, std::uint8_t* pixel_map);
@@ -31,6 +36,7 @@ private:
     brick::interfaces::display::IFrameBufferDisplay* framebuffers_  = nullptr;
     void*                                            framebuffer_1_ = nullptr;
     void*                                            framebuffer_2_ = nullptr;
+    Status                                           flush_status_  = Status::ok;
 };
 
 }  // namespace brick::lvgl

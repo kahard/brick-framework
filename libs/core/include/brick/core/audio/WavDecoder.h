@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "brick/Status.h"
 #include "brick/core/audio/AudioBuffer.h"
 #include "brick/interfaces/storage/IFileSystem.h"
 
@@ -14,10 +15,11 @@ class WavDecoder
 {
 public:
     /// Writes the samples to samples (capacity bytes, one per frame) and points
-    /// output at them. Fails when the file is not a supported WAV or has more
-    /// frames than capacity; samples must stay valid while output is played.
-    static bool decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* samples,
-                       std::size_t capacity, AudioBuffer& output);
+    /// output at them; samples must stay valid while output is played.
+    /// Status::not_supported for a WAV other than 8/16-bit PCM mono/stereo,
+    /// Status::no_memory when the file has more frames than capacity.
+    static Status decode(interfaces::storage::IFileSystem& file_system, const char* path, std::uint8_t* samples,
+                         std::size_t capacity, AudioBuffer& output);
 
 private:
     static bool          read_exact(interfaces::storage::IFile& file, void* data, std::size_t size);

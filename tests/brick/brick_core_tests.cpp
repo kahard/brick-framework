@@ -35,6 +35,15 @@ using brick::mocks::MemoryAssetSource;
 using brick::mocks::MemoryFile;
 using brick::mocks::MemoryFileSystem;
 using FakeDisplay = brick::mocks::RecordingDisplay;
+using brick::Status;
+
+void test_status()
+{
+    static_assert(brick::is_ok(Status::ok) && !brick::is_ok(Status::error));
+    assert(std::strcmp(brick::to_string(Status::ok), "ok") == 0);
+    assert(std::strcmp(brick::to_string(Status::timeout), "timeout") == 0);
+    assert(std::strcmp(brick::to_string(Status::not_supported), "not supported") == 0);
+}
 
 void test_periodic_timer()
 {
@@ -89,9 +98,9 @@ void test_bmp_decoder()
     MemoryFileSystem fs;
     fs.files["test.bmp"]           = make_2x2_bmp();
     std::uint8_t pixels[2 * 2 * 2] = {};
-    const bool   decoded =
+    const Status decoded =
         brick::core::image::BmpDecoder::decode(fs, "test.bmp", pixels, { .target_width = 2, .target_height = 2 });
-    assert(decoded && fs.open_files() == 0);
+    assert(decoded == Status::ok && fs.open_files() == 0);
 
     // RGB565, native little endian: top-left red, top-right green,
     // bottom-left blue, white.
@@ -99,8 +108,8 @@ void test_bmp_decoder()
         0x00, 0xF8, 0xE0, 0x07, 0x1F, 0x00, 0xFF, 0xFF,
     };
     assert(std::memcmp(pixels, expected, sizeof(expected)) == 0);
-    assert(
-        !brick::core::image::BmpDecoder::decode(fs, "missing.bmp", pixels, { .target_width = 2, .target_height = 2 }));
+    assert(brick::core::image::BmpDecoder::decode(fs, "missing.bmp", pixels, { .target_width = 2, .target_height = 2 })
+           == Status::not_found);
 }
 
 // Top-down BMP whose pixel (x, y) has red = x, green = y * 4 and blue = 0x80.
@@ -145,7 +154,8 @@ void test_bmp_decoder_wide_rows()
         fs.files["wide.bmp"] = make_gradient_bmp(70, 3, bits);
         std::uint8_t pixels[70 * 3 * 2];
         assert(
-            brick::core::image::BmpDecoder::decode(fs, "wide.bmp", pixels, { .target_width = 70, .target_height = 3 }));
+            brick::core::image::BmpDecoder::decode(fs, "wide.bmp", pixels, { .target_width = 70, .target_height = 3 })
+            == Status::ok);
         for (int y = 0; y < 3; ++y)
             for (int x = 0; x < 70; ++x)
             {
@@ -155,8 +165,9 @@ void test_bmp_decoder_wide_rows()
             }
 
         std::uint8_t cropped[40 * 1 * 2];
-        assert(brick::core::image::BmpDecoder::decode(fs, "wide.bmp", cropped,
-                                                      { .target_width = 40, .target_height = 1 }));
+        assert(
+            brick::core::image::BmpDecoder::decode(fs, "wide.bmp", cropped, { .target_width = 40, .target_height = 1 })
+            == Status::ok);
         for (int x = 0; x < 40; ++x)
             assert(static_cast<std::uint16_t>(cropped[x * 2] | (cropped[x * 2 + 1] << 8)) == expected_gradient(x, 1));
         assert(fs.open_files() == 0);
@@ -191,15 +202,16 @@ void test_wav_decoder()
     fs.files["test.wav"]                       = make_pcm_wav();
     std::uint8_t                    samples[4] = {};
     brick::core::audio::AudioBuffer buffer;
-    assert(brick::core::audio::WavDecoder::decode(fs, "test.wav", samples, sizeof(samples), buffer));
+    assert(brick::core::audio::WavDecoder::decode(fs, "test.wav", samples, sizeof(samples), buffer) == Status::ok);
     assert(buffer.sample_rate() == 8000);
     assert(buffer.size() == 2 && buffer.data() == samples);
     assert(buffer.data()[0] == 0);
     assert(buffer.data()[1] == 255);
     assert(fs.open_files() == 0);
-    assert(!brick::core::audio::WavDecoder::decode(fs, "missing.wav", samples, sizeof(samples), buffer));
+    assert(brick::core::audio::WavDecoder::decode(fs, "missing.wav", samples, sizeof(samples), buffer)
+           == Status::not_found);
     // More frames than the caller's buffer holds.
-    assert(!brick::core::audio::WavDecoder::decode(fs, "test.wav", samples, 1, buffer));
+    assert(brick::core::audio::WavDecoder::decode(fs, "test.wav", samples, 1, buffer) == Status::no_memory);
     assert(fs.open_files() == 0);
 }
 
@@ -209,8 +221,9 @@ void test_audio_player()
     brick::core::audio::PeriodicAudioPlayer player(output);
     const std::uint8_t                      samples[] = { 10, 20, 30 };
     brick::core::audio::AudioBuffer         buffer(samples, sizeof(samples), 8000);
-    assert(player.begin());
-    assert(player.play(buffer));
+    assert(player.begin() == Status::ok);
+    assert(player.play(buffer) == Status::ok);
+    assert(player.play(brick::core::audio::AudioBuffer{}) == Status::invalid_argument);
     assert(player.playing());
     player.tick();
     player.tick();
@@ -229,7 +242,7 @@ void test_screen_canvas()
     // The canvas draws into the caller's pixels and presents exactly its area.
     auto canvas = screen.create_canvas({ 4, 8, 16, 4 }, pixels);
     assert(canvas.valid() && canvas.buffer().data == reinterpret_cast<std::uint8_t*>(pixels.data()));
-    assert(canvas.clear(0xF800).present());
+    assert(canvas.clear(0xF800).present() == Status::ok);
     assert(pixels[0] == 0xF800 && pixels[63] == 0xF800);
     assert(display.last_area.x == 4 && display.last_area.y == 8 && display.last_byte_count == 16 * 4 * 2);
 
@@ -238,6 +251,9 @@ void test_screen_canvas()
     assert(!screen.create_canvas({ 0, 0, 16, 5 }, pixels).valid());
     assert(!screen.create_canvas({ 0, 0, 0, 4 }, pixels).valid());
     assert(!screen.create_canvas({ 0, 0, 1, 1 }, nullptr, 1).valid());
+    // present() reports why a canvas is invalid.
+    assert(screen.create_canvas(1, pixels).clear(0).present() == Status::no_memory);
+    assert(screen.create_canvas({ 0, 0, 0, 4 }, pixels).present() == Status::invalid_argument);
 }
 
 void test_touch_mapper()
@@ -285,7 +301,7 @@ void test_asset_streamer()
     const ImageAsset                  asset{ pixels.data(), 4, 5, 8, pixels.size(), PixelFormat::rgb565 };
     std::uint8_t                      scratch[16] = {};
 
-    assert(streamer.stream(asset, DisplayRect{ 10, 20, 4, 5 }, scratch, sizeof(scratch)));
+    assert(streamer.stream(asset, DisplayRect{ 10, 20, 4, 5 }, scratch, sizeof(scratch)) == Status::ok);
     assert((reader.offsets == std::vector<std::size_t>{ 0, 16, 32 }));
     assert((reader.sizes == std::vector<std::size_t>{ 16, 16, 8 }));
     assert(display.submitted_areas.size() == 3);
@@ -293,14 +309,15 @@ void test_asset_streamer()
     assert(display.submitted_areas[1].y == 22 && display.submitted_areas[1].height == 2);
     assert(display.submitted_areas[2].y == 24 && display.submitted_areas[2].height == 1);
     assert((display.submitted_byte_counts == std::vector<std::size_t>{ 16, 16, 8 }));
-    assert(!streamer.stream(asset, DisplayRect{ 0, 0, 4, 5 }, scratch, 7));
+    // 7 bytes of scratch cannot hold one 8-byte row.
+    assert(streamer.stream(asset, DisplayRect{ 0, 0, 4, 5 }, scratch, 7) == Status::no_memory);
 
     std::uint8_t                                          framebuffer_data[40] = {};
     const brick::interfaces::display::WritablePixelBuffer framebuffer{ framebuffer_data,    4,    5, 8,
                                                                        PixelFormat::rgb565, false };
     reader.offsets.clear();
     reader.sizes.clear();
-    assert(streamer.stream_to_buffer(asset, framebuffer, scratch, sizeof(scratch)));
+    assert(streamer.stream_to_buffer(asset, framebuffer, scratch, sizeof(scratch)) == Status::ok);
     assert((reader.offsets == std::vector<std::size_t>{ 0, 16, 32 }));
     assert(std::memcmp(framebuffer_data, pixels.data(), pixels.size()) == 0);
 }
@@ -342,14 +359,16 @@ void test_asset_source_streamer()
     brick::core::image::AssetStreamer streamer(display);
     std::uint8_t                      scratch[4] = {};
 
-    assert(streamer.stream(asset, source, DisplayRect{ 0, 0, 2, 3 }, scratch, sizeof(scratch)));
+    assert(streamer.stream(asset, source, DisplayRect{ 0, 0, 2, 3 }, scratch, sizeof(scratch)) == Status::ok);
     assert((source.offsets == std::vector<std::size_t>{ 0, 4, 8 }));
     assert((source.sizes == std::vector<std::size_t>{ 4, 4, 4 }));
     assert(display.submitted_byte_counts.size() == 3);
     assert(display.submitted_byte_counts[0] == 4 && display.submitted_byte_counts[2] == 4);
 
     const AssetDescriptor out_of_bounds{ 8, 13, 4, 2, 1, 4, PixelFormat::rgb565 };
-    assert(!streamer.stream(out_of_bounds, source, DisplayRect{ 0, 0, 2, 1 }, scratch, sizeof(scratch)));
+    // The source refuses a read beyond the bundle; the streamer passes its status on.
+    assert(streamer.stream(out_of_bounds, source, DisplayRect{ 0, 0, 2, 1 }, scratch, sizeof(scratch))
+           == Status::invalid_argument);
 }
 
 }  // namespace
@@ -378,12 +397,13 @@ int main()
 
     FakeDisplay       display;
     const PixelBuffer packed{ pixels, 8, 4, 16, brick::interfaces::display::PixelFormat::rgb565, false };
-    assert(display.draw_buffer({ 12, 30, 8, 4 }, packed));
+    assert(display.draw_buffer({ 12, 30, 8, 4 }, packed) == Status::ok);
     assert(display.last_area.x == 12 && display.last_area.y == 30);
     assert(display.last_pixels == pixels && display.last_byte_count == 64);
     const PixelBuffer padded{ pixels, 8, 4, 20, brick::interfaces::display::PixelFormat::rgb565, false };
-    assert(!display.draw_buffer({ 12, 30, 8, 4 }, padded));
+    assert(display.draw_buffer({ 12, 30, 8, 4 }, padded) == Status::invalid_argument);
 
+    test_status();
     test_periodic_timer();
     test_bmp_decoder();
     test_bmp_decoder_wide_rows();

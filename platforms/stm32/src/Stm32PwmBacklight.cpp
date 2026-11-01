@@ -3,10 +3,10 @@
 namespace brick::platform::stm32::f1
 {
 
-bool Stm32PwmBacklight::begin()
+Status Stm32PwmBacklight::begin()
 {
     if (config_.timer == nullptr || config_.port == nullptr)
-        return false;
+        return Status::invalid_argument;
     __HAL_RCC_GPIOC_CLK_ENABLE();
     __HAL_RCC_AFIO_CLK_ENABLE();
     __HAL_RCC_TIM3_CLK_ENABLE();
@@ -22,36 +22,42 @@ bool Stm32PwmBacklight::begin()
     config_.timer->Init.Period            = config_.timer_period;
     config_.timer->Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
     config_.timer->Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-    if (HAL_TIM_PWM_Init(config_.timer) != HAL_OK)
-        return false;
+    if (const HAL_StatusTypeDef result = HAL_TIM_PWM_Init(config_.timer); result != HAL_OK)
+        return to_status(result);
     TIM_OC_InitTypeDef channel{};
     channel.OCMode     = TIM_OCMODE_PWM1;
     channel.Pulse      = 0;
     channel.OCPolarity = config_.active_high ? TIM_OCPOLARITY_HIGH : TIM_OCPOLARITY_LOW;
     channel.OCFastMode = TIM_OCFAST_DISABLE;
-    if (HAL_TIM_PWM_ConfigChannel(config_.timer, &channel, config_.channel) != HAL_OK)
-        return false;
-    if (HAL_TIM_PWM_Start(config_.timer, config_.channel) != HAL_OK)
-        return false;
+    if (const HAL_StatusTypeDef result = HAL_TIM_PWM_ConfigChannel(config_.timer, &channel, config_.channel);
+        result != HAL_OK)
+        return to_status(result);
+    if (const HAL_StatusTypeDef result = HAL_TIM_PWM_Start(config_.timer, config_.channel); result != HAL_OK)
+        return to_status(result);
     initialized_ = true;
-    return set_brightness(brightness_);
+    return set_brightness_percent(brightness_);
 }
 
-bool Stm32PwmBacklight::set_enabled(bool enabled)
+Status Stm32PwmBacklight::set_enabled(bool enabled)
 {
-    return set_brightness(enabled ? brightness_ : 0);
-}
-
-bool Stm32PwmBacklight::set_brightness(std::uint8_t percent)
-{
-    if (!initialized_ && config_.timer == nullptr)
-        return false;
-    if (percent > 100)
-        percent = 100;
-    brightness_      = percent;
-    const auto pulse = static_cast<std::uint32_t>(config_.timer_period) * percent / 100u;
+    if (!initialized_)
+        return Status::not_ready;
+    // Disabling keeps the brightness for the next set_enabled(true).
+    const auto pulse = static_cast<std::uint32_t>(config_.timer_period) * (enabled ? brightness_ : 0U) / 100U;
     __HAL_TIM_SET_COMPARE(config_.timer, config_.channel, pulse);
-    return true;
+    return Status::ok;
+}
+
+Status Stm32PwmBacklight::set_brightness_percent(std::uint8_t percent)
+{
+    if (!initialized_)
+        return Status::not_ready;
+    if (percent > 100)
+        return Status::invalid_argument;
+    brightness_      = percent;
+    const auto pulse = static_cast<std::uint32_t>(config_.timer_period) * percent / 100U;
+    __HAL_TIM_SET_COMPARE(config_.timer, config_.channel, pulse);
+    return Status::ok;
 }
 
 }  // namespace brick::platform::stm32::f1

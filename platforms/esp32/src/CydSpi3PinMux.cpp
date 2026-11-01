@@ -10,7 +10,7 @@ CydSpi3PinMux::CydSpi3PinMux(CydSpi3PinMuxConfig config) : config_(config)
 {
 }
 
-bool CydSpi3PinMux::select_touch()
+void CydSpi3PinMux::select_touch()
 {
     gpio_reset_pin(config_.sd_sclk);
     gpio_reset_pin(config_.sd_mosi);
@@ -22,10 +22,9 @@ bool CydSpi3PinMux::select_touch()
     esp_rom_gpio_connect_in_signal(config_.touch_miso, VSPIQ_IN_IDX, false);
     if (config_.touch_interrupt != GPIO_NUM_NC)
         gpio_intr_enable(config_.touch_interrupt);
-    return true;
 }
 
-bool CydSpi3PinMux::select_sd()
+void CydSpi3PinMux::select_sd()
 {
     if (config_.touch_interrupt != GPIO_NUM_NC)
         gpio_intr_disable(config_.touch_interrupt);
@@ -38,7 +37,6 @@ bool CydSpi3PinMux::select_sd()
     esp_rom_gpio_connect_out_signal(config_.sd_sclk, VSPICLK_OUT_IDX, false, false);
     esp_rom_gpio_connect_out_signal(config_.sd_mosi, VSPID_OUT_IDX, false, false);
     esp_rom_gpio_connect_in_signal(config_.sd_miso, VSPIQ_IN_IDX, false);
-    return true;
 }
 
 }  // namespace brick::platform::esp32::wroom32

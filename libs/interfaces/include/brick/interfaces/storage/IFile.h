@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+
+#include "brick/Status.h"
 namespace brick::interfaces::storage
 {
 
@@ -18,7 +20,7 @@ public:
         (void)count;
         return 0;
     }
-    virtual bool seek(long offset, int origin) = 0;
+    virtual Status seek(long offset, int origin) = 0;
 };
 
 }  // namespace brick::interfaces::storage

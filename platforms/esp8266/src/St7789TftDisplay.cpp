@@ -7,12 +7,12 @@ St7789TftDisplay::St7789TftDisplay(St7789TftDisplayConfig config) : config_(conf
 {
 }
 
-bool St7789TftDisplay::begin()
+Status St7789TftDisplay::begin()
 {
     if (initialized_)
-        return true;
+        return Status::ok;
     if (config_.width == 0 || config_.height == 0 || config_.rotation > 3)
-        return false;
+        return Status::invalid_argument;
     if (config_.enable_backlight)
     {
         pinMode(config_.backlight_gpio, OUTPUT);
@@ -22,7 +22,7 @@ bool St7789TftDisplay::begin()
     tft_.setSwapBytes(config_.swap_bytes);
     tft_.setRotation(config_.rotation);
     initialized_ = true;
-    return true;
+    return Status::ok;
 }
 
 brick::interfaces::display::DisplaySize St7789TftDisplay::size() const
@@ -56,31 +56,33 @@ brick::interfaces::display::DisplayCapabilities St7789TftDisplay::capabilities()
     };
 }
 
-bool St7789TftDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
+Status St7789TftDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
 {
     const auto value = static_cast<std::uint8_t>(rotation);
     if (value > 3)
-        return false;
+        return Status::invalid_argument;
     config_.rotation = value;
     if (initialized_)
         tft_.setRotation(config_.rotation);
-    return true;
+    return Status::ok;
 }
 
-bool St7789TftDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
-                                   const brick::interfaces::display::PixelBuffer& buffer)
+Status St7789TftDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
+                                     const brick::interfaces::display::PixelBuffer& buffer)
 {
+    if (!initialized_)
+        return Status::not_ready;
     const auto display_size = size();
-    if (!initialized_ || area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > display_size.width
+    if (area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > display_size.width
         || area.y + area.height > display_size.height || !buffer.valid()
         || buffer.width != static_cast<std::uint32_t>(area.width)
         || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format()
         || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
-        return false;
+        return Status::invalid_argument;
     tft_.pushImage(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y),
                    static_cast<std::uint16_t>(area.width), static_cast<std::uint16_t>(area.height),
                    const_cast<std::uint16_t*>(reinterpret_cast<const std::uint16_t*>(buffer.data)));
-    return true;
+    return Status::ok;
 }
 
 }  // namespace brick::platform::esp8266

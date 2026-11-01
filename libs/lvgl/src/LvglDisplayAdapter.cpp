@@ -33,9 +33,9 @@ lv_display_t* LvglDisplayAdapter::create_framebuffer(brick::interfaces::display:
 
     brick::interfaces::display::WritablePixelBuffer buffer_1;
     brick::interfaces::display::WritablePixelBuffer buffer_2;
-    if (!framebuffers.get_frame_buffer(0, buffer_1) || !framebuffers.get_frame_buffer(1, buffer_2) || !buffer_1.valid()
-        || !buffer_2.valid() || buffer_1.width != buffer_2.width || buffer_1.height != buffer_2.height
-        || buffer_1.stride_bytes != buffer_2.stride_bytes)
+    if (!is_ok(framebuffers.get_frame_buffer(0, buffer_1)) || !is_ok(framebuffers.get_frame_buffer(1, buffer_2))
+        || !buffer_1.valid() || !buffer_2.valid() || buffer_1.width != buffer_2.width
+        || buffer_1.height != buffer_2.height || buffer_1.stride_bytes != buffer_2.stride_bytes)
         return nullptr;
 
     const auto buffer_size = static_cast<std::uint32_t>(buffer_1.stride_bytes * buffer_1.height);
@@ -79,8 +79,9 @@ void LvglDisplayAdapter::flush_(lv_display_t* display, const lv_area_t& area, st
 
         if (index != 0xFF)
         {
-            framebuffers_->present_frame_buffer(index);
-            device_.wait_for_vsync(100);
+            flush_status_ = framebuffers_->present_frame_buffer(index);
+            if (is_ok(flush_status_))
+                flush_status_ = device_.wait_for_vsync(100);
         }
         lv_display_flush_ready(display);
         return;
@@ -109,8 +110,9 @@ void LvglDisplayAdapter::flush_(lv_display_t* display, const lv_area_t& area, st
         height,
     };
 
-    if (device_.submit_buffer(rectangle, buffer))
-        device_.wait_for_transfer_complete(1000);
+    flush_status_ = device_.submit_buffer(rectangle, buffer);
+    if (is_ok(flush_status_))
+        flush_status_ = device_.wait_for_transfer_complete(1000);
     lv_display_flush_ready(display);
 }
 

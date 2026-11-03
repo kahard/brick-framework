@@ -26,8 +26,9 @@ public:
     WebScreen& operator=(const WebScreen&) = delete;
 
     /// Listens on port (0: any free port) of this computer only, or of every
-    /// network interface with lan. False when the port cannot be opened.
-    bool start(std::uint16_t port, bool lan, const std::string& title);
+    /// network interface with lan. The page shows a push button when button
+    /// is set. False when the port cannot be opened.
+    bool start(std::uint16_t port, bool lan, const std::string& title, bool button);
     /// The port listened on, after start().
     std::uint16_t port() const;
     /// Browsers currently showing the screen.

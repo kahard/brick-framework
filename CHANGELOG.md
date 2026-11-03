@@ -52,6 +52,9 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 - symulator PC w przeglądarce: `--web [PORT]` uruchamia wbudowany serwer
   HTTP + WebSocket (`WebScreen`), który pokazuje ekran na stronie i przyjmuje
   dotyk i przycisk z przeglądarki; `--web-lan` udostępnia go w sieci lokalnej,
+- przycisk symulatora (strona web, spacja w oknie, `--press`) tylko dla
+  płytek, które go mają: `SimulatorBoardConfig::button`, ustawione dla
+  ESP-12F ST7789,
 - płytki: flaga `wifi` (CYD, Panel 480, JC1060, JC8012, ESP-12F) i `ethernet`
   (JC1060, IP101), domyślnie wyłączone; `SimulatorBoard` ma symulowane
   Wi-Fi (`--wifi`) i sieć komputera jako Ethernet (`--offline`),

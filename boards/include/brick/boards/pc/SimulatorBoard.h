@@ -27,6 +27,7 @@ struct SimulatorBoardConfig
     std::uint16_t height        = 240;
     std::uint8_t  frame_buffers = 0;  ///< 0 = partial-update panel, N = scan-out frame buffers
     bool          debug_log     = false;
+    bool          button        = false;  ///< a push button: the web page shows one, the window maps space
 
     static constexpr SimulatorBoardConfig cyd() { return { "CYD 2.8-inch (simulated)", 320, 240, 0, false }; }
     static constexpr SimulatorBoardConfig panel480() { return { "ESP32-S3 480x480 (simulated)", 480, 480, 2, false }; }
@@ -34,7 +35,7 @@ struct SimulatorBoardConfig
     static constexpr SimulatorBoardConfig jc8012() { return { "JC8012 10-inch (simulated)", 800, 1280, 2, false }; }
     static constexpr SimulatorBoardConfig esp12f_st7789()
     {
-        return { "ESP-12F ST7789 (simulated)", 240, 240, 0, false };
+        return { "ESP-12F ST7789 (simulated)", 240, 240, 0, false, true };
     }
 };
 
@@ -42,7 +43,9 @@ struct SimulatorBoardConfig
 /// boards (display(), touch(), backlight(), button(), buzzer(), sd(),
 /// eeprom(), flash(), wifi(), ethernet(), time(), logger()) so a target entry
 /// point for the PC looks like the embedded one. Wi-Fi is simulated (--wifi);
-/// ethernet() is the PC's own network, down with --offline.
+/// ethernet() is the PC's own network, down with --offline. The simulator
+/// drives button() (browser, space key, --press) only for a config with a
+/// button, as on the real boards.
 class SimulatorBoard final : public brick::interfaces::board::IBoard
 {
 public:
@@ -58,7 +61,8 @@ public:
           ethernet_("ethernet", options.offline), simulator_(options, display_, time_, config.name)
     {
         simulator_.attach(touch_);
-        simulator_.attach(button_);
+        if (config.button)
+            simulator_.attach(button_);
         simulator_.attach(backlight_);
     }
 

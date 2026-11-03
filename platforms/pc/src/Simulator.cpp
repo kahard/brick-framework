@@ -219,7 +219,7 @@ bool Simulator::has_window() const
 bool Simulator::start_web()
 {
     web_ = std::make_unique<WebScreen>();
-    if (!web_->start(options_.web_port, options_.web_lan, title_))
+    if (!web_->start(options_.web_port, options_.web_lan, title_, button_ != nullptr))
     {
         std::fprintf(stderr, "Cannot open the web screen on port %u\n", static_cast<unsigned>(options_.web_port));
         web_.reset();

@@ -1,6 +1,7 @@
 #pragma once
 
-// The page served by WebScreen. {{TITLE}} is replaced by the board name.
+// The page served by WebScreen. {{TITLE}} is replaced by the board name and
+// {{BUTTON}} by kWebScreenButton (a board with a push button) or nothing.
 // Messages from the server (binary, little-endian, several per frame):
 //   1 width:u16 height:u16                      screen size; clears to black
 //   2 x:u16 y:u16 w:u16 h:u16 pixels:u16[w*h]   RGB565 rectangle
@@ -35,7 +36,7 @@ inline constexpr char kWebScreenPage[] = R"PAGE(<!doctype html>
 <h1>{{TITLE}}</h1>
 <canvas id="screen" width="320" height="240"></canvas>
 <div class="bar">
-  <button id="button" title="Space">Button</button>
+  {{BUTTON}}
   <span id="status">connecting...</span>
 </div>
 <script>
@@ -116,19 +117,25 @@ canvas.addEventListener("pointermove", (event) => { if (event.buttons) send("m "
 canvas.addEventListener("pointerup", (event) => send("u " + position(event)));
 canvas.addEventListener("pointercancel", (event) => send("u " + position(event)));
 
+// Only a board with a push button has one on the page; space presses it too.
 const button = document.getElementById("button");
-button.addEventListener("pointerdown", () => send("b 1"));
-button.addEventListener("pointerup", () => send("b 0"));
-button.addEventListener("pointerleave", () => send("b 0"));
-document.addEventListener("keydown", (event) => {
-  if (event.code === "Space" && !event.repeat) { send("b 1"); event.preventDefault(); }
-});
-document.addEventListener("keyup", (event) => { if (event.code === "Space") send("b 0"); });
+if (button) {
+  button.addEventListener("pointerdown", () => send("b 1"));
+  button.addEventListener("pointerup", () => send("b 0"));
+  button.addEventListener("pointerleave", () => send("b 0"));
+  document.addEventListener("keydown", (event) => {
+    if (event.code === "Space" && !event.repeat) { send("b 1"); event.preventDefault(); }
+  });
+  document.addEventListener("keyup", (event) => { if (event.code === "Space") send("b 0"); });
+}
 
 connect();
 </script>
 </body>
 </html>
 )PAGE";
+
+/// What {{BUTTON}} becomes for a board with a push button.
+inline constexpr char kWebScreenButton[] = R"(<button id="button" title="Space">Button</button>)";
 
 }  // namespace brick::platform::pc

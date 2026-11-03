@@ -161,7 +161,7 @@ void test_page_and_screen()
            == brick::Status::ok);
 
     WebScreen screen;
-    assert(screen.start(0, false, "Test <board>"));
+    assert(screen.start(0, false, "Test <board>", true));
     assert(screen.port() != 0);
     const auto idle = [] {};
 
@@ -171,6 +171,8 @@ void test_page_and_screen()
     assert(page.received.rfind("HTTP/1.1 200 OK", 0) == 0);
     assert(page.received.find("<canvas") != std::string::npos);
     assert(page.received.find("Test &lt;board&gt;") != std::string::npos);
+    assert(page.received.find("id=\"button\"") != std::string::npos);
+    assert(page.received.find("{{") == std::string::npos);
 
     Browser viewer(screen.port());
     viewer.send_text("GET /ws HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
@@ -225,6 +227,19 @@ void test_page_and_screen()
     assert(point.x == 3 && point.y == 1);  // the press is reported before the move
 }
 
+/// A board without a push button gets a page without one.
+void test_page_without_button()
+{
+    WebScreen screen;
+    assert(screen.start(0, false, "No button", false));
+    Browser page(screen.port());
+    page.send_text("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(page.read_until("", [] {}));
+    assert(page.received.rfind("HTTP/1.1 200 OK", 0) == 0);
+    assert(page.received.find("<button") == std::string::npos);
+    assert(page.received.find("{{") == std::string::npos);
+}
+
 }  // namespace
 
 int main()
@@ -232,6 +247,7 @@ int main()
     sockets::start();
     test_websocket_helpers();
     test_page_and_screen();
+    test_page_without_button();
     std::puts("brick_pc_web_screen_tests: all passed");
     return 0;
 }

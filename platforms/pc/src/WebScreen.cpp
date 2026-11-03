@@ -90,6 +90,15 @@ namespace
         return request.substr(begin, end - begin);
     }
 
+    void replace_all(std::string& text, const std::string& placeholder, const std::string& value)
+    {
+        for (std::size_t at = text.find(placeholder); at != std::string::npos; at = text.find(placeholder, at))
+        {
+            text.replace(at, placeholder.size(), value);
+            at += value.size();
+        }
+    }
+
     std::string escape_html(const std::string& text)
     {
         std::string out;
@@ -231,7 +240,7 @@ WebScreen::~WebScreen()
         sockets::close_handle(state_->listener);
 }
 
-bool WebScreen::start(std::uint16_t port, bool lan, const std::string& title)
+bool WebScreen::start(std::uint16_t port, bool lan, const std::string& title, bool button)
 {
     sockets::start();
     const Handle listener = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -253,13 +262,11 @@ bool WebScreen::start(std::uint16_t port, bool lan, const std::string& title)
         sockets::close_handle(listener);
         return false;
     }
-    state_->listener              = listener;
-    state_->port                  = ntohs(address.sin_port);
-    state_->page                  = kWebScreenPage;
-    const std::string placeholder = "{{TITLE}}";
-    for (std::size_t at = state_->page.find(placeholder); at != std::string::npos;
-         at             = state_->page.find(placeholder, at))
-        state_->page.replace(at, placeholder.size(), escape_html(title));
+    state_->listener = listener;
+    state_->port     = ntohs(address.sin_port);
+    state_->page     = kWebScreenPage;
+    replace_all(state_->page, "{{TITLE}}", escape_html(title));
+    replace_all(state_->page, "{{BUTTON}}", button ? kWebScreenButton : "");
     state_->thread = std::thread(&State::run, state_.get());
     return true;
 }

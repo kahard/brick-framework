@@ -68,6 +68,8 @@ public:
     Simulator& operator=(const Simulator&) = delete;
 
     void attach(PcTouchscreen& touch) { touch_ = &touch; }
+    /// A board attaches its button only when it has one: the web page then
+    /// shows a button, the window maps space and --press works.
     void attach(PcButton& button) { button_ = &button; }
     void attach(PcBacklight& backlight) { backlight_ = &backlight; }
 

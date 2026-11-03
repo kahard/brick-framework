@@ -55,6 +55,7 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 - przycisk symulatora (strona web, spacja w oknie, `--press`) tylko dla
   płytek, które go mają: `SimulatorBoardConfig::button`, ustawione dla
   ESP-12F ST7789,
+- opis symulatora PC i pisania aplikacji pod niego (`docs/pc-simulator.md`),
 - płytki: flaga `wifi` (CYD, Panel 480, JC1060, JC8012, ESP-12F) i `ethernet`
   (JC1060, IP101), domyślnie wyłączone; `SimulatorBoard` ma symulowane
   Wi-Fi (`--wifi`) i sieć komputera jako Ethernet (`--offline`),

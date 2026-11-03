@@ -96,7 +96,8 @@ default http://localhost:8080/; `--web-lan` lets a phone or tablet on the
 network open it too); with `--headless`, applications run without a window,
 which is how CI runs their smoke tests. Without SDL2 an endless run needs
 `--web` or `--headless`. Link `BRICK::PlatformPC` and use
-`brick_add_simulator()` from `cmake/BrickSimulator.cmake`.
+`brick_add_simulator()` from `cmake/BrickSimulator.cmake`. How it all works
+and how to write an application for it: [docs/pc-simulator.md](docs/pc-simulator.md).
 
 Test doubles that record calls (displays, touch screens, file systems,
 loggers) are in `libs/mocks` (`BRICK::Mocks`).
@@ -118,6 +119,8 @@ in [docs/architecture-pl.md](docs/architecture-pl.md).
 - [Application architecture and PC simulation](docs/application-architecture.md):
   layers, how applications stay portable, the PC simulator and the migration
   plan.
+- [PC simulator](docs/pc-simulator.md): the window, the web screen and the
+  headless smoke tests, and how to write an application that runs in them.
 - [Embedded coding rules](docs/embedded-coding-rules.md): rules for code that
   runs on a microcontroller, checked by [`libs/rules`](libs/rules/README.md).
 

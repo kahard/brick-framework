@@ -104,7 +104,10 @@ struct filled by the target; they are never read from a board header inside
 
 ## The PC simulator
 
-`platforms/pc` implements the interfaces on a desktop OS:
+[pc-simulator.md](pc-simulator.md) is the full guide: the simulator loop, the
+window, the web screen and its protocol, scripted smoke tests and a checklist
+for a new application. In short, `platforms/pc` implements the interfaces on a
+desktop OS:
 
 | Interface | PC implementation |
 |---|---|

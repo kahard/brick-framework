@@ -4,12 +4,18 @@
 #include "brick/platform/esp32/EspStatus.h"
 #include "brick/platform/esp32/network/EspNetworkStack.h"
 #include "brick/platform/esp32/network/EspWifi.h"
+#include "esp_log.h"
 #include "esp_wifi.h"
 
 namespace brick::platform::esp32
 {
 
 using interfaces::network::LinkState;
+
+namespace
+{
+    constexpr char kTag[] = "brick_wifi";
+}  // namespace
 
 Status EspWifiAccessPoint::ip_info(interfaces::network::IpInfo& info) const
 {
@@ -32,6 +38,8 @@ Status EspWifiAccessPoint::start(const interfaces::network::WifiAccessPointConfi
         return Status::not_ready;
     if (const Status status = core::network::check_access_point(config); !is_ok(status))
         return status;
+    if (settings_ignored_)
+        return Status::not_supported;
     wifi_config_t     settings{};
     const std::size_t ssid_length = core::network::bounded_length(config.ssid, sizeof(settings.ap.ssid));
     const std::size_t password_length =
@@ -53,7 +61,23 @@ Status EspWifiAccessPoint::start(const interfaces::network::WifiAccessPointConfi
         state_.store(previous);
         return status;
     }
-    return to_status(esp_wifi_set_config(WIFI_IF_AP, &settings));
+    if (const esp_err_t error = esp_wifi_set_config(WIFI_IF_AP, &settings); error != ESP_OK)
+        return to_status(error);
+    // An ESP32-C6 co-processor with old esp_hosted firmware (2.1.0 on the
+    // JC8012 as shipped) answers ESP_OK but keeps its own hotspot, open and
+    // named ESP_xxxxxx. Rather than leave that open, close it.
+    wifi_config_t applied{};
+    if (esp_wifi_get_config(WIFI_IF_AP, &applied) == ESP_OK
+        && (applied.ap.ssid_len != settings.ap.ssid_len
+            || std::memcmp(applied.ap.ssid, settings.ap.ssid, ssid_length) != 0
+            || applied.ap.authmode != settings.ap.authmode))
+    {
+        ESP_LOGE(kTag, "The radio kept its own hotspot settings (co-processor firmware too old?): hotspot closed");
+        (void)stop();
+        settings_ignored_ = true;
+        return Status::not_supported;
+    }
+    return Status::ok;
 }
 
 Status EspWifiAccessPoint::stop()

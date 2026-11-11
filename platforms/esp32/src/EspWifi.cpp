@@ -6,6 +6,12 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 
+// ESP32-P4: the radio is an ESP32-C6 behind esp_hosted (see docs/network.md).
+#if __has_include("esp_hosted.h")
+#    include "esp_hosted.h"
+#    define BRICK_ESP_HOSTED 1
+#endif
+
 namespace brick::platform::esp32
 {
 
@@ -26,6 +32,25 @@ namespace
                 error = nvs_flash_init();
         }
         return to_status(error);
+    }
+
+    /// Hotspot clients get the device as their DNS server (DHCP option 6),
+    /// for a captive DNS such as core::network::CaptiveDns; without one
+    /// names simply do not resolve on the hotspot, as before.
+    void offer_own_dns(esp_netif_t* netif)
+    {
+        esp_netif_ip_info_t address{};
+        if (esp_netif_get_ip_info(netif, &address) != ESP_OK)
+            return;
+        esp_netif_dns_info_t dns{};
+        dns.ip.type            = ESP_IPADDR_TYPE_V4;
+        dns.ip.u_addr.ip4.addr = address.ip.addr;
+        std::uint8_t offer     = 0x02;  // OFFER_DNS of the ESP-IDF DHCP server
+        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_stop(netif));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(
+            esp_netif_dhcps_option(netif, ESP_NETIF_OP_SET, ESP_NETIF_DOMAIN_NAME_SERVER, &offer, sizeof(offer)));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_set_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_start(netif));
     }
 }  // namespace
 
@@ -63,12 +88,24 @@ Status EspWifi::create_netifs_()
     if (station_.netif() == nullptr)
         station_.attach(esp_netif_create_default_wifi_sta());
     if (access_point_.netif() == nullptr)
+    {
         access_point_.attach(esp_netif_create_default_wifi_ap());
+        if (access_point_.netif() != nullptr)
+            offer_own_dns(access_point_.netif());
+    }
     return station_.netif() != nullptr && access_point_.netif() != nullptr ? Status::ok : Status::no_memory;
 }
 
 Status EspWifi::start_driver_()
 {
+#ifdef BRICK_ESP_HOSTED
+    // esp_hosted starts itself from a constructor in an object file nothing
+    // refers to, which the linker leaves out of the static library: without
+    // this call esp_wifi_init() fails ("Transport not initialized"). A second
+    // call does nothing.
+    if (const esp_err_t error = esp_hosted_init(); error != ESP_OK)
+        return to_status(error);
+#endif
     const wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     if (const esp_err_t error = esp_wifi_init(&init); error != ESP_OK)
         return to_status(error);

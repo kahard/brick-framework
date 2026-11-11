@@ -1,3 +1,4 @@
+#include <array>
 #include <cstring>
 
 #include "brick/core/network/WifiConfigCheck.h"
@@ -151,12 +152,33 @@ Status EspWifiStation::scan_results(WifiNetwork* networks, std::size_t capacity,
 void EspWifiStation::collect_scan_()
 {
     scan_count_ = 0;
+    collected_  = true;
     wifi_ap_record_t record{};
-    for (std::size_t read = 0; read < kMaxScanRecords && esp_wifi_scan_get_ap_record(&record) == ESP_OK; ++read)
+    std::size_t      read = 0;
+    for (; read < kMaxScanRecords && esp_wifi_scan_get_ap_record(&record) == ESP_OK; ++read)
         core::network::add_scanned_network(scan_results_.data(), scan_results_.size(), scan_count_, to_network(record));
-    // Frees the records of a scan that found more access points than were read.
-    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_clear_ap_list());
-    collected_ = true;
+    if (read > 0)
+    {
+        // Frees the records of a scan that found more access points than were read.
+        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_clear_ap_list());
+        return;
+    }
+    // Nothing read one by one: an ESP32-C6 with esp_hosted firmware before
+    // 2.5 (JC1060, JC8012 as shipped) does not know that call, only the whole
+    // list (which also frees it).
+    collect_scan_list_();
+}
+
+void EspWifiStation::collect_scan_list_()
+{
+    // Up to kMaxScanResults records (about 1.8 KB of stack, only here).
+    std::array<wifi_ap_record_t, kMaxScanResults> records{};
+    std::uint16_t                                 number = kMaxScanResults;
+    if (esp_wifi_scan_get_ap_records(&number, records.data()) != ESP_OK)
+        return;
+    for (std::uint16_t index = 0; index < number; ++index)
+        core::network::add_scanned_network(scan_results_.data(), scan_results_.size(), scan_count_,
+                                           to_network(records[index]));
 }
 
 Status EspWifiStation::connect(const interfaces::network::WifiCredentials& credentials)

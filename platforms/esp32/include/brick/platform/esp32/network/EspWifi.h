@@ -67,9 +67,11 @@ private:
         failed,
     };
 
-    void      collect_scan_();
-    esp_err_t leave_();
-    void      on_disconnected_(std::uint16_t reason);
+    void collect_scan_();
+    /// The whole scan list at once, for co-processors without the one-by-one call.
+    [[gnu::noinline]] void collect_scan_list_();
+    esp_err_t              leave_();
+    void                   on_disconnected_(std::uint16_t reason);
 
     EspWifi&                                      radio_;
     esp_netif_t*                                  netif_ = nullptr;
@@ -109,6 +111,9 @@ private:
     esp_netif_t*                                netif_ = nullptr;
     std::atomic<interfaces::network::LinkState> state_{ interfaces::network::LinkState::down };
     std::atomic<std::uint8_t>                   clients_{ 0 };
+    /// The radio ignored the hotspot settings once (old co-processor firmware):
+    /// start() no longer turns an open default hotspot on.
+    bool settings_ignored_ = false;
 };
 
 /// The Wi-Fi radio: owns the ESP-IDF driver, its netifs and event handlers,

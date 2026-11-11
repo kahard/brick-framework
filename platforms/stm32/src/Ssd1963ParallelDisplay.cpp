@@ -9,6 +9,33 @@ namespace
 {
 
     constexpr std::uint16_t kDataPins = 0x00FF;
+
+    /// Port value that puts value on D0..D7 in one BSRR write.
+    constexpr std::uint32_t bus_word(std::uint8_t value)
+    {
+        return (static_cast<std::uint32_t>(kDataPins & ~value) << 16) | value;
+    }
+
+    /// The registers of one data burst, kept in locals so the byte loop
+    /// does not reload the configuration.
+    struct BurstWriter
+    {
+        GPIO_TypeDef* data_port;
+        GPIO_TypeDef* wr_port;
+        std::uint32_t wr_low;
+        std::uint32_t wr_high;
+
+        void strobe() const
+        {
+            wr_port->BSRR = wr_low;
+            wr_port->BSRR = wr_high;
+        }
+        void write(std::uint32_t word) const
+        {
+            data_port->BSRR = word;
+            strobe();
+        }
+    };
     // Delays of the tested power-up sequence: on tested panels, lighting the
     // backlight without the supply gate transition leaves the controller blank.
     constexpr std::uint32_t kSupplyOffMs     = 200;
@@ -98,17 +125,16 @@ Status Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRe
     constexpr std::size_t bytes_per_pixel = 2;
     if (!started_)
         return Status::not_ready;
-    if (area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > config_.width
-        || area.y + area.height > config_.height || !buffer.valid()
-        || buffer.width != static_cast<std::uint32_t>(area.width)
+    if (!inside_(area) || !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width)
         || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format()
         || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel)
         return Status::invalid_argument;
-    if (const Status status = set_window_(area.x, area.y, area.width, area.height); !is_ok(status))
+    if (const Status status = begin_burst_(area); !is_ok(status))
         return status;
 
     // The controller takes 8-bit red, green and blue for every pixel.
-    command_(kWriteMemoryStart);
+    const BurstWriter writer{ config_.data_port, config_.wr.port, static_cast<std::uint32_t>(config_.wr.pin) << 16,
+                              config_.wr.pin };
     for (std::uint32_t row = 0; row < buffer.height; ++row)
     {
         const auto* pixels =
@@ -116,12 +142,76 @@ Status Ssd1963ParallelDisplay::draw_buffer(brick::interfaces::display::DisplayRe
         for (std::uint32_t column = 0; column < buffer.width; ++column)
         {
             const auto value = pixels[column];
-            data_(static_cast<std::uint8_t>((value >> 8) & 0xF8));
-            data_(static_cast<std::uint8_t>((value >> 3) & 0xFC));
-            data_(static_cast<std::uint8_t>((value << 3) & 0xF8));
+            writer.write(bus_word(static_cast<std::uint8_t>((value >> 8) & 0xF8)));
+            writer.write(bus_word(static_cast<std::uint8_t>((value >> 3) & 0xFC)));
+            writer.write(bus_word(static_cast<std::uint8_t>((value << 3) & 0xF8)));
         }
     }
+    end_burst_();
     return Status::ok;
+}
+
+Status Ssd1963ParallelDisplay::fill_rect(brick::interfaces::display::DisplayRect area, std::uint16_t color)
+{
+    if (!started_)
+        return Status::not_ready;
+    if (!inside_(area))
+        return Status::invalid_argument;
+    if (const Status status = begin_burst_(area); !is_ok(status))
+        return status;
+    const BurstWriter   writer{ config_.data_port, config_.wr.port, static_cast<std::uint32_t>(config_.wr.pin) << 16,
+                              config_.wr.pin };
+    const auto          red    = static_cast<std::uint8_t>((color >> 8) & 0xF8);
+    const auto          green  = static_cast<std::uint8_t>((color >> 3) & 0xFC);
+    const auto          blue   = static_cast<std::uint8_t>((color << 3) & 0xF8);
+    const std::uint32_t pixels = static_cast<std::uint32_t>(area.width) * static_cast<std::uint32_t>(area.height);
+    if (red == green && green == blue)
+    {
+        // The data lines stay as they are; only WR moves.
+        config_.data_port->BSRR = bus_word(red);
+        for (std::uint32_t pixel = 0; pixel < pixels; ++pixel)
+        {
+            writer.strobe();
+            writer.strobe();
+            writer.strobe();
+        }
+    }
+    else
+    {
+        const std::uint32_t words[] = { bus_word(red), bus_word(green), bus_word(blue) };
+        for (std::uint32_t pixel = 0; pixel < pixels; ++pixel)
+        {
+            writer.write(words[0]);
+            writer.write(words[1]);
+            writer.write(words[2]);
+        }
+    }
+    end_burst_();
+    return Status::ok;
+}
+
+bool Ssd1963ParallelDisplay::inside_(brick::interfaces::display::DisplayRect area) const
+{
+    return !area.empty() && area.x >= 0 && area.y >= 0 && area.x + area.width <= config_.width
+           && area.y + area.height <= config_.height;
+}
+
+Status Ssd1963ParallelDisplay::begin_burst_(brick::interfaces::display::DisplayRect area) const
+{
+    if (const Status status =
+            set_window_(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y),
+                        static_cast<std::uint16_t>(area.width), static_cast<std::uint16_t>(area.height));
+        !is_ok(status))
+        return status;
+    command_(kWriteMemoryStart);
+    write(config_.cs, false);
+    write(config_.rs, true);
+    return Status::ok;
+}
+
+void Ssd1963ParallelDisplay::end_burst_() const
+{
+    write(config_.cs, true);
 }
 
 void Ssd1963ParallelDisplay::power_up_panel_() const

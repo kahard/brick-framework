@@ -50,6 +50,12 @@ void test_partial_display()
     assert(display.draw_buffer(DisplayRect{ 3, 1, 2, 1 }, buffer) == Status::invalid_argument);
     assert(display.draw_buffer(DisplayRect{ -1, 0, 2, 1 }, buffer) == Status::invalid_argument);
 
+    // A fill without a caller buffer, as a DMA fill on hardware.
+    assert(display.fill_rect(DisplayRect{ 2, 0, 2, 2 }, 0x001F) == Status::ok);
+    assert(display.screen()[2] == 0x001F && display.screen()[4 + 3] == 0x001F && display.screen()[4 + 1] == 0xF800);
+    assert(display.frame_counter() == 2);
+    assert(display.fill_rect(DisplayRect{ 3, 0, 2, 1 }, 0) == Status::invalid_argument);
+
     assert(display.set_rotation(Rotation::rotate_90) == Status::ok);
     assert(display.size().width == 2 && display.size().height == 4);
 }

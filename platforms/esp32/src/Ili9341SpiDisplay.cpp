@@ -1,5 +1,7 @@
 #include "brick/platform/esp32/Ili9341SpiDisplay.h"
 
+#include "brick/core/display/Rgb565Pixels.h"
+
 namespace brick::platform::esp32
 {
 namespace
@@ -49,7 +51,11 @@ Ili9341SpiDisplay::Ili9341SpiDisplay(Ili9341SpiDisplayConfig config) : config_(c
 Ili9341SpiDisplay::~Ili9341SpiDisplay()
 {
     if (spi_device_ != nullptr)
+    {
+        // The device cannot be removed with transfers still queued.
+        (void)drain_();
         spi_bus_remove_device(spi_device_);
+    }
     if (spi_ready_)
         spi_bus_free(config_.spi_host);
 }
@@ -113,6 +119,8 @@ Status Ili9341SpiDisplay::set_rotation(brick::interfaces::display::Rotation rota
         ESP_LOGW(TAG, "ILI9341 smoke profile supports only rotation 0");
         return Status::not_supported;
     }
+    if (const Status status = drain_(); !is_ok(status))
+        return status;
     return send_command_(kMemoryAccess, &config_.madctl, 1);
 }
 
@@ -129,24 +137,51 @@ Status Ili9341SpiDisplay::draw_buffer(brick::interfaces::display::DisplayRect   
         || buffer.stride_bytes < static_cast<std::size_t>(area.width) * bytes_per_pixel)
         return Status::invalid_argument;
 
+    // The previous area's last transfers end before the window changes.
+    if (const Status status = drain_(); !is_ok(status))
+        return status;
+    if (const Status status =
+            set_address_window_(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y),
+                                static_cast<std::uint16_t>(area.width), static_cast<std::uint16_t>(area.height));
+        !is_ok(status))
+        return status;
+    const Status status = send_pixels_(buffer, static_cast<std::size_t>(area.width) * bytes_per_pixel);
+    if (!is_ok(status))
+        (void)drain_();
+    return status;
+}
+
+Status Ili9341SpiDisplay::fill_rect(brick::interfaces::display::DisplayRect area, std::uint16_t color)
+{
+    if (!started_)
+        return Status::not_ready;
+    if (!inside_(area))
+        return Status::invalid_argument;
+    if (const Status status = drain_(); !is_ok(status))
+        return status;
     if (const Status status =
             set_address_window_(static_cast<std::uint16_t>(area.x), static_cast<std::uint16_t>(area.y),
                                 static_cast<std::uint16_t>(area.width), static_cast<std::uint16_t>(area.height));
         !is_ok(status))
         return status;
 
-    const std::size_t row_bytes = static_cast<std::size_t>(area.width) * bytes_per_pixel;
-    if (buffer.stride_bytes == row_bytes)
-        return send_data_(buffer.data, row_bytes * buffer.height);
+    // One buffer with the color in the panel's byte order is sent as often
+    // as needed; concurrent transfers may read the same buffer.
+    const std::size_t total_bytes = static_cast<std::size_t>(area.width) * static_cast<std::size_t>(area.height) * 2U;
+    const std::size_t chunk_bytes = std::min(total_bytes, kPixelTransferBytes);
+    auto&             pixels      = pixel_tx_buffers_[0];
+    brick::core::display::fill_rgb565(reinterpret_cast<std::uint16_t*>(pixels.data()), chunk_bytes / 2U,
+                                      static_cast<std::uint16_t>((color >> 8) | (color << 8)));
+    const Status status = send_repeated_(pixels.data(), chunk_bytes, total_bytes);
+    if (!is_ok(status))
+        (void)drain_();
+    return status;
+}
 
-    for (std::uint32_t row = 0; row < buffer.height; ++row)
-    {
-        if (const Status status =
-                send_data_(buffer.data + static_cast<std::size_t>(row) * buffer.stride_bytes, row_bytes);
-            !is_ok(status))
-            return status;
-    }
-    return Status::ok;
+bool Ili9341SpiDisplay::inside_(brick::interfaces::display::DisplayRect area) const
+{
+    return !area.empty() && area.x >= 0 && area.y >= 0 && area.x + area.width <= config_.width
+           && area.y + area.height <= config_.height;
 }
 
 Status Ili9341SpiDisplay::begin_spi_()
@@ -187,60 +222,99 @@ Status Ili9341SpiDisplay::send_command_(std::uint8_t command, const std::uint8_t
     return length == 0 ? Status::ok : transmit_(true, args, length);
 }
 
-Status Ili9341SpiDisplay::send_data_(const std::uint8_t* data, std::size_t length)
+Status Ili9341SpiDisplay::send_pixels_(const brick::interfaces::display::PixelBuffer& buffer, std::size_t row_bytes)
 {
-    if (length % 2 != 0)
-        return Status::invalid_argument;
     gpio_set_level(config_.dc_gpio, 1);
-    std::size_t queued = 0;
-    Status      status = Status::ok;
-    for (std::size_t buffer = 0; length != 0; buffer = (buffer + 1) % kPixelBufferCount)
+    // Rows are packed into full transfer buffers, also when the caller's rows
+    // have stride padding, so a narrow area still moves in 4 KB transfers.
+    std::uint32_t row        = 0;
+    std::size_t   row_offset = 0;
+    while (row < buffer.height)
     {
-        // Every buffer is in flight: wait for the oldest before refilling it.
-        if (queued == kPixelBufferCount)
+        if (const Status status = reserve_transaction_(); !is_ok(status))
+            return status;
+        auto&       pixels = pixel_tx_buffers_[next_transaction_];
+        std::size_t filled = 0;
+        while (filled < kPixelTransferBytes && row < buffer.height)
         {
-            if (status = collect_transaction_(); !is_ok(status))
-                break;
-            --queued;
+            const std::size_t chunk = std::min(kPixelTransferBytes - filled, row_bytes - row_offset);
+            // RGB565 is little-endian in memory; ILI9341 takes every pixel MSB first.
+            brick::core::display::copy_rgb565_swapped(
+                pixels.data() + filled, buffer.data + static_cast<std::size_t>(row) * buffer.stride_bytes + row_offset,
+                chunk);
+            filled += chunk;
+            row_offset += chunk;
+            if (row_offset == row_bytes)
+            {
+                ++row;
+                row_offset = 0;
+            }
         }
-        const std::size_t chunk = std::min(length, kPixelTransferBytes);
-        if (status = queue_pixels_(data, chunk, buffer); !is_ok(status))
-            break;
-        ++queued;
-        data += chunk;
-        length -= chunk;
+        if (const Status status = queue_transaction_(pixels.data(), filled); !is_ok(status))
+            return status;
     }
-    // Collect what is still queued, also after an error, so no transfer is
-    // left running from a buffer that the next call refills.
-    for (; queued != 0; --queued)
-    {
-        if (const Status collected = collect_transaction_(); is_ok(status))
-            status = collected;
-    }
-    return status;
+    return Status::ok;
 }
 
-Status Ili9341SpiDisplay::queue_pixels_(const std::uint8_t* data, std::size_t length, std::size_t buffer)
+Status Ili9341SpiDisplay::send_repeated_(const std::uint8_t* data, std::size_t chunk_bytes, std::size_t total_bytes)
 {
-    // RGB565 assets are stored in the portable little-endian memory
-    // representation. ILI9341 expects each pixel on SPI MSB first.
-    auto& pixels = pixel_tx_buffers_[buffer];
-    for (std::size_t index = 0; index < length; index += 2)
+    gpio_set_level(config_.dc_gpio, 1);
+    while (total_bytes != 0)
     {
-        pixels[index]     = data[index + 1];
-        pixels[index + 1] = data[index];
+        if (const Status status = reserve_transaction_(); !is_ok(status))
+            return status;
+        const std::size_t length = std::min(total_bytes, chunk_bytes);
+        if (const Status status = queue_transaction_(data, length); !is_ok(status))
+            return status;
+        total_bytes -= length;
     }
-    spi_transaction_t& transaction = pixel_transactions_[buffer];
+    return Status::ok;
+}
+
+Status Ili9341SpiDisplay::reserve_transaction_()
+{
+    // Every descriptor is in flight: the oldest one, next_transaction_, has
+    // to finish before it and its buffer are used again.
+    if (queued_ < kPixelBufferCount)
+        return Status::ok;
+    return collect_transaction_();
+}
+
+Status Ili9341SpiDisplay::queue_transaction_(const std::uint8_t* data, std::size_t length)
+{
+    spi_transaction_t& transaction = pixel_transactions_[next_transaction_];
     transaction                    = {};
     transaction.length             = length * 8;  // in bits
-    transaction.tx_buffer          = pixels.data();
-    return to_status(spi_device_queue_trans(spi_device_, &transaction, kTransferTimeoutTicks));
+    transaction.tx_buffer          = data;
+    if (const esp_err_t err = spi_device_queue_trans(spi_device_, &transaction, kTransferTimeoutTicks); err != ESP_OK)
+        return to_status(err);
+    ++queued_;
+    next_transaction_ = (next_transaction_ + 1) % kPixelBufferCount;
+    return Status::ok;
 }
 
 Status Ili9341SpiDisplay::collect_transaction_()
 {
     spi_transaction_t* completed = nullptr;
-    return to_status(spi_device_get_trans_result(spi_device_, &completed, kTransferTimeoutTicks));
+    const esp_err_t    err       = spi_device_get_trans_result(spi_device_, &completed, kTransferTimeoutTicks);
+    if (err == ESP_OK)
+        --queued_;
+    return to_status(err);
+}
+
+Status Ili9341SpiDisplay::drain_()
+{
+    while (queued_ != 0)
+    {
+        if (const Status status = collect_transaction_(); !is_ok(status))
+        {
+            // A transfer that did not finish within the timeout is not
+            // waited for again; the first failure is reported.
+            queued_ = 0;
+            return status;
+        }
+    }
+    return Status::ok;
 }
 
 Status Ili9341SpiDisplay::set_address_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width,

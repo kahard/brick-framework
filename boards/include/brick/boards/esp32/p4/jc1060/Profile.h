@@ -16,6 +16,8 @@ namespace brick::boards::jc1060
 
 inline constexpr gpio_num_t kBacklightGpio = GPIO_NUM_23;
 
+/// A 52 MHz pixel clock refreshes at 59 Hz with these porches (40 MHz: 45 Hz);
+/// two lanes at 600 Mbit/s carry the 832 Mbit/s of RGB565 pixels.
 inline brick::platform::esp32::p4::MipiDsiPanelConfig display_config()
 {
     brick::platform::esp32::p4::MipiDsiPanelConfig config;
@@ -23,7 +25,7 @@ inline brick::platform::esp32::p4::MipiDsiPanelConfig display_config()
     config.height                  = 600;
     config.data_lanes              = 2;
     config.lane_bit_rate_mbps      = 600.0f;
-    config.pixel_clock_mhz         = 40.0f;
+    config.pixel_clock_mhz         = 52.0f;
     config.hsync_pulse_width       = 20;
     config.hsync_back_porch        = 160;
     config.hsync_front_porch       = 160;

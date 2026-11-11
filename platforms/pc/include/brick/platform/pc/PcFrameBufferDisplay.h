@@ -36,10 +36,16 @@ public:
     Status                                          draw_buffer(brick::interfaces::display::DisplayRect        area,
                                                                 const brick::interfaces::display::PixelBuffer& buffer) override;
     Status                                          wait_for_vsync(std::uint32_t timeout_ms) override;
+    Status fill_rect(brick::interfaces::display::DisplayRect area, std::uint16_t color) override;
 
     std::uint8_t frame_buffer_count() const override;
     Status       get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
     Status       present_frame_buffer(std::uint8_t index) override;
+    /// CPU copies (brick/core/display/FrameBufferCopy.h).
+    Status copy_to_frame_buffer(std::uint8_t index, brick::interfaces::display::DisplayRect area,
+                                const brick::interfaces::display::PixelBuffer& pixels) override;
+    Status copy_between_frame_buffers(std::uint8_t from, std::uint8_t to,
+                                      brick::interfaces::display::DisplayRect area) override;
 
     /// Visible image, size().width * size().height RGB565 pixels, row-major.
     const std::uint16_t* screen() const { return screen_.data(); }

@@ -41,6 +41,11 @@ struct Ssd1963ParallelDisplayConfig
 };
 
 /// SSD1963 controller on an 8-bit 8080 bus driven by GPIO, RGB565 input.
+///
+/// Pixel data is written as one burst: chip select and the data/command line
+/// stay put, and every byte costs three port writes (data lines, WR low, WR
+/// high). fill_rect() repeats precomputed port values, and only strobes WR
+/// when the three color bytes are equal (black, white, greys).
 class Ssd1963ParallelDisplay final : public brick::interfaces::display::IDisplayDevice
 {
 public:
@@ -53,6 +58,7 @@ public:
     Status set_rotation(brick::interfaces::display::Rotation rotation) override;
     Status draw_buffer(brick::interfaces::display::DisplayRect        area,
                        const brick::interfaces::display::PixelBuffer& buffer) override;
+    Status fill_rect(brick::interfaces::display::DisplayRect area, std::uint16_t color) override;
 
 private:
     void   power_up_panel_() const;
@@ -63,6 +69,10 @@ private:
     void   data16_(std::uint16_t value) const;
     Status initialize_controller_();
     Status set_window_(std::uint16_t x, std::uint16_t y, std::uint16_t width, std::uint16_t height) const;
+    bool   inside_(brick::interfaces::display::DisplayRect area) const;
+    /// Window set and memory write started; CS low and RS high until end_burst_().
+    Status begin_burst_(brick::interfaces::display::DisplayRect area) const;
+    void   end_burst_() const;
 
     Ssd1963ParallelDisplayConfig config_;
     bool                         started_ = false;

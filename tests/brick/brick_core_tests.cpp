@@ -16,6 +16,8 @@
 #include "brick/core/audio/BeepSequence.h"
 #include "brick/core/audio/PeriodicAudioPlayer.h"
 #include "brick/core/audio/WavDecoder.h"
+#include "brick/core/display/FrameBufferCopy.h"
+#include "brick/core/display/Rgb565Pixels.h"
 #include "brick/core/display/Screen.h"
 #include "brick/core/image/BmpDecoder.h"
 #include "brick/core/input/DragSlider.h"
@@ -412,6 +414,173 @@ void test_screen_canvas()
     assert(screen.fill_area({ 0, 0, 65, 1 }, 0, pixels) == Status::invalid_argument);
 }
 
+void test_frame_buffer_copy()
+{
+    using brick::core::display::copy_frame_area;
+    using brick::core::display::copy_into_frame;
+    using brick::interfaces::display::PixelBuffer;
+    using brick::interfaces::display::PixelFormat;
+    using brick::interfaces::display::WritablePixelBuffer;
+
+    constexpr std::uint32_t                     kWidth  = 8;
+    constexpr std::uint32_t                     kHeight = 6;
+    std::array<std::uint16_t, kWidth * kHeight> first{};
+    std::array<std::uint16_t, kWidth * kHeight> second{};
+    const WritablePixelBuffer                   first_frame{
+        reinterpret_cast<std::uint8_t*>(first.data()), kWidth, kHeight, kWidth * 2, PixelFormat::rgb565, false
+    };
+    const WritablePixelBuffer second_frame{
+        reinterpret_cast<std::uint8_t*>(second.data()), kWidth, kHeight, kWidth * 2, PixelFormat::rgb565, false
+    };
+
+    // A 3x2 area at (2,1) from pixels with a padded stride.
+    const std::array<std::uint16_t, 8> pixels{ 1, 2, 3, 0, 4, 5, 6, 0 };
+    const PixelBuffer                  area_pixels{
+        reinterpret_cast<const std::uint8_t*>(pixels.data()), 3, 2, 8, PixelFormat::rgb565, false
+    };
+    assert(copy_into_frame(first_frame, { 2, 1, 3, 2 }, area_pixels) == brick::Status::ok);
+    assert(first[1 * kWidth + 2] == 1 && first[1 * kWidth + 4] == 3 && first[2 * kWidth + 3] == 5);
+    assert(first[1 * kWidth + 1] == 0 && first[1 * kWidth + 5] == 0 && first[3 * kWidth + 2] == 0);
+
+    // The same area into the other frame, nothing around it.
+    assert(copy_frame_area(first_frame, second_frame, { 2, 1, 3, 2 }) == brick::Status::ok);
+    assert(second == first);
+
+    // Outside the frame, empty, or the wrong size: refused, nothing written.
+    assert(copy_into_frame(first_frame, { 6, 0, 3, 2 }, area_pixels) == brick::Status::invalid_argument);
+    assert(copy_into_frame(first_frame, { 0, 0, 2, 2 }, area_pixels) == brick::Status::invalid_argument);
+    assert(copy_frame_area(first_frame, second_frame, {}) == brick::Status::invalid_argument);
+    assert(second == first);
+}
+
+void test_rgb565_pixels()
+{
+    using brick::core::display::copy_rgb565_swapped;
+    using brick::core::display::fill_rgb565;
+
+    // Every start alignment and length, also odd ones, against a plain loop.
+    alignas(8) std::array<std::uint16_t, 40> pixels{};
+    for (std::size_t start = 0; start < 4; ++start)
+        for (std::size_t count = 0; count < 20; ++count)
+        {
+            pixels.fill(0x1111);
+            fill_rgb565(pixels.data() + start, count, 0xABCD);
+            for (std::size_t index = 0; index < pixels.size(); ++index)
+                assert(pixels[index] == (index >= start && index < start + count ? 0xABCD : 0x1111));
+        }
+
+    alignas(8) std::array<std::uint8_t, 48> source{};
+    for (std::size_t index = 0; index < source.size(); ++index)
+        source[index] = static_cast<std::uint8_t>(index * 7 + 3);
+    alignas(8) std::array<std::uint8_t, 48> destination{};
+    for (std::size_t source_offset = 0; source_offset < 4; ++source_offset)
+        for (std::size_t destination_offset = 0; destination_offset < 4; ++destination_offset)
+            for (std::size_t bytes = 0; bytes <= 40; bytes += 2)
+            {
+                destination.fill(0xEE);
+                copy_rgb565_swapped(destination.data() + destination_offset, source.data() + source_offset, bytes);
+                for (std::size_t index = 0; index < destination.size(); ++index)
+                {
+                    const bool        inside   = index >= destination_offset && index < destination_offset + bytes;
+                    const std::size_t relative = index - destination_offset;
+                    const auto        expected = inside ? source[source_offset + (relative ^ 1U)] : 0xEE;
+                    assert(destination[index] == expected);
+                }
+            }
+}
+
+/// Glyph type of the generated bitmap fonts: rows of MSB-first bits.
+struct TestGlyph
+{
+    std::uint16_t       width;
+    std::uint16_t       height;
+    std::int16_t        top;
+    std::uint16_t       stride;
+    const std::uint8_t* data;
+};
+
+/// The straightforward per-pixel renderer draw_text() must match.
+void reference_text(std::vector<std::uint16_t>& pixels, std::int32_t width, std::int32_t height, std::int32_t x,
+                    std::int32_t y, const char* text, const char* characters, const TestGlyph* glyphs,
+                    std::size_t count, std::uint16_t color)
+{
+    for (const char* cursor = text; *cursor != '\0'; ++cursor)
+    {
+        const char* found = std::strchr(characters, *cursor);
+        if (found == nullptr)
+            continue;
+        const TestGlyph& glyph = glyphs[static_cast<std::size_t>(found - characters)];
+        (void)count;
+        for (std::int32_t row = 0; row < glyph.height; ++row)
+            for (std::int32_t column = 0; column < glyph.width; ++column)
+            {
+                const std::int32_t px = x + column;
+                const std::int32_t py = y + glyph.top + row;
+                if ((glyph.data[row * glyph.stride + column / 8] & (0x80U >> (column & 7))) != 0 && px >= 0 && py >= 0
+                    && px < width && py < height)
+                    pixels[static_cast<std::size_t>(py * width + px)] = color;
+            }
+        x += glyph.width + 1;
+        if (x >= width)
+            break;
+    }
+}
+
+void test_screen_fill_and_text()
+{
+    FakeDisplay                  display;
+    brick::core::display::Screen screen(display);
+
+    // fill() keeps the stride padding of every row.
+    std::vector<std::uint16_t>                      padded(7 * 3, 0x5555);
+    brick::interfaces::display::WritablePixelBuffer view{
+        reinterpret_cast<std::uint8_t*>(padded.data()),  5,    3, 7 * 2,
+        brick::interfaces::display::PixelFormat::rgb565, false
+    };
+    assert(screen.fill(view, 0x1234) == Status::ok);
+    for (std::size_t index = 0; index < padded.size(); ++index)
+        assert(padded[index] == (index % 7 < 5 ? 0x1234 : 0x5555));
+
+    // A 10-pixel-wide glyph spans two bitmap bytes, one of them empty in
+    // some rows; another glyph sits above its baseline (negative top).
+    static constexpr std::uint8_t wide_bits[]  = { 0xFF, 0xC0, 0x00, 0x40, 0x81, 0x00, 0x00, 0x00, 0xAA, 0x80 };
+    static constexpr std::uint8_t small_bits[] = { 0xE0, 0xA0, 0xE0 };
+    const TestGlyph               glyphs[]     = { { 10, 5, 1, 2, wide_bits }, { 3, 3, -2, 1, small_bits } };
+    const char                    characters[] = "AB";
+    constexpr std::int32_t        kWidth       = 23;
+    constexpr std::int32_t        kHeight      = 9;
+    for (std::int32_t x = -12; x <= kWidth; x += 3)
+        for (std::int32_t y = -6; y <= kHeight; ++y)
+        {
+            std::vector<std::uint16_t> expected(kWidth * kHeight, 0);
+            std::vector<std::uint16_t> actual(kWidth * kHeight, 0);
+            reference_text(expected, kWidth, kHeight, x, y, "AxBA", characters, glyphs, 2, 0xF00D);
+            brick::interfaces::display::WritablePixelBuffer target{
+                reinterpret_cast<std::uint8_t*>(actual.data()),  kWidth, kHeight, kWidth * 2,
+                brick::interfaces::display::PixelFormat::rgb565, false
+            };
+            assert(screen.draw_text(target, x, y, "AxBA", characters, glyphs, 2, 0xF00D) == Status::ok);
+            assert(actual == expected);
+        }
+}
+
+void test_screen_hardware_fill()
+{
+    FakeDisplay display;
+    display.hardware_fill = true;
+    brick::core::display::Screen   screen(display);
+    std::array<std::uint16_t, 128> pixels{};
+
+    // The device fills the whole area at once; the caller's pixels stay unused.
+    assert(screen.fill_area({ 10, 20, 100, 50 }, 0x07E0, pixels) == Status::ok);
+    assert(display.filled_areas.size() == 1 && display.filled_areas[0].width == 100);
+    assert(display.last_fill_color == 0x07E0 && display.submitted_areas.empty() && pixels[0] == 0);
+    // The same preconditions as without hardware fill: a row must fit the pixels.
+    assert(screen.fill_area({ 0, 0, 129, 1 }, 0, pixels) == Status::invalid_argument);
+    assert(screen.fill_area({ 300, 0, 30, 1 }, 0, pixels) == Status::invalid_argument);
+    assert(display.filled_areas.size() == 1);
+}
+
 void test_touch_mapper()
 {
     using brick::core::input::TouchCalibration;
@@ -576,6 +745,142 @@ void test_asset_streamer()
     assert(std::memcmp(framebuffer_data, pixels.data(), pixels.size()) == 0);
 }
 
+/// Display with queued transfers: a submitted buffer stays in use until
+/// wait_for_transfer_complete(), and it records each stripe's pixels.
+class AsyncDisplay final : public brick::interfaces::display::IDisplayDevice
+{
+public:
+    Status                                  begin() override { return Status::ok; }
+    brick::interfaces::display::DisplaySize size() const override { return { 320, 240 }; }
+    brick::interfaces::display::PixelFormat pixel_format() const override
+    {
+        return brick::interfaces::display::PixelFormat::rgb565;
+    }
+    Status set_rotation(brick::interfaces::display::Rotation) override { return Status::ok; }
+    brick::interfaces::display::DisplayCapabilities capabilities() const override
+    {
+        brick::interfaces::display::DisplayCapabilities result{};
+        result.async_transfer = true;
+        return result;
+    }
+    Status draw_buffer(brick::interfaces::display::DisplayRect, const brick::interfaces::display::PixelBuffer&) override
+    {
+        return Status::not_supported;
+    }
+    Status submit_buffer(brick::interfaces::display::DisplayRect        area,
+                         const brick::interfaces::display::PixelBuffer& buffer) override
+    {
+        if (in_flight != nullptr)
+            return Status::busy;
+        in_flight       = buffer.data;
+        in_flight_bytes = buffer.stride_bytes * buffer.height;
+        received.insert(received.end(), buffer.data, buffer.data + in_flight_bytes);
+        areas.push_back(area);
+        return Status::ok;
+    }
+    Status wait_for_transfer_complete(std::uint32_t) override
+    {
+        in_flight = nullptr;
+        ++waits;
+        return Status::ok;
+    }
+
+    const std::uint8_t*                                  in_flight       = nullptr;
+    std::size_t                                          in_flight_bytes = 0;
+    std::vector<std::uint8_t>                            received;
+    std::vector<brick::interfaces::display::DisplayRect> areas;
+    int                                                  waits = 0;
+};
+
+/// Reader that fails the test when it writes into a buffer still in flight.
+class CheckingReader final : public brick::interfaces::display::IAssetReader
+{
+public:
+    CheckingReader(const std::vector<std::uint8_t>& data, const AsyncDisplay& display) : data_(data), display_(display)
+    {
+    }
+
+    Status read(const brick::interfaces::display::ImageAsset&, std::size_t offset, std::uint8_t* destination,
+                std::size_t bytes) override
+    {
+        const std::uint8_t* busy = display_.in_flight;
+        assert(busy == nullptr || destination + bytes <= busy || destination >= busy + display_.in_flight_bytes);
+        if (fail_at_offset == offset)
+            return Status::error;
+        std::memcpy(destination, data_.data() + offset, bytes);
+        if (busy != nullptr)
+            ++overlapped_reads;
+        return Status::ok;
+    }
+
+    std::size_t fail_at_offset   = SIZE_MAX;
+    int         overlapped_reads = 0;
+
+private:
+    const std::vector<std::uint8_t>& data_;
+    const AsyncDisplay&              display_;
+};
+
+void test_asset_streamer_pipelined()
+{
+    using brick::interfaces::display::DisplayRect;
+    using brick::interfaces::display::ImageAsset;
+    using brick::interfaces::display::PixelFormat;
+
+    std::vector<std::uint8_t> pixels(4 * 2 * 7);
+    for (std::size_t i = 0; i < pixels.size(); ++i)
+        pixels[i] = static_cast<std::uint8_t>(i + 1);
+    const ImageAsset asset{ pixels.data(), 4, 7, 8, pixels.size(), PixelFormat::rgb565 };
+
+    // 32 bytes of scratch: two halves of two rows each; 7 rows in 4 stripes.
+    AsyncDisplay                      display;
+    CheckingReader                    reader(pixels, display);
+    brick::core::image::AssetStreamer streamer(display, reader);
+    std::uint8_t                      scratch[32] = {};
+    assert(streamer.stream(asset, DisplayRect{ 0, 10, 4, 7 }, scratch, sizeof(scratch)) == Status::ok);
+    assert(display.received == pixels);
+    assert(display.areas.size() == 4 && display.areas[3].y == 16 && display.areas[3].height == 1);
+    // Every stripe after the first was read while the previous one was sent,
+    // and nothing is in flight when stream() returns.
+    assert(reader.overlapped_reads == 3 && display.in_flight == nullptr && display.waits == 4);
+
+    // A failed read still waits for the stripe in flight before returning.
+    AsyncDisplay                      failing_display;
+    CheckingReader                    failing_reader(pixels, failing_display);
+    brick::core::image::AssetStreamer failing(failing_display, failing_reader);
+    failing_reader.fail_at_offset = 16;
+    assert(failing.stream(asset, DisplayRect{ 0, 0, 4, 7 }, scratch, sizeof(scratch)) == Status::error);
+    assert(failing_display.in_flight == nullptr && failing_display.areas.size() == 1);
+
+    // Scratch for a single stripe: no overlap, every stripe is waited for.
+    AsyncDisplay                      single_display;
+    CheckingReader                    single_reader(pixels, single_display);
+    brick::core::image::AssetStreamer single(single_display, single_reader);
+    assert(single.stream(asset, DisplayRect{ 0, 0, 4, 7 }, scratch, 15) == Status::ok);
+    assert(single_reader.overlapped_reads == 0 && single_display.received == pixels);
+}
+
+void test_asset_streamer_padded_rows()
+{
+    using brick::interfaces::display::ImageAsset;
+    using brick::interfaces::display::PixelFormat;
+
+    // Rows of 4 bytes (2 pixels) stored 6 bytes apart; the last row has no padding.
+    const std::vector<std::uint8_t>   padded{ 1, 2, 3, 4, 0, 0, 5, 6, 7, 8, 0, 0, 9, 10, 11, 12 };
+    const ImageAsset                  asset{ padded.data(), 2, 3, 6, padded.size(), PixelFormat::rgb565 };
+    FakeDisplay                       display;
+    MemoryAssetReader                 reader(padded);
+    brick::core::image::AssetStreamer streamer(display, reader);
+    std::uint8_t                      scratch[8] = {};
+    std::uint8_t                      out[12]    = {};
+    const brick::interfaces::display::WritablePixelBuffer packed{ out, 2, 3, 4, PixelFormat::rgb565, false };
+    assert(streamer.stream_to_buffer(asset, packed, scratch, sizeof(scratch)) == Status::ok);
+    const std::uint8_t expected[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+    assert(std::memcmp(out, expected, sizeof(expected)) == 0);
+    // Packed destination rows are read in place: scratch is not touched.
+    assert(scratch[0] == 0 && scratch[7] == 0);
+}
+
 void test_asset_bundle()
 {
     using brick::core::image::AssetBundle;
@@ -666,11 +971,17 @@ int main()
     test_wav_decoder_formats();
     test_audio_player();
     test_screen_canvas();
+    test_rgb565_pixels();
+    test_frame_buffer_copy();
+    test_screen_fill_and_text();
+    test_screen_hardware_fill();
     test_touch_mapper();
     test_drag_slider();
     test_beep_sequence();
     test_serial_logger();
     test_asset_streamer();
+    test_asset_streamer_pipelined();
+    test_asset_streamer_padded_rows();
     test_asset_bundle();
     test_asset_source_streamer();
     std::puts("BRICK PC tests passed");

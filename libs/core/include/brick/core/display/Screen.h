@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "brick/core/display/Rgb565Pixels.h"
 #include "brick/interfaces/display/IDisplayDevice.h"
 #include "brick/interfaces/display/WritablePixelBuffer.h"
 
@@ -119,10 +120,7 @@ public:
     Status draw(brick::interfaces::display::DisplayRect area, const brick::interfaces::display::PixelBuffer& buffer)
     {
         if (area.empty() || area.width != static_cast<std::int32_t>(buffer.width)
-            || area.height != static_cast<std::int32_t>(buffer.height)
-            || !brick::interfaces::display::DisplayRect{ 0, 0, static_cast<std::int32_t>(device_.size().width),
-                                                         static_cast<std::int32_t>(device_.size().height) }
-                    .contains(area)
+            || area.height != static_cast<std::int32_t>(buffer.height) || !display_rect().contains(area)
             || buffer.format != device_.pixel_format())
         {
             return Status::invalid_argument;
@@ -138,13 +136,19 @@ public:
             buffer);
     }
 
-    /// Fills an area of the display with color, in strips as tall as the
-    /// caller's pixels allow (at least one row of the area).
+    /// Fills an area of the display with color. A device with its own fill
+    /// path (IDisplayDevice::fill_rect(), e.g. a DMA fill) does it without the
+    /// CPU; otherwise the color is drawn from the caller's pixels, in strips as
+    /// tall as they allow. The pixels must hold at least one row of the area
+    /// either way, so the call works on every device.
     Status fill_area(brick::interfaces::display::DisplayRect area, std::uint16_t color, std::uint16_t* pixels,
                      std::size_t capacity)
     {
-        if (area.empty() || pixels == nullptr || capacity < static_cast<std::size_t>(area.width))
+        if (area.empty() || pixels == nullptr || capacity < static_cast<std::size_t>(area.width)
+            || !display_rect().contains(area))
             return Status::invalid_argument;
+        if (const Status status = device_.fill_rect(area, color); status != Status::not_supported)
+            return status;
         const auto strip_rows = static_cast<std::int32_t>(
             std::min(capacity / static_cast<std::size_t>(area.width), static_cast<std::size_t>(area.height)));
         for (std::int32_t row = 0; row < area.height; row += strip_rows)
@@ -168,12 +172,16 @@ public:
     {
         if (buffer.data == nullptr || buffer.format != brick::interfaces::display::PixelFormat::rgb565)
             return Status::invalid_argument;
-        for (std::uint32_t y = 0; y < buffer.height; ++y)
+        const std::size_t row_bytes = static_cast<std::size_t>(buffer.width) * sizeof(std::uint16_t);
+        if (buffer.stride_bytes == row_bytes)
         {
-            auto* row = reinterpret_cast<std::uint16_t*>(buffer.data + y * buffer.stride_bytes);
-            for (std::uint32_t x = 0; x < buffer.width; ++x)
-                row[x] = color;
+            // Packed rows: one run over the whole buffer.
+            fill_rgb565(reinterpret_cast<std::uint16_t*>(buffer.data),
+                        static_cast<std::size_t>(buffer.width) * buffer.height, color);
+            return Status::ok;
         }
+        for (std::uint32_t y = 0; y < buffer.height; ++y)
+            fill_rgb565(reinterpret_cast<std::uint16_t*>(buffer.data + y * buffer.stride_bytes), buffer.width, color);
         return Status::ok;
     }
 
@@ -196,16 +204,7 @@ public:
             if (index >= count)
                 continue;
             const Glyph& glyph = glyphs[index];
-            for (std::uint16_t row = 0; row < glyph.height; ++row)
-                for (std::uint16_t column = 0; column < glyph.width; ++column)
-                    if (glyph.data[row * glyph.stride + column / 8] & (0x80u >> (column & 7)))
-                    {
-                        const auto px = x + column;
-                        const auto py = y + glyph.top + row;
-                        if (px >= 0 && py >= 0 && px < static_cast<std::int32_t>(buffer.width)
-                            && py < static_cast<std::int32_t>(buffer.height))
-                            reinterpret_cast<std::uint16_t*>(buffer.data + py * buffer.stride_bytes)[px] = color;
-                    }
+            draw_glyph_(buffer, x, static_cast<std::int32_t>(y + glyph.top), glyph, color);
             x += glyph.width + 1;
             if (x >= static_cast<std::int32_t>(buffer.width))
                 break;
@@ -219,6 +218,76 @@ public:
     }
 
 private:
+    brick::interfaces::display::DisplayRect display_rect() const
+    {
+        const auto display_size = device_.size();
+        return { 0, 0, static_cast<std::int32_t>(display_size.width), static_cast<std::int32_t>(display_size.height) };
+    }
+
+    /// Column of the highest set bit of a non-zero bitmap byte (bit 7 is
+    /// column 0): one instruction where the compiler has a count of leading
+    /// zeros (NSAU on Xtensa, CLZ on ARM).
+    static std::int32_t first_set_column_(std::uint32_t byte)
+    {
+#if defined(__GNUC__)
+        return __builtin_clz(byte) - 24;
+#else
+        std::int32_t column = 0;
+        while ((byte & 0x80U) == 0U)
+        {
+            byte <<= 1U;
+            ++column;
+        }
+        return column;
+#endif
+    }
+
+    /// Sets the glyph's pixels with its top-left corner at (left, top). The
+    /// part inside the buffer is computed once per glyph and applied to each
+    /// bitmap byte as a mask, so the loop visits only the set pixels, with no
+    /// bounds checks.
+    template <typename Glyph>
+    static void draw_glyph_(brick::interfaces::display::WritablePixelBuffer& buffer, std::int32_t left,
+                            std::int32_t top, const Glyph& glyph, std::uint16_t color)
+    {
+        const auto width        = static_cast<std::int32_t>(buffer.width);
+        const auto height       = static_cast<std::int32_t>(buffer.height);
+        const auto first_row    = std::max<std::int32_t>(0, -top);
+        const auto end_row      = std::min<std::int32_t>(static_cast<std::int32_t>(glyph.height), height - top);
+        const auto first_column = std::max<std::int32_t>(0, -left);
+        const auto end_column   = std::min<std::int32_t>(static_cast<std::int32_t>(glyph.width), width - left);
+        if (first_row >= end_row || first_column >= end_column)
+            return;
+        const std::int32_t   first_byte = first_column >> 3;
+        const std::int32_t   last_byte  = (end_column - 1) >> 3;
+        const std::uint32_t  first_mask = 0xFFU >> (first_column & 7);
+        const std::uint32_t  last_mask  = (0xFF00U >> (((end_column - 1) & 7) + 1)) & 0xFFU;
+        const std::size_t    stride     = glyph.stride;
+        const auto*          bitmap     = glyph.data;
+        const std::ptrdiff_t row_bytes  = static_cast<std::ptrdiff_t>(buffer.stride_bytes);
+        std::uint8_t*        row_start  = buffer.data + static_cast<std::ptrdiff_t>(top + first_row) * row_bytes;
+        for (std::int32_t row = first_row; row < end_row; ++row, row_start += row_bytes)
+        {
+            const auto* bits = bitmap + static_cast<std::size_t>(row) * stride;
+            auto*       out  = reinterpret_cast<std::uint16_t*>(row_start);
+            for (std::int32_t index = first_byte; index <= last_byte; ++index)
+            {
+                std::uint32_t byte = static_cast<std::uint8_t>(bits[index]);
+                if (index == first_byte)
+                    byte &= first_mask;
+                if (index == last_byte)
+                    byte &= last_mask;
+                const std::int32_t column = left + (index << 3);
+                while (byte != 0U)
+                {
+                    const std::int32_t bit = first_set_column_(byte);
+                    out[column + bit]      = color;
+                    byte ^= 0x80U >> static_cast<std::uint32_t>(bit);
+                }
+            }
+        }
+    }
+
     brick::interfaces::display::IDisplayDevice& device_;
 };
 

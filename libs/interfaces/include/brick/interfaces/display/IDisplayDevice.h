@@ -56,14 +56,33 @@ public:
     ///
     /// A driver may override this when it can queue the transfer. In that case
     /// the caller must wait_for_transfer_complete() before reusing buffer.data.
+    /// Meanwhile the caller can prepare the next buffer; that overlap is what
+    /// DisplayCapabilities::async_transfer announces.
     virtual Status submit_buffer(DisplayRect area, const PixelBuffer& buffer) { return draw_buffer(area, buffer); }
 
     /// Waits until the last submitted buffer is no longer being read by the
-    /// display driver. Synchronous devices are complete immediately.
+    /// display driver. Synchronous devices are complete immediately, and so is
+    /// a driver that has already copied the pixels into its own transfer
+    /// buffers: the panel may still be receiving them, and the driver finishes
+    /// that before its next operation. Calling it with nothing submitted
+    /// returns Status::ok.
     virtual Status wait_for_transfer_complete(std::uint32_t timeout_ms)
     {
         (void)timeout_ms;
         return Status::ok;
+    }
+
+    /// Fills area with one RGB565 color without a caller buffer, for example
+    /// with a DMA fill engine or by sending one prepared transfer buffer
+    /// repeatedly. Status::not_supported when the device has no such path; the
+    /// caller then draws the color from its own pixels, as
+    /// brick::core::display::Screen::fill_area() does. Like submit_buffer(),
+    /// the fill may still be running on return.
+    virtual Status fill_rect(DisplayRect area, std::uint16_t color)
+    {
+        (void)area;
+        (void)color;
+        return Status::not_supported;
     }
 
     /// Waits for a display refresh boundary when the hardware exposes VSYNC.

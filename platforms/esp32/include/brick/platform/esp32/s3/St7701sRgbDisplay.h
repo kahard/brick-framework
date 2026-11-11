@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -31,6 +32,15 @@ struct St7701sRgbPanelConfig
     std::uint16_t vsync_front_porch  = 20;
     bool          pclk_active_neg    = false;
     std::uint8_t  frame_buffer_count = 1;
+    /// Lines of internal-RAM bounce buffers that the CPU refills from the
+    /// PSRAM frame buffer in an interrupt (with any number of frame buffers).
+    /// They keep PSRAM latency away from the pixel clock at the cost of a
+    /// steady CPU load. 0 lets the DMA read PSRAM directly, without CPU work;
+    /// the image then shifts sideways when flash and PSRAM traffic (they share
+    /// one bus on the ESP32-S3) leaves the DMA short of data, e.g. while
+    /// assets stream from flash at full speed. width * height must be a
+    /// multiple of width * bounce_buffer_lines.
+    std::uint16_t bounce_buffer_lines = 10;
 
     spi_host_device_t spi_host      = SPI2_HOST;
     gpio_num_t        spi_sclk_gpio = GPIO_NUM_NC;
@@ -77,12 +87,15 @@ public:
     std::uint8_t frame_buffer_count() const override;
     Status       get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
     Status       present_frame_buffer(std::uint8_t index) override;
+    /// CPU copies (brick/core/display/FrameBufferCopy.h).
+    Status copy_to_frame_buffer(std::uint8_t index, brick::interfaces::display::DisplayRect area,
+                                const brick::interfaces::display::PixelBuffer& pixels) override;
+    Status copy_between_frame_buffers(std::uint8_t from, std::uint8_t to,
+                                      brick::interfaces::display::DisplayRect area) override;
 
 private:
     static bool IRAM_ATTR on_vsync_(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t* event_data,
                                     void* user_ctx);
-    static bool IRAM_ATTR on_color_trans_done_(esp_lcd_panel_handle_t                panel,
-                                               const esp_lcd_rgb_panel_event_data_t* event_data, void* user_ctx);
     Status                begin_spi_();
     Status                write_9bit_(std::uint16_t value);
     Status                send_command_(std::uint8_t command, const std::uint8_t* data, std::size_t length);
@@ -91,15 +104,26 @@ private:
     Status                create_semaphores_();
     Status                create_rgb_panel_();
     void                  reset_panel_();
+    void                  compute_frame_timing_();
 
-    St7701sRgbPanelConfig        config_;
-    esp_lcd_panel_handle_t       panel_              = nullptr;
-    spi_device_handle_t          spi_device_         = nullptr;
-    SemaphoreHandle_t            vsync_semaphore_    = nullptr;
-    SemaphoreHandle_t            transfer_semaphore_ = nullptr;
-    bool                         spi_ready_          = false;
-    bool                         initialized_        = false;
-    static constexpr const char* TAG                 = "brick_st7701s_rgb";
+    St7701sRgbPanelConfig  config_;
+    esp_lcd_panel_handle_t panel_           = nullptr;
+    spi_device_handle_t    spi_device_      = nullptr;
+    SemaphoreHandle_t      vsync_semaphore_ = nullptr;
+
+    // Page flips: last_vsync_us_ is the time of the last VSYNC (low 32 bits of
+    // esp_timer_get_time(), set by the ISR); a flip less than late_flip_us_
+    // before the next VSYNC takes effect a frame later; flip_vsyncs_ is how
+    // many VSYNCs wait_for_vsync() has to see before the buffer shown before
+    // the last flip is free.
+    std::atomic<std::uint32_t> last_vsync_us_{ 0 };
+    std::uint32_t              frame_period_us_ = 0;
+    std::uint32_t              late_flip_us_    = 0;
+    std::uint8_t               flip_vsyncs_     = 0;
+
+    bool                         spi_ready_   = false;
+    bool                         initialized_ = false;
+    static constexpr const char* TAG          = "brick_st7701s_rgb";
 };
 
 }  // namespace brick::platform::esp32::s3

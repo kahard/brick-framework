@@ -156,11 +156,24 @@ public:
         return Status::ok;
     }
 
+    /// Not supported unless hardware_fill is set; then the fill is recorded.
+    Status fill_rect(brick::interfaces::display::DisplayRect area, std::uint16_t color) override
+    {
+        if (!hardware_fill)
+            return Status::not_supported;
+        filled_areas.push_back(area);
+        last_fill_color = color;
+        return Status::ok;
+    }
+
     brick::interfaces::display::DisplayRect              last_area{};
     const std::uint8_t*                                  last_pixels     = nullptr;
     std::size_t                                          last_byte_count = 0;
     std::vector<brick::interfaces::display::DisplayRect> submitted_areas;
     std::vector<std::size_t>                             submitted_byte_counts;
+    bool                                                 hardware_fill = false;
+    std::vector<brick::interfaces::display::DisplayRect> filled_areas;
+    std::uint16_t                                        last_fill_color = 0;
 
 private:
     brick::interfaces::display::DisplaySize size_;

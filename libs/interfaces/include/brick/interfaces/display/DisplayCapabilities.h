@@ -36,9 +36,14 @@ struct DisplayCapabilities
     bool             vsync               = false;
     bool             scanout_buffers     = false;
     bool             partial_transfer    = false;
-    bool             async_transfer      = false;
-    std::uint8_t     max_buffer_count    = 1;
-    RenderMode       preferred_mode      = RenderMode::partial;
+    /// submit_buffer() returns while the display still reads the caller's
+    /// buffer; wait_for_transfer_complete() releases it. A caller with two
+    /// buffers can then fill one while the other is sent. A driver that
+    /// copies the pixels before returning (and sends its copy in the
+    /// background) reports false: the caller's buffer is free at once.
+    bool         async_transfer   = false;
+    std::uint8_t max_buffer_count = 1;
+    RenderMode   preferred_mode   = RenderMode::partial;
 };
 
 }  // namespace brick::interfaces::display

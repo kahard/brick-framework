@@ -55,11 +55,14 @@ inline brick::platform::esp32::s3::St7701sRgbPanelConfig display_config()
 }
 
 /// Display configuration with two PSRAM frame buffers for tear-free
-/// full-frame rendering.
+/// full-frame rendering. The DMA scans them directly, without CPU work; an
+/// application that streams from flash or PSRAM at full speed sets
+/// bounce_buffer_lines (e.g. 10) to keep the image from shifting.
 inline brick::platform::esp32::s3::St7701sRgbPanelConfig double_buffered_display_config()
 {
     brick::platform::esp32::s3::St7701sRgbPanelConfig config = display_config();
     config.frame_buffer_count                                = 2;
+    config.bounce_buffer_lines                               = 0;
     return config;
 }
 

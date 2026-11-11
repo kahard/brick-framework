@@ -1,5 +1,7 @@
 #include "brick/platform/pc/PcFrameBufferDisplay.h"
 
+#include "brick/core/display/FrameBufferCopy.h"
+
 #include <algorithm>
 #include <cstring>
 
@@ -88,6 +90,24 @@ Status PcFrameBufferDisplay::draw_buffer(DisplayRect area, const PixelBuffer& bu
     return Status::ok;
 }
 
+Status PcFrameBufferDisplay::fill_rect(DisplayRect area, std::uint16_t color)
+{
+    if (!started_)
+        return Status::not_ready;
+    const auto display_size = size();
+    if (area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > display_size.width
+        || area.y + area.height > display_size.height)
+        return Status::invalid_argument;
+    for (std::int32_t row = 0; row < area.height; ++row)
+    {
+        auto* destination = screen_.data() + static_cast<std::size_t>(area.y + row) * display_size.width
+                            + static_cast<std::size_t>(area.x);
+        std::fill_n(destination, static_cast<std::size_t>(area.width), color);
+    }
+    ++frame_counter_;
+    return Status::ok;
+}
+
 Status PcFrameBufferDisplay::wait_for_vsync(std::uint32_t timeout_ms)
 {
     (void)timeout_ms;
@@ -130,6 +150,28 @@ void PcFrameBufferDisplay::resize()
     const std::size_t pixels       = static_cast<std::size_t>(display_size.width) * display_size.height;
     screen_.assign(pixels, 0);
     frame_buffers_.assign(config_.frame_buffers, std::vector<std::uint16_t>(pixels, 0));
+}
+
+
+Status PcFrameBufferDisplay::copy_to_frame_buffer(std::uint8_t index, brick::interfaces::display::DisplayRect area,
+                                                  const brick::interfaces::display::PixelBuffer& pixels)
+{
+    brick::interfaces::display::WritablePixelBuffer frame;
+    if (const Status status = get_frame_buffer(index, frame); !is_ok(status))
+        return status;
+    return brick::core::display::copy_into_frame(frame, area, pixels);
+}
+
+Status PcFrameBufferDisplay::copy_between_frame_buffers(std::uint8_t from, std::uint8_t to,
+                                                        brick::interfaces::display::DisplayRect area)
+{
+    brick::interfaces::display::WritablePixelBuffer source;
+    brick::interfaces::display::WritablePixelBuffer target;
+    if (const Status status = get_frame_buffer(from, source); !is_ok(status))
+        return status;
+    if (const Status status = get_frame_buffer(to, target); !is_ok(status))
+        return status;
+    return brick::core::display::copy_frame_area(source, target, area);
 }
 
 }  // namespace brick::platform::pc

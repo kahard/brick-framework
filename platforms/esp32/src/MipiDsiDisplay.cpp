@@ -1,34 +1,154 @@
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
 
+#include "brick/core/display/FrameBufferCopy.h"
 #include "esp_cache.h"
-#include "esp_memory_utils.h"
+#include "sdkconfig.h"
 #include <cstring>
 
 namespace brick::platform::esp32::p4
 {
 
-MipiDsiDisplay::MipiDsiDisplay(MipiDsiPanelConfig config, brick::interfaces::memory::IMemoryProvider& memory)
-    : config_(config), rotation_(config.default_rotation), memory_(memory)
+using brick::interfaces::display::DisplayRect;
+using brick::interfaces::display::PixelBuffer;
+using brick::interfaces::display::Rotation;
+
+namespace
 {
-    logical_width_  = config_.width;
-    logical_height_ = config_.height;
-    if (rotation_ == brick::interfaces::display::Rotation::rotate_90
-        || rotation_ == brick::interfaces::display::Rotation::rotate_270)
+    constexpr std::uint32_t kFlipTimeoutMs = 1000;
+    /// A whole 800x1280 frame takes the PPA about 35 ms.
+    constexpr std::uint32_t kPpaTimeoutMs = 200;
+    // DIG-734: the PPA cuts a block into units (64 output pixels wide, 16
+    // input rows high), and when there are several and the last one is small
+    // the 2D-DMA can miss it: the PPA never finishes unless it bypasses the
+    // macro block order. ESP-IDF up to 5.5.5 decides that from the unturned
+    // block and only for a last unit below its FIFO (12 x 128 bits). Larger
+    // ones stop it too: on a JC8012 (rev 1.3) 198x256 and 198x80 RGB565 (last
+    // units of 6 x 16 pixels, 1536 bits) and 135x127 (7 x 15, 1680 bits) did
+    // for good. Up to 16 x 128 bits counts as small here.
+    constexpr std::uint32_t kUnitWidth   = 64;
+    constexpr std::uint32_t kUnitRows    = 16;
+    constexpr std::uint32_t kFifoBits    = 12 * 128;
+    constexpr std::uint32_t kSmallBits   = 16 * 128;
+    constexpr std::uint32_t kPixelBits   = 16;
+    constexpr std::int32_t  kMaxBandRows = 64;
+
+    std::uint32_t last_unit(std::uint32_t size, std::uint32_t unit)
     {
-        logical_width_  = config_.height;
-        logical_height_ = config_.width;
+        const std::uint32_t rest = size % unit;
+        return rest == 0 ? unit : rest;
     }
+
+    bool several_units(std::uint32_t out_width, std::uint32_t in_rows)
+    {
+        return out_width > kUnitWidth || in_rows > kUnitRows;
+    }
+
+    std::uint32_t last_unit_bits(std::uint32_t out_width, std::uint32_t in_rows)
+    {
+        return last_unit(out_width, kUnitWidth) * last_unit(in_rows, kUnitRows) * kPixelBits;
+    }
+
+    /// ESP-IDF's decision for a width x rows input block.
+    bool idf_bypasses(std::uint32_t width, std::uint32_t rows)
+    {
+        return several_units(width, rows) && last_unit_bits(width, rows) < kFifoBits;
+    }
+
+    /// What the PPA needs for a block out_width pixels wide when it leaves.
+    bool ppa_needs_bypass(std::uint32_t out_width, std::uint32_t in_rows)
+    {
+        return several_units(out_width, in_rows) && last_unit_bits(out_width, in_rows) <= kSmallBits;
+    }
+
+    /// A width x rows block the PPA finishes: ESP-IDF decides what it needs.
+    /// Turned by 90/270 degrees the block leaves the PPA rows wide and width
+    /// high.
+    bool safe_block(std::uint32_t width, std::uint32_t rows, bool turned)
+    {
+        return idf_bypasses(width, rows) == (turned ? ppa_needs_bypass(rows, width) : ppa_needs_bypass(width, rows));
+    }
+
+    /// Rows per band: all of them when the area is safe, else the most rows
+    /// (fewer than height, at most kMaxBandRows turned) whose bands and last
+    /// band are all safe; 0 when there is none.
+    std::int32_t safe_band_rows(std::int32_t width, std::int32_t height, bool turned)
+    {
+        const auto w = static_cast<std::uint32_t>(width);
+        if (safe_block(w, static_cast<std::uint32_t>(height), turned))
+            return height;
+        const std::int32_t most = turned && height > kMaxBandRows ? kMaxBandRows : height - 1;
+        for (std::int32_t rows = most; rows > 0; --rows)
+        {
+            const std::int32_t rest = height % rows;
+            if (safe_block(w, static_cast<std::uint32_t>(rows), turned)
+                && (rest == 0 || safe_block(w, static_cast<std::uint32_t>(rest), turned)))
+                return rows;
+        }
+        return 0;
+    }
+    constexpr std::size_t kBytesPerPixel = 2;
+    // PSRAM is behind the L2 cache, whose lines are at least as long as L1's.
+#if defined(CONFIG_CACHE_L2_CACHE_LINE_SIZE)
+    constexpr std::size_t kCacheLineBytes = CONFIG_CACHE_L2_CACHE_LINE_SIZE;
+#else
+    constexpr std::size_t kCacheLineBytes = 128;
+#endif
+
+    bool swaps_axes(Rotation rotation)
+    {
+        return rotation == Rotation::rotate_90 || rotation == Rotation::rotate_270;
+    }
+
+    /// The PPA turns counter-clockwise; the logical image turns clockwise.
+    ppa_srm_rotation_angle_t ppa_angle(Rotation rotation)
+    {
+        switch (rotation)
+        {
+            case Rotation::rotate_90:
+                return PPA_SRM_ROTATION_ANGLE_270;
+            case Rotation::rotate_180:
+                return PPA_SRM_ROTATION_ANGLE_180;
+            case Rotation::rotate_270:
+                return PPA_SRM_ROTATION_ANGLE_90;
+            default:
+                return PPA_SRM_ROTATION_ANGLE_0;
+        }
+    }
+
+    /// RGB565 widened to the PPA fill color; the PPA truncates it back.
+    color_pixel_argb8888_data_t fill_color(std::uint16_t color)
+    {
+        const std::uint32_t         red   = (color >> 11) & 0x1FU;
+        const std::uint32_t         green = (color >> 5) & 0x3FU;
+        const std::uint32_t         blue  = color & 0x1FU;
+        color_pixel_argb8888_data_t result{};
+        result.r = (red << 3) | (red >> 2);
+        result.g = (green << 2) | (green >> 4);
+        result.b = (blue << 3) | (blue >> 2);
+        result.a = 0xFF;
+        return result;
+    }
+}  // namespace
+
+MipiDsiDisplay::MipiDsiDisplay(MipiDsiPanelConfig config) : config_(config), rotation_(config.default_rotation)
+{
+    const bool swapped = swaps_axes(rotation_);
+    logical_width_     = swapped ? config_.height : config_.width;
+    logical_height_    = swapped ? config_.width : config_.height;
 }
 
 MipiDsiDisplay::~MipiDsiDisplay()
 {
-    if (ppa_client_ != nullptr)
-        ppa_unregister_client(ppa_client_);
-    release_rotation_buffers_();
+    if (ppa_srm_ != nullptr)
+        ppa_unregister_client(ppa_srm_);
+    if (ppa_fill_ != nullptr)
+        ppa_unregister_client(ppa_fill_);
     if (color_trans_done_ != nullptr)
         vSemaphoreDelete(color_trans_done_);
     if (refresh_done_ != nullptr)
         vSemaphoreDelete(refresh_done_);
+    if (ppa_done_ != nullptr)
+        vSemaphoreDelete(ppa_done_);
     if (panel_ != nullptr)
         esp_lcd_panel_del(panel_);
     if (io_ != nullptr)
@@ -52,13 +172,22 @@ bool IRAM_ATTR MipiDsiDisplay::on_color_trans_done_(esp_lcd_panel_handle_t, esp_
 bool IRAM_ATTR MipiDsiDisplay::on_refresh_done_(esp_lcd_panel_handle_t, esp_lcd_dpi_panel_event_data_t*, void* user_ctx)
 {
     auto* self = static_cast<MipiDsiDisplay*>(user_ctx);
-    // Only the refresh after a completed color transfer counts; reading and
-    // clearing the flag is one atomic step.
-    if (!self->color_ready_for_refresh_.exchange(false))
+    // Only a refresh the task waits for counts; reading and clearing the
+    // flag is one atomic step.
+    if (!self->frame_end_wanted_.exchange(false))
         return false;
     BaseType_t woken = pdFALSE;
     if (self->refresh_done_ != nullptr)
         xSemaphoreGiveFromISR(self->refresh_done_, &woken);
+    return woken == pdTRUE;
+}
+
+bool IRAM_ATTR MipiDsiDisplay::on_ppa_done_(ppa_client_handle_t, ppa_event_data_t*, void* user_data)
+{
+    auto*      self  = static_cast<MipiDsiDisplay*>(user_data);
+    BaseType_t woken = pdFALSE;
+    if (self != nullptr && self->ppa_done_ != nullptr)
+        xSemaphoreGiveFromISR(self->ppa_done_, &woken);
     return woken == pdTRUE;
 }
 
@@ -77,10 +206,9 @@ Status MipiDsiDisplay::begin()
         return to_status(err);
     if (const Status status = send_init_sequence_(); !is_ok(status))
         return status;
-    if (const Status status = apply_rotation_(); !is_ok(status))
-        return status;
     if (const Status status = register_callbacks_(); !is_ok(status))
         return status;
+    create_ppa_clients_();
     if (esp_lcd_panel_disp_on_off(panel_, true) != ESP_OK)
         ESP_LOGW(TAG, "panel display-on command is not supported; relying on panel init sequence");
     initialized_ = true;
@@ -141,6 +269,34 @@ Status MipiDsiDisplay::create_dpi_panel_()
     return Status::ok;
 }
 
+void MipiDsiDisplay::create_ppa_clients_()
+{
+    // The PPA writes whole cache lines; esp_lcd allocates the frame buffers
+    // cache-line aligned and rounds their size up to a whole line.
+    ppa_out_bytes_ = (frame_buffer_bytes_() + kCacheLineBytes - 1) / kCacheLineBytes * kCacheLineBytes;
+
+    ppa_client_config_t ppa_config{};
+    ppa_config.oper_type = PPA_OPERATION_SRM;
+    // Copies queue up, so the copies of a frame run while LVGL draws on.
+    ppa_config.max_pending_trans_num = kPpaQueueDepth;
+    ppa_config.data_burst_length     = PPA_DATA_BURST_LENGTH_128;
+    ppa_done_                        = xSemaphoreCreateCounting(kPpaQueueDepth, 0);
+    ppa_event_callbacks_t callbacks{};
+    callbacks.on_trans_done = on_ppa_done_;
+    if (ppa_done_ == nullptr || ppa_register_client(&ppa_config, &ppa_srm_) != ESP_OK
+        || ppa_client_register_event_callbacks(ppa_srm_, &callbacks) != ESP_OK)
+    {
+        if (ppa_srm_ != nullptr)
+            ppa_unregister_client(ppa_srm_);
+        ppa_srm_ = nullptr;
+        ESP_LOGW(TAG, "PPA copy and rotation unavailable; the CPU copies instead");
+    }
+    ppa_config.oper_type             = PPA_OPERATION_FILL;
+    ppa_config.max_pending_trans_num = 1;
+    if (ppa_register_client(&ppa_config, &ppa_fill_) != ESP_OK)
+        ppa_fill_ = nullptr;
+}
+
 void MipiDsiDisplay::reset_panel_()
 {
     if (config_.reset_gpio == GPIO_NUM_NC)
@@ -182,257 +338,485 @@ brick::interfaces::display::DisplayCapabilities MipiDsiDisplay::capabilities() c
         brick::interfaces::display::DisplayPanelType::mipi_dsi,
         { logical_width_, logical_height_ },
         pixel_format(),
-        static_cast<std::size_t>(config_.width) * config_.height
-            * brick::interfaces::display::pixel_format_bytes(pixel_format()),
-        64,
+        frame_buffer_bytes_(),
+        // Buffers the PPA or the cache sync touch must cover whole cache lines.
+        kCacheLineBytes,
         0,
         true,
         true,
         true,
         true,
         true,
-        2,
+        kDpiFrameBufferCount,
         brick::interfaces::display::RenderMode::direct,
     };
 }
 
-Status MipiDsiDisplay::set_rotation(brick::interfaces::display::Rotation rotation)
+Status MipiDsiDisplay::set_rotation(Rotation rotation)
 {
-    const bool old_swapped = rotation_ == brick::interfaces::display::Rotation::rotate_90
-                             || rotation_ == brick::interfaces::display::Rotation::rotate_270;
-    const bool new_swapped = rotation == brick::interfaces::display::Rotation::rotate_90
-                             || rotation == brick::interfaces::display::Rotation::rotate_270;
     // The DPI scan-out geometry is fixed once the panel is running.
-    if (initialized_ && old_swapped != new_swapped)
+    if (initialized_ && swaps_axes(rotation_) != swaps_axes(rotation))
         return Status::not_supported;
-    rotation_       = rotation;
-    logical_width_  = new_swapped ? config_.height : config_.width;
-    logical_height_ = new_swapped ? config_.width : config_.height;
-    return initialized_ ? apply_rotation_() : Status::ok;
+    if (initialized_)
+        if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+            return status;
+    rotation_          = rotation;
+    const bool swapped = swaps_axes(rotation);
+    logical_width_     = swapped ? config_.height : config_.width;
+    logical_height_    = swapped ? config_.width : config_.height;
+    return Status::ok;
 }
 
-Status MipiDsiDisplay::draw_buffer(brick::interfaces::display::DisplayRect        area,
-                                   const brick::interfaces::display::PixelBuffer& buffer)
+bool MipiDsiDisplay::valid_area_(DisplayRect area) const
+{
+    return !area.empty() && area.x >= 0 && area.y >= 0 && area.x + area.width <= logical_width_
+           && area.y + area.height <= logical_height_;
+}
+
+DisplayRect MipiDsiDisplay::to_physical_(DisplayRect area) const
+{
+    const auto panel_width  = static_cast<std::int32_t>(config_.width);
+    const auto panel_height = static_cast<std::int32_t>(config_.height);
+    switch (rotation_)
+    {
+        case Rotation::rotate_90:
+            return { panel_width - area.y - area.height, area.x, area.height, area.width };
+        case Rotation::rotate_180:
+            return { panel_width - area.x - area.width, panel_height - area.y - area.height, area.width, area.height };
+        case Rotation::rotate_270:
+            return { area.y, panel_height - area.x - area.width, area.height, area.width };
+        default:
+            return area;
+    }
+}
+
+Status MipiDsiDisplay::draw_buffer(DisplayRect area, const PixelBuffer& buffer)
 {
     if (!initialized_ || panel_ == nullptr)
         return Status::not_ready;
-    if (area.empty() || area.x < 0 || area.y < 0 || area.x + area.width > logical_width_
-        || area.y + area.height > logical_height_ || !buffer.valid()
-        || buffer.width != static_cast<std::uint32_t>(area.width)
+    if (!valid_area_(area) || !buffer.valid() || buffer.width != static_cast<std::uint32_t>(area.width)
         || buffer.height != static_cast<std::uint32_t>(area.height) || buffer.format != pixel_format()
-        || buffer.stride_bytes != static_cast<std::size_t>(area.width) * 2)
+        || buffer.stride_bytes != static_cast<std::size_t>(area.width) * kBytesPerPixel)
         return Status::invalid_argument;
-    if (rotation_ != brick::interfaces::display::Rotation::rotate_0)
-        return rotated_transfer_(area, buffer);
-    if (area.x == 0 && area.y == 0 && area.width == logical_width_ && area.height == logical_height_
-        && dpi_frame_buffers_[0] != nullptr && dpi_frame_buffers_[1] != nullptr)
+    // The 2D-DMA takes one operation at a time, and a flip has to reach the
+    // screen before the other frame buffer is written.
+    if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+        return status;
+    if (area.x == 0 && area.y == 0 && area.width == logical_width_ && area.height == logical_height_)
         return full_frame_transfer_(buffer);
-    const auto bytes = buffer.stride_bytes * static_cast<std::size_t>(area.height);
-    if (esp_ptr_external_ram(buffer.data))
-    {
-        if (const esp_err_t err = esp_cache_msync(const_cast<std::uint8_t*>(buffer.data), bytes,
-                                                  ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
-            err != ESP_OK)
-            return to_status(err);
-    }
-    const auto err =
-        esp_lcd_panel_draw_bitmap(panel_, area.x, area.y, area.x + area.width, area.y + area.height, buffer.data);
-    if (err != ESP_OK)
-        ESP_LOGE(TAG, "draw_bitmap area=(%d,%d)-(%d,%d) failed: %s", area.x, area.y, area.x + area.width,
-                 area.y + area.height, esp_err_to_name(err));
-    transfer_pending_ = err == ESP_OK;
-    return to_status(err);
+    return partial_transfer_(area, buffer);
 }
 
-Status MipiDsiDisplay::full_frame_transfer_(const brick::interfaces::display::PixelBuffer& buffer)
+Status MipiDsiDisplay::full_frame_transfer_(const PixelBuffer& buffer)
 {
-    if (transfer_pending_)
-        if (const Status status = wait_for_transfer_complete(1000); !is_ok(status))
-            return status;
-    const auto next  = static_cast<std::uint8_t>(dpi_active_frame_buffer_ ^ 1U);
-    const auto bytes = static_cast<std::size_t>(config_.width) * config_.height * sizeof(std::uint16_t);
-    std::memcpy(dpi_frame_buffers_[next], buffer.data, bytes);
-    if (const esp_err_t err = esp_cache_msync(dpi_frame_buffers_[next], bytes,
-                                              ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
-        err != ESP_OK)
-        return to_status(err);
-    const auto err = esp_lcd_panel_draw_bitmap(panel_, 0, 0, config_.width, config_.height, dpi_frame_buffers_[next]);
+    // A frame drawn into a frame buffer is shown as it is.
+    if (rotation_ == Rotation::rotate_0)
+        for (std::uint8_t index = 0; index < kDpiFrameBufferCount; ++index)
+            if (buffer.data == dpi_frame_buffers_[index])
+                return flip_to_(index);
+    // Otherwise it is written into the hidden frame buffer and flipped in.
+    const auto        hidden = static_cast<std::uint8_t>(dpi_active_frame_buffer_ ^ 1U);
+    const DisplayRect frame{ 0, 0, logical_width_, logical_height_ };
+    if (const Status status = write_area_(frame, buffer.data, hidden); !is_ok(status))
+        return status;
+    return flip_to_(hidden);
+}
+
+Status MipiDsiDisplay::partial_transfer_(DisplayRect area, const PixelBuffer& buffer)
+{
+    if (rotation_ != Rotation::rotate_0)
+        return write_area_(area, buffer.data, dpi_active_frame_buffer_);
+    // esp_lcd copies the area with the 2D-DMA (it also writes the caller's
+    // pixels back from the cache) and reports the end in on_color_trans_done.
+    (void)xSemaphoreTake(color_trans_done_, 0);
+    const esp_err_t err =
+        esp_lcd_panel_draw_bitmap(panel_, area.x, area.y, area.x + area.width, area.y + area.height, buffer.data);
     if (err != ESP_OK)
-        ESP_LOGE(TAG, "full frame page flip failed: %s", esp_err_to_name(err));
-    if (err == ESP_OK)
-        dpi_active_frame_buffer_ = next;
-    transfer_pending_ = err == ESP_OK;
-    return to_status(err);
+    {
+        ESP_LOGE(TAG, "draw_bitmap area=(%d,%d)-(%d,%d) failed: %s", static_cast<int>(area.x), static_cast<int>(area.y),
+                 static_cast<int>(area.x + area.width), static_cast<int>(area.y + area.height), esp_err_to_name(err));
+        return to_status(err);
+    }
+    pending_ = Pending::copy;
+    return Status::ok;
+}
+
+Status MipiDsiDisplay::write_area_(DisplayRect area, const std::uint8_t* pixels, std::uint8_t frame_buffer)
+{
+    if (ppa_srm_ != nullptr && is_ok(ppa_write_bands_(area, pixels, frame_buffer)))
+        return Status::ok;
+    cpu_write_area_(area, reinterpret_cast<const std::uint16_t*>(pixels),
+                    reinterpret_cast<std::uint16_t*>(dpi_frame_buffers_[frame_buffer]));
+    return sync_rows_(frame_buffer, area);
+}
+
+Status MipiDsiDisplay::ppa_write_bands_(DisplayRect area, const std::uint8_t* pixels, std::uint8_t frame_buffer,
+                                        bool wait)
+{
+    // ESP-IDF up to 5.5.5 gets the DIG-734 workaround wrong for some blocks
+    // (esp-idf #19023 for 90/270-degree turns), and the PPA then never
+    // finishes them. The area goes in bands it gets right; an area without
+    // such bands the CPU copies.
+    const std::int32_t band_rows = safe_band_rows(area.width, area.height, swaps_axes(rotation_));
+    if (band_rows == 0)
+        return Status::not_supported;
+    const std::size_t row_bytes = static_cast<std::size_t>(area.width) * kBytesPerPixel;
+    for (std::int32_t top = 0; top < area.height; top += band_rows)
+    {
+        const std::int32_t rows = area.height - top < band_rows ? area.height - top : band_rows;
+        const DisplayRect  band{ area.x, area.y + top, area.width, rows };
+        if (const Status status =
+                ppa_write_area_(band, pixels + static_cast<std::size_t>(top) * row_bytes, frame_buffer, wait);
+            !is_ok(status))
+            return status;
+    }
+    return Status::ok;
+}
+
+Status MipiDsiDisplay::ppa_write_area_(DisplayRect area, const std::uint8_t* pixels, std::uint8_t frame_buffer,
+                                       bool wait)
+{
+    // One PPA scale-rotate-mirror pass at scale 1: the 2D-DMA copies (and
+    // rotates) the area straight into place while this task sleeps. The PPA
+    // writes the caller's pixels back from the cache and drops stale cache
+    // lines of the destination itself.
+    const DisplayRect     physical = to_physical_(area);
+    ppa_srm_oper_config_t operation{};
+    operation.in.buffer          = pixels;
+    operation.in.pic_w           = static_cast<std::uint32_t>(area.width);
+    operation.in.pic_h           = static_cast<std::uint32_t>(area.height);
+    operation.in.block_w         = static_cast<std::uint32_t>(area.width);
+    operation.in.block_h         = static_cast<std::uint32_t>(area.height);
+    operation.out.buffer         = dpi_frame_buffers_[frame_buffer];
+    operation.out.block_offset_x = static_cast<std::uint32_t>(physical.x);
+    operation.out.block_offset_y = static_cast<std::uint32_t>(physical.y);
+    operation.rotation_angle     = ppa_angle(rotation_);
+    return run_srm_(operation, area, wait);
+}
+
+Status MipiDsiDisplay::run_srm_(ppa_srm_oper_config_t& operation, DisplayRect area, bool wait)
+{
+    // Some areas the PPA never finishes (esp-idf #19023, #18999), and a
+    // blocking call would wait forever. The task waits with a timeout
+    // instead; until the late copy ends the CPU copies.
+    if (const Status status = settle_late_srm_(); !is_ok(status))
+        return status;
+    // A full queue makes room by waiting for its oldest copy.
+    if (srm_queued_ >= kPpaQueueDepth)
+        if (const Status status = take_srm_done_(); !is_ok(status))
+            return status;
+    operation.in.srm_cm       = PPA_SRM_COLOR_MODE_RGB565;
+    operation.out.buffer_size = static_cast<std::uint32_t>(ppa_out_bytes_);
+    operation.out.pic_w       = config_.width;
+    operation.out.pic_h       = config_.height;
+    operation.out.srm_cm      = PPA_SRM_COLOR_MODE_RGB565;
+    operation.scale_x         = 1.0f;
+    operation.scale_y         = 1.0f;
+    operation.mode            = PPA_TRANS_MODE_NON_BLOCKING;
+    operation.user_data       = this;
+    if (const esp_err_t err = ppa_do_scale_rotate_mirror(ppa_srm_, &operation); err != ESP_OK)
+        return to_status(err);
+    // What each queued copy is, for the log of one that does not end.
+    SrmCopy& copy = srm_copies_[(srm_oldest_ + srm_queued_) % kPpaQueueDepth];
+    copy.area     = area;
+    copy.in =
+        reinterpret_cast<std::uintptr_t>(operation.in.buffer)
+        + (static_cast<std::uintptr_t>(operation.in.block_offset_y) * operation.in.pic_w + operation.in.block_offset_x)
+              * kBytesPerPixel;
+    copy.out = reinterpret_cast<std::uintptr_t>(operation.out.buffer)
+               + (static_cast<std::uintptr_t>(operation.out.block_offset_y) * operation.out.pic_w
+                  + operation.out.block_offset_x)
+                     * kBytesPerPixel;
+    ++srm_queued_;
+    pending_ = Pending::ppa;
+    return wait ? wait_for_srm_() : Status::ok;
+}
+
+Status MipiDsiDisplay::wait_for_srm_()
+{
+    // Every queued copy, oldest first.
+    while (srm_queued_ > 0)
+        if (const Status status = take_srm_done_(); !is_ok(status))
+            return status;
+    if (pending_ == Pending::ppa)
+        pending_ = Pending::none;
+    return Status::ok;
+}
+
+Status MipiDsiDisplay::take_srm_done_()
+{
+    // The end of the oldest queued copy.
+    if (xSemaphoreTake(ppa_done_, pdMS_TO_TICKS(kPpaTimeoutMs)) == pdTRUE)
+    {
+        srm_oldest_ = static_cast<std::uint8_t>((srm_oldest_ + 1U) % kPpaQueueDepth);
+        --srm_queued_;
+        return Status::ok;
+    }
+    srm_late_            = true;
+    pending_             = Pending::none;
+    const SrmCopy& stuck = srm_copies_[srm_oldest_];
+    ESP_LOGW(TAG,
+             "PPA copy of %dx%d at (%d,%d), rotation %d, from 0x%08x to 0x%08x did not end (%u queued); the CPU "
+             "copies until it does",
+             static_cast<int>(stuck.area.width), static_cast<int>(stuck.area.height), static_cast<int>(stuck.area.x),
+             static_cast<int>(stuck.area.y), static_cast<int>(rotation_), static_cast<unsigned>(stuck.in),
+             static_cast<unsigned>(stuck.out), static_cast<unsigned>(srm_queued_));
+    return Status::timeout;
+}
+
+Status MipiDsiDisplay::settle_late_srm_()
+{
+    // Counts the copies that have ended since; busy while some have not.
+    if (!srm_late_)
+        return Status::ok;
+    while (srm_queued_ > 0 && xSemaphoreTake(ppa_done_, 0) == pdTRUE)
+    {
+        srm_oldest_ = static_cast<std::uint8_t>((srm_oldest_ + 1U) % kPpaQueueDepth);
+        --srm_queued_;
+    }
+    if (srm_queued_ > 0)
+        return Status::busy;
+    srm_late_ = false;
+    ESP_LOGI(TAG, "the late PPA copies have ended; the PPA copies again");
+    return Status::ok;
+}
+
+Status MipiDsiDisplay::copy_to_frame_buffer(std::uint8_t index, DisplayRect area, const PixelBuffer& pixels)
+{
+    brick::interfaces::display::WritablePixelBuffer frame;
+    if (const Status status = get_frame_buffer(index, frame); !is_ok(status))
+        return status;
+    if (!brick::core::display::area_inside(area, frame.width, frame.height) || !pixels.valid()
+        || pixels.width != static_cast<std::uint32_t>(area.width)
+        || pixels.height != static_cast<std::uint32_t>(area.height) || pixels.format != pixel_format())
+        return Status::invalid_argument;
+    // Queued behind earlier PPA copies, in order; anything else ends first.
+    if (pending_ != Pending::ppa)
+        if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+            return status;
+    // Submitted only: the caller's pixels are read until the copy ends.
+    if (ppa_srm_ != nullptr && pixels.stride_bytes == static_cast<std::size_t>(area.width) * kBytesPerPixel
+        && is_ok(ppa_write_bands_(area, pixels.data, index, false)))
+        return Status::ok;
+    // The CPU writes after the queued copies.
+    if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+        return status;
+    if (const Status status = brick::core::display::copy_into_frame(frame, area, pixels); !is_ok(status))
+        return status;
+    return sync_rows_(index, area);
+}
+
+Status MipiDsiDisplay::copy_between_frame_buffers(std::uint8_t from, std::uint8_t to, DisplayRect area)
+{
+    brick::interfaces::display::WritablePixelBuffer source;
+    brick::interfaces::display::WritablePixelBuffer target;
+    if (const Status status = get_frame_buffer(from, source); !is_ok(status))
+        return status;
+    if (const Status status = get_frame_buffer(to, target); !is_ok(status))
+        return status;
+    if (!brick::core::display::area_inside(area, source.width, source.height))
+        return Status::invalid_argument;
+    if (pending_ != Pending::ppa)
+        if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+            return status;
+    if (ppa_srm_ != nullptr && is_ok(ppa_copy_between_(from, to, area)))
+        return Status::ok;
+    if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+        return status;
+    if (const Status status = brick::core::display::copy_frame_area(source, target, area); !is_ok(status))
+        return status;
+    return sync_rows_(to, area);
+}
+
+Status MipiDsiDisplay::ppa_copy_between_(std::uint8_t from, std::uint8_t to, DisplayRect area)
+{
+    // In bands the PPA finishes (see ppa_write_bands_()), queued only.
+    const std::int32_t band_rows = safe_band_rows(area.width, area.height, false);
+    if (band_rows == 0)
+        return Status::not_supported;
+    for (std::int32_t top = 0; top < area.height; top += band_rows)
+    {
+        const std::int32_t    rows = area.height - top < band_rows ? area.height - top : band_rows;
+        const DisplayRect     band{ area.x, area.y + top, area.width, rows };
+        ppa_srm_oper_config_t operation{};
+        operation.in.buffer          = dpi_frame_buffers_[from];
+        operation.in.pic_w           = config_.width;
+        operation.in.pic_h           = config_.height;
+        operation.in.block_w         = static_cast<std::uint32_t>(band.width);
+        operation.in.block_h         = static_cast<std::uint32_t>(band.height);
+        operation.in.block_offset_x  = static_cast<std::uint32_t>(band.x);
+        operation.in.block_offset_y  = static_cast<std::uint32_t>(band.y);
+        operation.out.buffer         = dpi_frame_buffers_[to];
+        operation.out.block_offset_x = static_cast<std::uint32_t>(band.x);
+        operation.out.block_offset_y = static_cast<std::uint32_t>(band.y);
+        operation.rotation_angle     = PPA_SRM_ROTATION_ANGLE_0;
+        if (const Status status = run_srm_(operation, band, false); !is_ok(status))
+            return status;
+    }
+    return Status::ok;
+}
+
+Status MipiDsiDisplay::sync_rows_(std::uint8_t frame_buffer, DisplayRect area)
+{
+    // The scan-out reads PSRAM, not the cache.
+    const DisplayRect physical  = to_physical_(area);
+    const std::size_t row_bytes = static_cast<std::size_t>(config_.width) * kBytesPerPixel;
+    return to_status(
+        esp_cache_msync(dpi_frame_buffers_[frame_buffer] + static_cast<std::size_t>(physical.y) * row_bytes,
+                        static_cast<std::size_t>(physical.height) * row_bytes,
+                        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED));
+}
+
+void MipiDsiDisplay::cpu_write_area_(DisplayRect area, const std::uint16_t* pixels, std::uint16_t* frame_buffer) const
+{
+    const auto panel_width = static_cast<std::size_t>(config_.width);
+    const auto width       = static_cast<std::size_t>(area.width);
+    const auto height      = static_cast<std::size_t>(area.height);
+    const auto left        = static_cast<std::size_t>(area.x);
+    const auto top         = static_cast<std::size_t>(area.y);
+    const auto last_column = panel_width - 1;
+    const auto last_row    = static_cast<std::size_t>(config_.height) - 1;
+    for (std::size_t y = 0; y < height; ++y)
+    {
+        const std::uint16_t* row = pixels + y * width;
+        const std::size_t    ly  = top + y;
+        switch (rotation_)
+        {
+            case Rotation::rotate_90:
+                for (std::size_t x = 0; x < width; ++x)
+                    frame_buffer[(left + x) * panel_width + (last_column - ly)] = row[x];
+                break;
+            case Rotation::rotate_180:
+                for (std::size_t x = 0; x < width; ++x)
+                    frame_buffer[(last_row - ly) * panel_width + (last_column - left - x)] = row[x];
+                break;
+            case Rotation::rotate_270:
+                for (std::size_t x = 0; x < width; ++x)
+                    frame_buffer[(last_row - left - x) * panel_width + ly] = row[x];
+                break;
+            default:
+                std::memcpy(frame_buffer + ly * panel_width + left, row, width * kBytesPerPixel);
+                break;
+        }
+    }
+}
+
+Status MipiDsiDisplay::flip_to_(std::uint8_t frame_buffer)
+{
+    // With a frame buffer as source esp_lcd only writes it back from the
+    // cache, switches the scan-out to it at the end of the current refresh and
+    // reports color-transfer-done at once.
+    (void)xSemaphoreTake(color_trans_done_, 0);
+    const esp_err_t err =
+        esp_lcd_panel_draw_bitmap(panel_, 0, 0, config_.width, config_.height, dpi_frame_buffers_[frame_buffer]);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "page flip failed: %s", esp_err_to_name(err));
+        return to_status(err);
+    }
+    dpi_active_frame_buffer_ = frame_buffer;
+    pending_                 = Pending::flip;
+    return Status::ok;
 }
 
 Status MipiDsiDisplay::wait_for_transfer_complete(std::uint32_t timeout_ms)
 {
-    if (color_trans_done_ != nullptr && refresh_done_ != nullptr)
-    {
-        if (xSemaphoreTake(color_trans_done_, pdMS_TO_TICKS(timeout_ms)) != pdTRUE)
-            return Status::timeout;
-        color_ready_for_refresh_ = true;
-        if (xSemaphoreTake(refresh_done_, pdMS_TO_TICKS(timeout_ms)) != pdTRUE)
-            return Status::timeout;
-        transfer_pending_ = false;
+    const Pending pending = pending_;
+    if (pending == Pending::none)
         return Status::ok;
-    }
-
-    // esp_lcd's DPI draw call queues the source buffer for scan-out. Keep the
-    // LVGL buffer alive for at least one complete video frame before reuse.
-    const auto h_total = static_cast<std::uint32_t>(config_.width) + config_.hsync_back_porch
-                         + config_.hsync_front_porch + config_.hsync_pulse_width;
-    const auto v_total = static_cast<std::uint32_t>(config_.height) + config_.vsync_back_porch
-                         + config_.vsync_front_porch + config_.vsync_pulse_width;
-    // Pixels divided by pixels per microsecond.
-    const auto frame_us =
-        static_cast<std::uint32_t>(static_cast<float>(h_total) * static_cast<float>(v_total) / config_.pixel_clock_mhz)
-        + 2'000;
-    const auto wait_ms = (frame_us + 999) / 1'000;
-    if (wait_ms > timeout_ms)
+    pending_ = Pending::none;
+    if (pending == Pending::ppa)
+        return wait_for_srm_();
+    if (xSemaphoreTake(color_trans_done_, pdMS_TO_TICKS(timeout_ms)) != pdTRUE)
         return Status::timeout;
-    vTaskDelay(pdMS_TO_TICKS(wait_ms));
-    transfer_pending_ = false;
-    return Status::ok;
+    // The frame buffer shown before a flip is read until the refresh ends.
+    return pending == Pending::flip ? wait_frame_end_(timeout_ms) : Status::ok;
 }
 
-Status MipiDsiDisplay::ensure_rotation_buffers_()
+Status MipiDsiDisplay::wait_for_vsync(std::uint32_t timeout_ms)
 {
-    if (rotation_source_ != nullptr && rotation_target_ != nullptr)
-        return Status::ok;
-    const auto source_bytes = static_cast<std::size_t>(logical_width_) * logical_height_ * sizeof(std::uint16_t);
-    const auto target_bytes = static_cast<std::size_t>(config_.width) * config_.height * sizeof(std::uint16_t);
-    // Allocated on the first rotated draw and kept until the display is destroyed.
-    using brick::interfaces::memory::MemoryKind;
-    rotation_source_ = static_cast<std::uint16_t*>(memory_.allocate(source_bytes, MemoryKind::external, 64));
-    rotation_target_ = static_cast<std::uint16_t*>(memory_.allocate(target_bytes, MemoryKind::external, 64));
-    if (rotation_source_ == nullptr || rotation_target_ == nullptr)
-    {
-        release_rotation_buffers_();
-        ESP_LOGE(TAG, "rotation requires PSRAM buffers (%zu + %zu bytes)", source_bytes, target_bytes);
-        return Status::no_memory;
-    }
-    memset(rotation_source_, 0, source_bytes);
-    memset(rotation_target_, 0, target_bytes);
-    if (ppa_client_ == nullptr)
-    {
-        const ppa_client_config_t ppa_config{ .oper_type             = PPA_OPERATION_SRM,
-                                              .max_pending_trans_num = 1,
-                                              .data_burst_length     = PPA_DATA_BURST_LENGTH_128 };
-        if (ppa_register_client(&ppa_config, &ppa_client_) != ESP_OK)
-        {
-            ppa_client_ = nullptr;
-            ESP_LOGW(TAG, "PPA rotation unavailable; using CPU fallback");
-        }
-    }
-    return Status::ok;
-}
-
-void MipiDsiDisplay::release_rotation_buffers_()
-{
-    if (rotation_source_ != nullptr)
-        memory_.release(rotation_source_);
-    if (rotation_target_ != nullptr)
-        memory_.release(rotation_target_);
-    rotation_source_ = nullptr;
-    rotation_target_ = nullptr;
-}
-
-Status MipiDsiDisplay::ppa_rotate_buffer_(const std::uint16_t* source)
-{
-    if (ppa_client_ == nullptr)
-        return Status::not_supported;
-    ppa_srm_oper_config_t operation{};
-    operation.in.buffer       = source;
-    operation.in.pic_w        = logical_width_;
-    operation.in.pic_h        = logical_height_;
-    operation.in.block_w      = logical_width_;
-    operation.in.block_h      = logical_height_;
-    operation.in.srm_cm       = PPA_SRM_COLOR_MODE_RGB565;
-    operation.out.buffer      = rotation_target_;
-    operation.out.buffer_size = static_cast<uint32_t>(config_.width) * config_.height * sizeof(std::uint16_t);
-    operation.out.pic_w       = config_.width;
-    operation.out.pic_h       = config_.height;
-    operation.out.srm_cm      = PPA_SRM_COLOR_MODE_RGB565;
-    switch (rotation_)
-    {
-        case brick::interfaces::display::Rotation::rotate_90:
-            operation.rotation_angle = PPA_SRM_ROTATION_ANGLE_270;
-            break;
-        case brick::interfaces::display::Rotation::rotate_180:
-            operation.rotation_angle = PPA_SRM_ROTATION_ANGLE_180;
-            break;
-        default:
-            operation.rotation_angle = PPA_SRM_ROTATION_ANGLE_90;
-            break;
-    }
-    operation.scale_x = 1.0f;
-    operation.scale_y = 1.0f;
-    operation.mode    = PPA_TRANS_MODE_BLOCKING;
-    return to_status(ppa_do_scale_rotate_mirror(ppa_client_, &operation));
-}
-
-void MipiDsiDisplay::rotate_buffer_(const std::uint16_t* source)
-{
-    const auto pw = static_cast<std::size_t>(config_.width);
-    const auto lw = static_cast<std::size_t>(logical_width_);
-    const auto lh = static_cast<std::size_t>(logical_height_);
-    if (rotation_ == brick::interfaces::display::Rotation::rotate_90)
-    {
-        for (std::size_t x = 0; x < lw; ++x)
-            for (std::size_t y = 0; y < lh; ++y)
-                rotation_target_[x * pw + (pw - 1 - y)] = source[y * lw + x];
-        return;
-    }
-    if (rotation_ == brick::interfaces::display::Rotation::rotate_270)
-    {
-        for (std::size_t x = 0; x < lw; ++x)
-            for (std::size_t y = 0; y < lh; ++y)
-                rotation_target_[(lw - 1 - x) * pw + y] = source[y * lw + x];
-        return;
-    }
-    for (std::size_t y = 0; y < lh; ++y)
-        for (std::size_t x = 0; x < lw; ++x)
-        {
-            std::size_t dst_x;
-            std::size_t dst_y;
-            dst_x                                = pw - 1 - x;
-            dst_y                                = lh - 1 - y;
-            rotation_target_[dst_y * pw + dst_x] = source[y * lw + x];
-        }
-}
-
-Status MipiDsiDisplay::rotated_transfer_(brick::interfaces::display::DisplayRect        area,
-                                         const brick::interfaces::display::PixelBuffer& buffer)
-{
-    if (const Status status = ensure_rotation_buffers_(); !is_ok(status))
+    if (!initialized_)
+        return Status::not_ready;
+    // A pending flip completes at the end of a refresh: that is the boundary.
+    if (pending_ == Pending::flip)
+        return wait_for_transfer_complete(timeout_ms);
+    if (const Status status = wait_for_transfer_complete(timeout_ms); !is_ok(status))
         return status;
-    if (transfer_pending_)
-        if (const Status status = wait_for_transfer_complete(1000); !is_ok(status))
-            return status;
-    const auto* src = reinterpret_cast<const std::uint16_t*>(buffer.data);
-    const bool  full_frame =
-        area.x == 0 && area.y == 0 && area.width == logical_width_ && area.height == logical_height_;
-    if (!full_frame)
-    {
-        auto* dst = rotation_source_ + static_cast<std::size_t>(area.y) * logical_width_ + area.x;
-        for (std::int16_t row = 0; row < area.height; ++row)
-            memcpy(dst + static_cast<std::size_t>(row) * logical_width_,
-                   src + static_cast<std::size_t>(row) * area.width,
-                   static_cast<std::size_t>(area.width) * sizeof(std::uint16_t));
-        src = rotation_source_;
-    }
-    // The PPA rotates whole frames only; the CPU handles the rest and PPA failures.
-    if (!full_frame || !is_ok(ppa_rotate_buffer_(src)))
-        rotate_buffer_(src);
-    const auto bytes = static_cast<std::size_t>(config_.width) * config_.height * sizeof(std::uint16_t);
-    if (const esp_err_t err =
-            esp_cache_msync(rotation_target_, bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
-        err != ESP_OK)
-        return to_status(err);
-    const auto err    = esp_lcd_panel_draw_bitmap(panel_, 0, 0, config_.width, config_.height, rotation_target_);
-    transfer_pending_ = err == ESP_OK;
-    return to_status(err);
+    return wait_frame_end_(timeout_ms);
+}
+
+Status MipiDsiDisplay::wait_frame_end_(std::uint32_t timeout_ms)
+{
+    // Drop a give left behind by an earlier wait that timed out.
+    (void)xSemaphoreTake(refresh_done_, 0);
+    frame_end_wanted_ = true;
+    if (xSemaphoreTake(refresh_done_, pdMS_TO_TICKS(timeout_ms)) == pdTRUE)
+        return Status::ok;
+    frame_end_wanted_ = false;
+    return Status::timeout;
+}
+
+Status MipiDsiDisplay::fill_rect(DisplayRect area, std::uint16_t color)
+{
+    if (!initialized_ || panel_ == nullptr)
+        return Status::not_ready;
+    if (!valid_area_(area))
+        return Status::invalid_argument;
+    if (ppa_fill_ == nullptr)
+        return Status::not_supported;
+    if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+        return status;
+    // Into the frame buffer on the screen, like a partial draw.
+    const DisplayRect      physical = to_physical_(area);
+    ppa_fill_oper_config_t operation{};
+    operation.out.buffer         = dpi_frame_buffers_[dpi_active_frame_buffer_];
+    operation.out.buffer_size    = static_cast<std::uint32_t>(ppa_out_bytes_);
+    operation.out.pic_w          = config_.width;
+    operation.out.pic_h          = config_.height;
+    operation.out.block_offset_x = static_cast<std::uint32_t>(physical.x);
+    operation.out.block_offset_y = static_cast<std::uint32_t>(physical.y);
+    operation.out.fill_cm        = PPA_FILL_COLOR_MODE_RGB565;
+    operation.fill_block_w       = static_cast<std::uint32_t>(physical.width);
+    operation.fill_block_h       = static_cast<std::uint32_t>(physical.height);
+    operation.fill_argb_color    = fill_color(color);
+    operation.mode               = PPA_TRANS_MODE_BLOCKING;
+    return to_status(ppa_do_fill(ppa_fill_, &operation));
+}
+
+std::uint8_t MipiDsiDisplay::frame_buffer_count() const
+{
+    return rotation_ == Rotation::rotate_0 ? kDpiFrameBufferCount : 0;
+}
+
+Status MipiDsiDisplay::get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer)
+{
+    if (!initialized_)
+        return Status::not_ready;
+    if (index >= frame_buffer_count())
+        return Status::invalid_argument;
+    buffer = { dpi_frame_buffers_[index],
+               config_.width,
+               config_.height,
+               static_cast<std::size_t>(config_.width) * kBytesPerPixel,
+               pixel_format(),
+               true };
+    return Status::ok;
+}
+
+Status MipiDsiDisplay::present_frame_buffer(std::uint8_t index)
+{
+    if (!initialized_)
+        return Status::not_ready;
+    if (index >= frame_buffer_count())
+        return Status::invalid_argument;
+    if (const Status status = wait_for_transfer_complete(kFlipTimeoutMs); !is_ok(status))
+        return status;
+    return flip_to_(index);
+}
+
+std::size_t MipiDsiDisplay::frame_buffer_bytes_() const
+{
+    return static_cast<std::size_t>(config_.width) * config_.height * kBytesPerPixel;
 }
 
 Status MipiDsiDisplay::send_init_sequence_()
@@ -462,33 +846,6 @@ Status MipiDsiDisplay::send_init_sequence_()
         index += count;
         vTaskDelay(pdMS_TO_TICKS(command == 0x11 ? 10 : 1));
     }
-    return Status::ok;
-}
-
-Status MipiDsiDisplay::apply_rotation_()
-{
-    bool swap = false, mirror_x = false, mirror_y = false;
-    switch (rotation_)
-    {
-        case brick::interfaces::display::Rotation::rotate_90:
-            swap     = true;
-            mirror_x = true;
-            break;
-        case brick::interfaces::display::Rotation::rotate_180:
-            mirror_x = true;
-            mirror_y = true;
-            break;
-        case brick::interfaces::display::Rotation::rotate_270:
-            swap     = true;
-            mirror_y = true;
-            break;
-        default:
-            break;
-    }
-    // DPI panels do not implement swap_xy. Keep the physical scanout geometry
-    // and rotate the logical framebuffer in BRICK for every non-zero rotation.
-    if (swap || mirror_x || mirror_y)
-        return ensure_rotation_buffers_();
     return Status::ok;
 }
 

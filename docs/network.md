@@ -150,6 +150,19 @@ no open hotspot with a setup page stays on the air; that board can be set up
 only from the build (or its own address in a network) until the ESP32-C6
 firmware is updated.
 
+Updating the ESP32-C6 (done on a JC8012, 2.1.10 -> 2.12.1, 2026-11): build the
+co-processor firmware of the same esp_hosted version as the host component
+(`managed_components/espressif__esp_hosted/slave`, with `../common` next to
+it) with ESP-IDF for `esp32c6` (`idf.py set-target esp32c6 build`; the
+defaults match the panels: SDIO, fixed C6 pins). A small P4 application then
+starts esp_hosted, reads the image from a data partition of the P4's flash
+(written there with `esptool write_flash --force`) and sends it with
+`esp_hosted_slave_ota_begin()` / `write()` / `end()` (and `activate()` on
+firmware 2.6 or newer), then restarts. The C6 writes the image into its other
+OTA slot and keeps the old one until the new one is complete; 1.2 MB take
+about 12 s. After the update the version warning, the scan fallback and the
+hotspot problem are gone.
+
 `EspEthernet` drives the internal EMAC with an RMII PHY (IP101, RTL8201,
 LAN87xx, DP83848, KSZ80xx or generic); the board profile supplies the pins.
 `begin()` returns at once; the link follows the cable.

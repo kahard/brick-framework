@@ -79,7 +79,14 @@ public:
     Status start(const WifiManagerConfig& config);
     /// Leaves the network and closes the hotspot.
     void stop();
-    void update();
+    /// Replaces the known networks while running, e.g. from a setup page:
+    /// leaves the current network and joins one of the new ones; the hotspot
+    /// stays open until that works. Without networks the hotspot opens at
+    /// once. The array and its strings must stay valid while the manager
+    /// runs. Status::invalid_argument as start(), Status::not_ready when
+    /// stopped.
+    Status set_networks(const interfaces::network::WifiCredentials* networks, std::size_t count);
+    void   update();
     /// Scans again while connected or waiting, e.g. for a list on the screen;
     /// networks() changes when scan_count() does. Status::busy while joining
     /// or scanning, Status::not_ready when stopped.
@@ -89,6 +96,8 @@ public:
     /// The network being joined or joined; nullptr otherwise.
     const interfaces::network::WifiCredentials* current_network() const;
     interfaces::network::WifiFailure            last_failure() const { return last_failure_; }
+    /// Networks the manager may join (start() or set_networks()).
+    std::size_t known_network_count() const { return config_.network_count; }
     /// Failed attempts since the last successful connection.
     std::uint16_t                           failed_attempts() const { return failed_attempts_; }
     bool                                    access_point_active() const { return access_point_active_; }

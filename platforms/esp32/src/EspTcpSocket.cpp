@@ -133,6 +133,19 @@ Status EspTcpSocket::receive(std::uint8_t* data, std::size_t capacity, std::size
     return would_block(errno) ? Status::no_data : fail_(from_errno(errno));
 }
 
+void EspTcpSocket::adopt(int socket)
+{
+    close();
+    socket_         = socket;
+    const int flags = ::fcntl(socket_, F_GETFL, 0);
+    if (flags < 0 || ::fcntl(socket_, F_SETFL, flags | O_NONBLOCK) < 0)
+    {
+        (void)fail_(Status::error);
+        return;
+    }
+    state_ = State::connected;
+}
+
 void EspTcpSocket::close()
 {
     if (socket_ >= 0)

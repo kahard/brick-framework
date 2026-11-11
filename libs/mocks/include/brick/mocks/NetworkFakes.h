@@ -8,12 +8,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "brick/interfaces/network/IDnsResolver.h"
+#include "brick/interfaces/network/ITcpListener.h"
 #include "brick/interfaces/network/ITcpSocket.h"
+#include "brick/interfaces/network/IUdpSocket.h"
 #include "brick/interfaces/network/IWifiAccessPoint.h"
 #include "brick/interfaces/network/IWifiStation.h"
 
@@ -156,10 +160,11 @@ private:
 class FakeWifiAccessPoint final : public brick::interfaces::network::IWifiAccessPoint
 {
 public:
-    std::string ssid;
-    int         starts  = 0;
-    int         stops   = 0;
-    std::size_t clients = 0;
+    std::string                             ssid;
+    int                                     starts  = 0;
+    int                                     stops   = 0;
+    std::size_t                             clients = 0;
+    brick::interfaces::network::Ipv4Address address{ { 192, 168, 4, 1 } };
 
     const char*                           name() const override { return "access point"; }
     brick::interfaces::network::LinkState link_state() const override
@@ -168,7 +173,8 @@ public:
     }
     Status ip_info(brick::interfaces::network::IpInfo& info) const override
     {
-        info = {};
+        info         = {};
+        info.address = address;
         return running_ ? Status::ok : Status::not_ready;
     }
     Status mac_address(brick::interfaces::network::MacAddress& mac) const override
@@ -250,6 +256,16 @@ public:
     std::string                          sent;
     brick::interfaces::network::Endpoint remote;
     int                                  closes = 0;
+    /// After the whole response: Status::no_data (the peer waits) instead
+    /// of Status::not_ready (the peer closed).
+    bool stay_open = false;
+
+    /// Connected at once, as a connection a listener accepted.
+    void open_connected()
+    {
+        state_    = State::connected;
+        position_ = 0;
+    }
 
     Status connect(const brick::interfaces::network::Endpoint& endpoint) override
     {
@@ -282,6 +298,8 @@ public:
     Status receive(std::uint8_t* data, std::size_t capacity, std::size_t& received) override
     {
         received = 0;
+        if (state_ == State::connected && position_ >= response.size() && stay_open)
+            return Status::no_data;
         if (state_ != State::connected || position_ >= response.size())
             return Status::not_ready;
         std::size_t bytes = response.size() - position_;
@@ -308,6 +326,77 @@ private:
     State       state_    = State::closed;
     int         polls_    = 0;
     std::size_t position_ = 0;
+};
+
+/// Listener handing out the sockets the test queued in incoming.
+class FakeTcpListener final : public brick::interfaces::network::ITcpListener
+{
+public:
+    std::deque<FakeTcpSocket*> incoming;
+    std::uint16_t              port          = 0;
+    bool                       listening     = false;
+    Status                     listen_result = Status::ok;
+
+    Status listen(std::uint16_t value) override
+    {
+        if (listen_result != Status::ok)
+            return listen_result;
+        port      = value;
+        listening = true;
+        return Status::ok;
+    }
+    brick::interfaces::network::ITcpSocket* accept() override
+    {
+        if (!listening || incoming.empty())
+            return nullptr;
+        FakeTcpSocket* socket = incoming.front();
+        incoming.pop_front();
+        socket->open_connected();
+        return socket;
+    }
+    void close() override { listening = false; }
+};
+
+/// UDP socket receiving what the test queued and recording what it sends.
+class FakeUdpSocket final : public brick::interfaces::network::IUdpSocket
+{
+public:
+    using Datagram = std::pair<brick::interfaces::network::Endpoint, std::vector<std::uint8_t>>;
+
+    std::deque<Datagram>  incoming;
+    std::vector<Datagram> sent;
+    std::uint16_t         port   = 0;
+    bool                  opened = false;
+
+    Status open(std::uint16_t value) override
+    {
+        port   = value;
+        opened = true;
+        return Status::ok;
+    }
+    Status receive_from(std::uint8_t* data, std::size_t capacity, std::size_t& received,
+                        brick::interfaces::network::Endpoint& from) override
+    {
+        received = 0;
+        if (!opened)
+            return Status::not_ready;
+        if (incoming.empty())
+            return Status::no_data;
+        const Datagram& datagram = incoming.front();
+        received                 = datagram.second.size() < capacity ? datagram.second.size() : capacity;
+        std::memcpy(data, datagram.second.data(), received);
+        from = datagram.first;
+        incoming.pop_front();
+        return Status::ok;
+    }
+    Status send_to(const brick::interfaces::network::Endpoint& to, const std::uint8_t* data, std::size_t size) override
+    {
+        if (!opened)
+            return Status::not_ready;
+        sent.emplace_back(to, std::vector<std::uint8_t>(data, data + size));
+        return Status::ok;
+    }
+    void close() override { opened = false; }
 };
 
 }  // namespace brick::mocks

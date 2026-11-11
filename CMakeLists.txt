@@ -26,8 +26,10 @@ add_library(brick_core STATIC
     libs/core/src/AssetStreamer.cpp
     libs/core/src/BeepSequence.cpp
     libs/core/src/BmpDecoder.cpp
+    libs/core/src/CaptiveDns.cpp
     libs/core/src/DragSlider.cpp
     libs/core/src/HttpProbe.cpp
+    libs/core/src/HttpServer.cpp
     libs/core/src/Ipv4.cpp
     libs/core/src/NetworkSelector.cpp
     libs/core/src/PeriodicAudioPlayer.cpp
@@ -35,9 +37,11 @@ add_library(brick_core STATIC
     libs/core/src/SerialLogger.cpp
     libs/core/src/TouchMapper.cpp
     libs/core/src/WavDecoder.cpp
+    libs/core/src/WifiCredentialStore.cpp
     libs/core/src/WifiManager.cpp
     libs/core/src/WifiNetworkChoice.cpp
-    libs/core/src/WifiScanList.cpp)
+    libs/core/src/WifiScanList.cpp
+    libs/core/src/WifiSetupPortal.cpp)
 add_library(BRICK::Core ALIAS brick_core)
 target_include_directories(brick_core INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/core/include")
@@ -137,6 +141,11 @@ if(BRICK_BUILD_TESTS)
   target_compile_options(brick_network_tests PRIVATE -Wall -Wextra -Werror)
   target_link_libraries(brick_network_tests PRIVATE BRICK::Core BRICK::Mocks)
   add_test(NAME brick_network_tests COMMAND brick_network_tests)
+  add_executable(brick_setup_portal_tests tests/brick/brick_setup_portal_tests.cpp)
+  target_compile_features(brick_setup_portal_tests PRIVATE cxx_std_17)
+  target_compile_options(brick_setup_portal_tests PRIVATE -Wall -Wextra -Werror)
+  target_link_libraries(brick_setup_portal_tests PRIVATE BRICK::Core BRICK::Mocks)
+  add_test(NAME brick_setup_portal_tests COMMAND brick_setup_portal_tests)
   if(BRICK_BUILD_PC)
     brick_add_simulator(brick_pc_tests tests/pc/pc_platform_tests.cpp)
     target_compile_options(brick_pc_tests PRIVATE -Wall -Wextra -Werror)

@@ -28,6 +28,11 @@ public:
     Status receive(std::uint8_t* data, std::size_t capacity, std::size_t& received) override;
     void   close() override;
 
+    /// Takes over a connection a listener accepted (Esp8266TcpListener).
+    void adopt(tcp_pcb* pcb);
+    /// Closed and holding no connection: free for a listener.
+    bool idle() const { return state_ == State::closed && pcb_ == nullptr; }
+
     // Called by the lwIP callbacks of this socket.
     void on_connected();
     void on_error(std::int8_t error);

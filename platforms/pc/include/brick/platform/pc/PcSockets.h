@@ -1,11 +1,15 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
 #include "brick/interfaces/network/IDnsResolver.h"
 #include "brick/interfaces/network/INetworkInterface.h"
+#include "brick/interfaces/network/ITcpListener.h"
 #include "brick/interfaces/network/ITcpSocket.h"
+#include "brick/interfaces/network/IUdpSocket.h"
 
 // The PC's real network behind the BRICK network interfaces. With offline
 // set (simulator option --offline) nothing leaves the PC: the host network
@@ -69,6 +73,11 @@ public:
     Status receive(std::uint8_t* data, std::size_t capacity, std::size_t& received) override;
     void   close() override;
 
+    /// Takes over a connected socket a listener accepted (PcTcpListener).
+    void adopt(std::intptr_t socket);
+    /// Closed and holding no socket: free for a listener.
+    bool idle() const { return state_ == State::closed && socket_ == -1; }
+
 private:
     enum class State : std::uint8_t
     {
@@ -85,6 +94,53 @@ private:
     std::intptr_t socket_  = -1;
     State         state_   = State::closed;
     Status        failure_ = Status::error;
+};
+
+/// ITcpListener over a non-blocking socket. It listens on this PC only
+/// (127.0.0.1), or on every interface with lan set, so a simulated device's
+/// pages open in a browser on http://localhost:<port>/. With port set it
+/// listens there whatever port the device asks for (its port 80 is taken or
+/// privileged on a PC).
+class PcTcpListener final : public brick::interfaces::network::ITcpListener
+{
+public:
+    static constexpr std::size_t kMaxConnections = 2;
+
+    explicit PcTcpListener(bool lan = false, std::uint16_t port = 0) : lan_(lan), port_(port) {}
+    ~PcTcpListener() override { close(); }
+    PcTcpListener(const PcTcpListener&)            = delete;
+    PcTcpListener& operator=(const PcTcpListener&) = delete;
+
+    Status                                  listen(std::uint16_t port) override;
+    brick::interfaces::network::ITcpSocket* accept() override;
+    void                                    close() override;
+
+private:
+    bool                                     lan_;
+    std::uint16_t                            port_;
+    std::intptr_t                            socket_ = -1;
+    std::array<PcTcpSocket, kMaxConnections> clients_;
+};
+
+/// IUdpSocket over a non-blocking socket, on 127.0.0.1 only (lan: on every
+/// interface).
+class PcUdpSocket final : public brick::interfaces::network::IUdpSocket
+{
+public:
+    explicit PcUdpSocket(bool lan = false) : lan_(lan) {}
+    ~PcUdpSocket() override { close(); }
+    PcUdpSocket(const PcUdpSocket&)            = delete;
+    PcUdpSocket& operator=(const PcUdpSocket&) = delete;
+
+    Status open(std::uint16_t port) override;
+    Status receive_from(std::uint8_t* data, std::size_t capacity, std::size_t& received,
+                        brick::interfaces::network::Endpoint& from) override;
+    Status send_to(const brick::interfaces::network::Endpoint& to, const std::uint8_t* data, std::size_t size) override;
+    void   close() override;
+
+private:
+    bool          lan_;
+    std::intptr_t socket_ = -1;
 };
 
 }  // namespace brick::platform::pc

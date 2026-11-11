@@ -259,6 +259,18 @@ Status PcTcpSocket::receive(std::uint8_t* data, std::size_t capacity, std::size_
     return would_block(last_error()) ? Status::no_data : fail_(Status::error);
 }
 
+void PcTcpSocket::adopt(std::intptr_t socket)
+{
+    close();
+    socket_ = socket;
+    if (!make_non_blocking(to_handle(socket_)))
+    {
+        (void)fail_(Status::error);
+        return;
+    }
+    state_ = State::connected;
+}
+
 void PcTcpSocket::close()
 {
     if (socket_ != -1)
@@ -273,6 +285,130 @@ Status PcTcpSocket::fail_(Status status)
     state_   = State::failed;
     failure_ = status;
     return status;
+}
+
+// ---- PcTcpListener ----------------------------------------------------------
+
+namespace
+{
+    /// A socket of type bound to port on 127.0.0.1 (or every interface).
+    Status bind_socket(int type, std::uint16_t port, bool lan, std::intptr_t& socket)
+    {
+        sockets::start();
+        const Handle handle = ::socket(AF_INET, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP);
+        if (handle == kInvalidHandle)
+            return Status::no_memory;
+#ifndef _WIN32
+        // Windows lets a second socket take a port with SO_REUSEADDR; elsewhere it only skips TIME_WAIT.
+        const int reuse = 1;
+        (void)::setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+#endif
+        sockaddr_in address{};
+        address.sin_family      = AF_INET;
+        address.sin_port        = htons(port);
+        address.sin_addr.s_addr = htonl(lan ? INADDR_ANY : INADDR_LOOPBACK);
+        if (::bind(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0)
+        {
+            close_handle(handle);
+            return Status::busy;
+        }
+        if (!make_non_blocking(handle))
+        {
+            close_handle(handle);
+            return Status::error;
+        }
+        socket = static_cast<std::intptr_t>(handle);
+        return Status::ok;
+    }
+}  // namespace
+
+Status PcTcpListener::listen(std::uint16_t port)
+{
+    if (socket_ != -1)
+        close_handle(to_handle(socket_));
+    socket_ = -1;
+    if (const Status status = bind_socket(SOCK_STREAM, port_ != 0 ? port_ : port, lan_, socket_); !is_ok(status))
+        return status;
+    if (::listen(to_handle(socket_), static_cast<int>(kMaxConnections)) != 0)
+    {
+        close_handle(to_handle(socket_));
+        socket_ = -1;
+        return Status::error;
+    }
+    return Status::ok;
+}
+
+brick::interfaces::network::ITcpSocket* PcTcpListener::accept()
+{
+    if (socket_ == -1)
+        return nullptr;
+    for (PcTcpSocket& client : clients_)
+    {
+        if (!client.idle())
+            continue;
+        const Handle accepted = ::accept(to_handle(socket_), nullptr, nullptr);
+        if (accepted == kInvalidHandle)
+            return nullptr;
+        client.adopt(static_cast<std::intptr_t>(accepted));
+        return &client;
+    }
+    return nullptr;
+}
+
+void PcTcpListener::close()
+{
+    if (socket_ != -1)
+        close_handle(to_handle(socket_));
+    socket_ = -1;
+    for (PcTcpSocket& client : clients_)
+        client.close();
+}
+
+// ---- PcUdpSocket ------------------------------------------------------------
+
+Status PcUdpSocket::open(std::uint16_t port)
+{
+    close();
+    return bind_socket(SOCK_DGRAM, port, lan_, socket_);
+}
+
+Status PcUdpSocket::receive_from(std::uint8_t* data, std::size_t capacity, std::size_t& received,
+                                 brick::interfaces::network::Endpoint& from)
+{
+    received = 0;
+    if (socket_ == -1)
+        return Status::not_ready;
+    if (capacity == 0)
+        return Status::invalid_argument;
+    sockaddr_in sender{};
+    socklen_t   length = sizeof(sender);
+    const auto  bytes  = ::recvfrom(to_handle(socket_), reinterpret_cast<char*>(data), static_cast<int>(capacity), 0,
+                                    reinterpret_cast<sockaddr*>(&sender), &length);
+    if (bytes < 0)
+        return would_block(last_error()) ? Status::no_data : Status::error;
+    received = static_cast<std::size_t>(bytes);
+    std::memcpy(from.address.octets.data(), &sender.sin_addr.s_addr, from.address.octets.size());
+    from.port = ntohs(sender.sin_port);
+    return Status::ok;
+}
+
+Status PcUdpSocket::send_to(const brick::interfaces::network::Endpoint& to, const std::uint8_t* data, std::size_t size)
+{
+    if (socket_ == -1)
+        return Status::not_ready;
+    const sockaddr_in address = to_sockaddr(to);
+    const auto sent = ::sendto(to_handle(socket_), reinterpret_cast<const char*>(data), static_cast<int>(size), 0,
+                               reinterpret_cast<const sockaddr*>(&address), sizeof(address));
+    if (sent >= 0)
+        return Status::ok;
+    return would_block(last_error()) ? Status::busy : Status::error;
+}
+
+void PcUdpSocket::close()
+{
+    if (socket_ != -1)
+        close_handle(to_handle(socket_));
+    socket_ = -1;
 }
 
 }  // namespace brick::platform::pc

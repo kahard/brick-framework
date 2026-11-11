@@ -58,6 +58,29 @@ void WifiManager::stop()
     scan_requested_ = false;
 }
 
+Status WifiManager::set_networks(const interfaces::network::WifiCredentials* networks, std::size_t count)
+{
+    if (state_ == WifiManagerState::stopped)
+        return Status::not_ready;
+    WifiManagerConfig config = config_;
+    config.networks          = networks;
+    config.network_count     = count;
+    if (const Status status = validate_(config); !is_ok(status))
+        return status;
+    if (state_ == WifiManagerState::connected || state_ == WifiManagerState::connecting)
+        if (const Status status = station_.disconnect(); !is_ok(status))
+            logger_.error(kTag, "Leaving the network failed: %s", to_string(status));
+    config_          = config;
+    current_         = kNoWifiNetwork;
+    failed_attempts_ = 0;
+    last_failure_    = WifiFailure::none;
+    last_failed_     = kNoWifiNetwork;
+    if (count == 0)
+        open_fallback_();
+    enter_scanning_();
+    return Status::ok;
+}
+
 void WifiManager::update()
 {
     switch (state_)

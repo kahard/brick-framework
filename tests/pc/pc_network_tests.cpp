@@ -2,6 +2,7 @@
 // the HTTP probe over real sockets against a server on the loopback
 // interface (no internet needed).
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -158,10 +159,66 @@ void test_offline_network()
     assert(host.begin() == Status::ok && host.link_state() == LinkState::down);
 }
 
+/// A listener, a connection from a client socket and UDP, all on 127.0.0.1.
+void test_listener_and_udp_over_loopback()
+{
+    using brick::platform::pc::PcTcpListener;
+    using brick::platform::pc::PcTcpSocket;
+    using brick::platform::pc::PcUdpSocket;
+    const brick::interfaces::network::Ipv4Address loopback{ { 127, 0, 0, 1 } };
+    const auto wait = [] { std::this_thread::sleep_for(std::chrono::milliseconds(5)); };
+
+    PcTcpListener listener;
+    std::uint16_t port = 0;
+    for (std::uint16_t candidate = 18731; candidate < 18760 && port == 0; ++candidate)
+        if (listener.listen(candidate) == Status::ok)
+            port = candidate;
+    assert(port != 0 && listener.accept() == nullptr);
+
+    PcTcpSocket client;
+    assert(client.connect({ loopback, port }) == Status::ok);
+    brick::interfaces::network::ITcpSocket* server = nullptr;
+    for (int attempt = 0; attempt < 200 && (server == nullptr || client.poll_connect() == Status::busy); ++attempt)
+    {
+        if (server == nullptr)
+            server = listener.accept();
+        wait();
+    }
+    assert(server != nullptr && client.poll_connect() == Status::ok);
+    std::size_t count = 0;
+    assert(client.send(reinterpret_cast<const std::uint8_t*>("ping"), 4, count) == Status::ok && count == 4);
+    std::uint8_t buffer[16];
+    Status       status = Status::no_data;
+    for (int attempt = 0; attempt < 200 && status == Status::no_data; ++attempt, wait())
+        status = server->receive(buffer, sizeof(buffer), count);
+    assert(status == Status::ok && count == 4 && std::memcmp(buffer, "ping", 4) == 0);
+    server->close();
+    for (int attempt = 0; attempt < 200 && status != Status::not_ready; ++attempt, wait())
+        status = client.receive(buffer, sizeof(buffer), count);
+    assert(status == Status::not_ready);  // the server closed
+    listener.close();
+
+    PcUdpSocket   receiver;
+    PcUdpSocket   sender;
+    std::uint16_t udp_port = 0;
+    for (std::uint16_t candidate = 18761; candidate < 18790 && udp_port == 0; ++candidate)
+        if (receiver.open(candidate) == Status::ok)
+            udp_port = candidate;
+    assert(udp_port != 0 && sender.open(static_cast<std::uint16_t>(udp_port + 1)) == Status::ok);
+    brick::interfaces::network::Endpoint from;
+    assert(receiver.receive_from(buffer, sizeof(buffer), count, from) == Status::no_data);
+    assert(sender.send_to({ loopback, udp_port }, reinterpret_cast<const std::uint8_t*>("dns?"), 4) == Status::ok);
+    status = Status::no_data;
+    for (int attempt = 0; attempt < 200 && status == Status::no_data; ++attempt, wait())
+        status = receiver.receive_from(buffer, sizeof(buffer), count, from);
+    assert(status == Status::ok && count == 4 && from.port == udp_port + 1 && from.address == loopback);
+}
+
 }  // namespace
 
 int main()
 {
+    test_listener_and_udp_over_loopback();
     test_simulated_wifi();
     test_offline_network();
     test_http_probe_over_loopback();

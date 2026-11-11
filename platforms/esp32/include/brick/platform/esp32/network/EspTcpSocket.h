@@ -22,6 +22,11 @@ public:
     Status receive(std::uint8_t* data, std::size_t capacity, std::size_t& received) override;
     void   close() override;
 
+    /// Takes over a connected socket a listener accepted (EspTcpListener).
+    void adopt(int socket);
+    /// Closed and holding no socket: free for a listener.
+    bool idle() const { return state_ == State::closed && socket_ < 0; }
+
 private:
     enum class State : std::uint8_t
     {

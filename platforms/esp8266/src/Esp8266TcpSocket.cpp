@@ -59,6 +59,16 @@ Status Esp8266TcpSocket::connect(const brick::interfaces::network::Endpoint& rem
     return Status::ok;
 }
 
+void Esp8266TcpSocket::adopt(tcp_pcb* pcb)
+{
+    close();
+    pcb_ = pcb;
+    tcp_arg(pcb_, this);
+    tcp_err(pcb_, brick::platform::esp8266::on_error);
+    tcp_recv(pcb_, brick::platform::esp8266::on_received);
+    state_ = State::connected;
+}
+
 Status Esp8266TcpSocket::poll_connect()
 {
     switch (state_)

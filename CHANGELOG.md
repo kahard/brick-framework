@@ -99,6 +99,19 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   urządzenie jako serwer DNS; ESP8266: `Esp8266TcpListener`,
   `Esp8266UdpSocket`, `Esp8266EepromStorage`; PC: `PcTcpListener` (port
   urządzenia można przenieść, np. 80 na 8081), `PcUdpSocket`,
+- odtwarzanie dźwięku strumieniem PCM 16-bit (`docs/audio.md`): interfejs
+  `IPcmOutput` (zapis bez czekania, głośność 0–100%); w core `ToneSource`
+  (sinus/prostokąt z wygaszaniem 5 ms), `WavSource` (WAV 8/16-bit mono/stereo
+  czytany kawałkami z dowolnego `IByteStorage`, np. `MemoryBytes` z pliku
+  wkompilowanego w firmware) i `PcmPlayer` (dokłada próbki w `update()`);
+  ESP32: `I2sPcmOutput` (I2S z kodekiem albo wzmacniaczem I2S, sterowanie
+  wzmacniaczem z GPIO), `Es8311Codec` (głośność 0,5 dB na krok, 100% to
+  -10 dB, bo głośniej przesterowuje NS4150) przez `LegacyI2cRegisters` albo
+  `MasterI2cRegisters`, `DacPcmOutput` (8-bitowy DAC ESP32 z DMA w pierścieniu,
+  zegar APLL, łagodny start i stop bez pyknięcia); `audio()` na płytkach
+  JC1060, JC8012 (ES8311 + NS4150), ESP32-S3 480x480 (wzmacniacz I2S) i CYD
+  (DAC, GPIO26) po włączeniu `audio = true`; PC: `PcPcmOutput` (liczy ramki
+  w tempie częstotliwości próbkowania, bez dźwięku),
 
 ### Changed (wydajność grafiki, bez zmiany API)
 

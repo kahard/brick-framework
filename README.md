@@ -45,6 +45,10 @@ The initial implementation includes:
 - audio-player interfaces and a periodic player,
 - LVGL image presentation,
 - ESP32 PWM audio output,
+- streaming PCM audio: `IPcmOutput`, tones, WAV read from any byte storage
+  and a non-blocking player, on I2S with the ES8311 codec (ESP32-P4 panels),
+  an I2S amplifier (ESP32-S3 panel), the ESP32 DAC (CYD) and the PC simulator
+  (see [docs/audio.md](docs/audio.md)),
 - portable display, touchscreen, and backlight interfaces,
 - touch calibration and coordinate mapping,
 - an ESP-IDF MIPI-DSI adapter,

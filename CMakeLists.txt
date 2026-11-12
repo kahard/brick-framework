@@ -32,6 +32,7 @@ add_library(brick_core STATIC
     libs/core/src/HttpServer.cpp
     libs/core/src/Ipv4.cpp
     libs/core/src/NetworkSelector.cpp
+    libs/core/src/PcmSource.cpp
     libs/core/src/PeriodicAudioPlayer.cpp
     libs/core/src/PeriodicTimer.cpp
     libs/core/src/SerialLogger.cpp
@@ -141,6 +142,11 @@ if(BRICK_BUILD_TESTS)
   target_compile_options(brick_network_tests PRIVATE -Wall -Wextra -Werror)
   target_link_libraries(brick_network_tests PRIVATE BRICK::Core BRICK::Mocks)
   add_test(NAME brick_network_tests COMMAND brick_network_tests)
+  add_executable(brick_pcm_tests tests/brick/brick_pcm_tests.cpp)
+  target_compile_features(brick_pcm_tests PRIVATE cxx_std_17)
+  target_compile_options(brick_pcm_tests PRIVATE -Wall -Wextra -Werror)
+  target_link_libraries(brick_pcm_tests PRIVATE BRICK::Core)
+  add_test(NAME brick_pcm_tests COMMAND brick_pcm_tests)
   add_executable(brick_setup_portal_tests tests/brick/brick_setup_portal_tests.cpp)
   target_compile_features(brick_setup_portal_tests PRIVATE cxx_std_17)
   target_compile_options(brick_setup_portal_tests PRIVATE -Wall -Wextra -Werror)

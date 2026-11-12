@@ -1,6 +1,7 @@
 #pragma once
 
 #include "brick/boards/esp32/p4/jc1060/InitSequence.h"
+#include "brick/platform/esp32/audio/I2sPcmOutput.h"
 #include "brick/platform/esp32/network/EspEthernet.h"
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
@@ -49,6 +50,21 @@ inline brick::platform::esp32::touch::Gt911Config touch_config()
     config.display_size                     = { 1024, 600 };
     config.address                          = 0x5D;
     config.read_calibration_from_controller = true;
+    return config;
+}
+
+/// ES8311 codec and NS4150 amplifier: I2S MCLK 13, BCLK 12, LRCK 10, data to
+/// the codec 9; the codec's I2C is the touch screen's (GPIO7/8); amplifier
+/// enable GPIO11.
+inline brick::platform::esp32::audio::I2sPcmOutputConfig audio_config()
+{
+    brick::platform::esp32::audio::I2sPcmOutputConfig config;
+    config.mclk_gpio      = GPIO_NUM_13;
+    config.bclk_gpio      = GPIO_NUM_12;
+    config.ws_gpio        = GPIO_NUM_10;
+    config.dout_gpio      = GPIO_NUM_9;
+    config.volume         = 80;  // -20 dB of the codec's DAC
+    config.amplifier_gpio = GPIO_NUM_11;
     return config;
 }
 

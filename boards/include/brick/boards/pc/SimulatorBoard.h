@@ -98,16 +98,18 @@ public:
     brick::platform::pc::PcBacklight&          backlight() { return backlight_; }
     brick::platform::pc::PcButton&             button() { return button_; }
     brick::platform::pc::PcBuzzer&             buzzer() { return buzzer_; }
-    brick::platform::pc::PcFileSystem&         sd() { return sd_; }
-    brick::platform::pc::PcByteStorage&        eeprom() { return eeprom_; }
-    brick::platform::pc::PcNorFlash&           flash() { return flash_; }
-    brick::platform::pc::PcMemory&             memory() { return memory_; }
-    brick::platform::pc::PcSerialPort&         serial() { return serial_; }
-    brick::platform::pc::PcWifi&               wifi() { return wifi_; }
-    brick::platform::pc::PcHostNetwork&        ethernet() { return ethernet_; }
-    brick::platform::pc::PcTime&               time() { return time_; }
-    brick::platform::pc::PcLogger&             logger() { return logger_; }
-    brick::platform::pc::Simulator&            simulator() { return simulator_; }
+    /// The speaker (counts the frames, no sound).
+    brick::platform::pc::PcPcmOutput&   audio() { return audio_; }
+    brick::platform::pc::PcFileSystem&  sd() { return sd_; }
+    brick::platform::pc::PcByteStorage& eeprom() { return eeprom_; }
+    brick::platform::pc::PcNorFlash&    flash() { return flash_; }
+    brick::platform::pc::PcMemory&      memory() { return memory_; }
+    brick::platform::pc::PcSerialPort&  serial() { return serial_; }
+    brick::platform::pc::PcWifi&        wifi() { return wifi_; }
+    brick::platform::pc::PcHostNetwork& ethernet() { return ethernet_; }
+    brick::platform::pc::PcTime&        time() { return time_; }
+    brick::platform::pc::PcLogger&      logger() { return logger_; }
+    brick::platform::pc::Simulator&     simulator() { return simulator_; }
 
 private:
     SimulatorBoardConfig                      config_;
@@ -118,6 +120,7 @@ private:
     brick::platform::pc::PcBacklight          backlight_;
     brick::platform::pc::PcButton             button_;
     brick::platform::pc::PcBuzzer             buzzer_;
+    brick::platform::pc::PcPcmOutput          audio_{ time_ };
     brick::platform::pc::PcFileSystem         sd_;
     brick::platform::pc::PcByteStorage        eeprom_;
     brick::platform::pc::PcNorFlash           flash_;

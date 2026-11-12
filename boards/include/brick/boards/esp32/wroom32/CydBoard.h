@@ -11,6 +11,7 @@
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/Ili9341SpiDisplay.h"
 #include "brick/platform/esp32/PwmBacklight.h"
+#include "brick/platform/esp32/audio/DacPcmOutput.h"
 #include "brick/platform/esp32/network/EspWifi.h"
 #include "brick/platform/esp32/touch/Xpt2046Touchscreen.h"
 #include "brick/platform/esp32/wroom32/CydSdSpiFileSystem.h"
@@ -57,6 +58,7 @@ public:
         backlight_.emplace(cyd::kBacklightGpio);
         touch_.emplace(cyd::touch_config());
         wifi_.emplace();
+        audio_.emplace();  // the DAC on GPIO26, the speaker connector's amplifier
         if constexpr (Features::sd)
         {
             spi3_pin_mux_.emplace(cyd::spi3_pin_mux_config());
@@ -116,14 +118,17 @@ public:
     brick::platform::esp32::wroom32::CydSdSpiFileSystem& sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&              time() { return time_; }
     brick::platform::esp32::EspWifi&                     wifi() { return wifi_.get(); }
-    brick::interfaces::memory::IMemoryProvider&          memory() { return memory_; }
-    brick::interfaces::logging::ILogger&                 logger() { return logger_.get(); }
+    /// The speaker; start() it with a format, then write frames.
+    brick::platform::esp32::audio::DacPcmOutput& audio() { return audio_.get(); }
+    brick::interfaces::memory::IMemoryProvider&  memory() { return memory_; }
+    brick::interfaces::logging::ILogger&         logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
 
-    static constexpr bool kWifi = brick::boards::common::wifi_enabled<Features>;
+    static constexpr bool kWifi  = brick::boards::common::wifi_enabled<Features>;
+    static constexpr bool kAudio = brick::boards::common::audio_enabled<Features>;
 
     brick::platform::esp32::FreeRtosTime time_;
     brick::platform::esp32::EspMemory    memory_;
@@ -137,6 +142,7 @@ private:
     Peripheral<Features::touch && Features::sd, brick::platform::esp32::wroom32::CydTouchscreen> muxed_touch_;
     Peripheral<Features::sd, brick::platform::esp32::wroom32::CydSdSpiFileSystem>                sd_;
     Peripheral<kWifi, brick::platform::esp32::EspWifi>                                           wifi_;
+    Peripheral<kAudio, brick::platform::esp32::audio::DacPcmOutput>                              audio_;
 };
 
 using CydBoard = CydBoardTemplate<>;

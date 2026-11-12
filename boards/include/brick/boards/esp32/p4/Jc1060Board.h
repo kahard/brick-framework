@@ -10,6 +10,8 @@
 #include "brick/platform/esp32/EspMemory.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/GpioBacklight.h"
+#include "brick/platform/esp32/audio/Es8311Codec.h"
+#include "brick/platform/esp32/audio/Es8311I2sAudio.h"
 #include "brick/platform/esp32/network/EspEthernet.h"
 #include "brick/platform/esp32/network/EspWifi.h"
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
@@ -31,7 +33,9 @@ struct Jc1060DefaultFeatures
     /// 50 KB of RAM, so it is off unless a project enables it.
     static constexpr bool wifi = false;
     /// IP101 Ethernet port, started by begin(); the link comes up with a cable.
-    static constexpr bool ethernet  = false;
+    static constexpr bool ethernet = false;
+    /// ES8311 speaker output (audio()); it shares the touch screen's I2C bus.
+    static constexpr bool audio     = false;
     static constexpr bool logging   = true;
     static constexpr int  log_level = 0;
 };
@@ -50,6 +54,7 @@ public:
         sd_.emplace(jc1060::sd_config());
         wifi_.emplace();
         ethernet_.emplace(jc1060::ethernet_config());
+        audio_.emplace(jc1060::audio_config(), I2C_NUM_0, brick::platform::esp32::audio::Es8311Codec::kAddress);
     }
 
     static constexpr brick::interfaces::board::BoardDescriptor descriptor_static()
@@ -99,8 +104,10 @@ public:
     brick::interfaces::time::ITimeProvider&          time() { return time_; }
     brick::platform::esp32::EspWifi&                 wifi() { return wifi_.get(); }
     brick::platform::esp32::EspEthernet&             ethernet() { return ethernet_.get(); }
-    brick::interfaces::memory::IMemoryProvider&      memory() { return memory_; }
-    brick::interfaces::logging::ILogger&             logger() { return logger_.get(); }
+    /// The speaker; start() it with a format, then write frames.
+    brick::platform::esp32::audio::I2sPcmOutput& audio() { return audio_.get().output(); }
+    brick::interfaces::memory::IMemoryProvider&  memory() { return memory_; }
+    brick::interfaces::logging::ILogger&         logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
@@ -108,6 +115,8 @@ private:
 
     static constexpr bool kWifi     = brick::boards::common::wifi_enabled<Features>;
     static constexpr bool kEthernet = brick::boards::common::ethernet_enabled<Features>;
+    static constexpr bool kAudio    = brick::boards::common::audio_enabled<Features>;
+    static_assert(!kAudio || Features::touch, "The ES8311 is reached over the touch screen's I2C: enable touch");
 
     brick::platform::esp32::FreeRtosTime time_;
     brick::platform::esp32::EspMemory    memory_;
@@ -120,6 +129,8 @@ private:
     Peripheral<Features::sd, brick::platform::esp32::SdmmcFileSystem>            sd_;
     Peripheral<kWifi, brick::platform::esp32::EspWifi>                           wifi_;
     Peripheral<kEthernet, brick::platform::esp32::EspEthernet>                   ethernet_;
+    Peripheral<kAudio, brick::platform::esp32::audio::Es8311I2sAudio<brick::platform::esp32::audio::LegacyI2cRegisters>>
+        audio_;
 };
 
 using Jc1060Board = Jc1060BoardTemplate<>;

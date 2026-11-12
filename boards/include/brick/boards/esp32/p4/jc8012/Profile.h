@@ -2,6 +2,7 @@
 
 #include "brick/boards/esp32/p4/jc8012/InitSequence.h"
 #include "brick/interfaces/display/DisplayTypes.h"
+#include "brick/platform/esp32/audio/I2sPcmOutput.h"
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
 #include "brick/platform/esp32/touch/Gsl3680Touchscreen.h"
@@ -60,6 +61,21 @@ inline brick::platform::esp32::touch::Gsl3680Config touch_config(Rotation rotati
     config.mirror_x = mirrored_x;
     config.mirror_y = mirrored_y;
     config.swap_xy  = swapped;
+    return config;
+}
+
+/// ES8311 codec and NS4150 amplifier: I2S MCLK 13, BCLK 12, LRCK 10, data to
+/// the codec 9; the codec's I2C is the touch screen's (GPIO7/8); amplifier
+/// enable GPIO20 (schematic: PA_CTRL).
+inline brick::platform::esp32::audio::I2sPcmOutputConfig audio_config()
+{
+    brick::platform::esp32::audio::I2sPcmOutputConfig config;
+    config.mclk_gpio      = GPIO_NUM_13;
+    config.bclk_gpio      = GPIO_NUM_12;
+    config.ws_gpio        = GPIO_NUM_10;
+    config.dout_gpio      = GPIO_NUM_9;
+    config.volume         = 80;  // -20 dB of the codec's DAC
+    config.amplifier_gpio = GPIO_NUM_20;
     return config;
 }
 

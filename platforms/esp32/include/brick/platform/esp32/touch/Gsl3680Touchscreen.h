@@ -31,6 +31,9 @@ struct Gsl3680Config
 class Gsl3680Touchscreen final : public brick::interfaces::display::ITouchscreen
 {
 public:
+    /// The i2c_master bus begin() created, for other devices on it (the
+    /// JC8012's ES8311 codec); nullptr before.
+    i2c_master_bus_handle_t bus() const { return bus_; }
     explicit Gsl3680Touchscreen(Gsl3680Config config);
     ~Gsl3680Touchscreen() override;
 

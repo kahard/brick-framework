@@ -20,4 +20,10 @@ inline constexpr bool ethernet_enabled = false;
 template <typename Features>
 inline constexpr bool ethernet_enabled<Features, std::void_t<decltype(Features::ethernet)>> = Features::ethernet;
 
+template <typename Features, typename = void>
+inline constexpr bool audio_enabled = false;
+
+template <typename Features>
+inline constexpr bool audio_enabled<Features, std::void_t<decltype(Features::audio)>> = Features::audio;
+
 }  // namespace brick::boards::common

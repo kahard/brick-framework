@@ -10,6 +10,7 @@
 #include "brick/platform/esp32/EspMemory.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/SdSpiFileSystem.h"
+#include "brick/platform/esp32/audio/I2sPcmOutput.h"
 #include "brick/platform/esp32/network/EspWifi.h"
 #include "brick/platform/esp32/s3/St7701sRgbDisplay.h"
 #include "brick/platform/esp32/touch/Gt911Touchscreen.h"
@@ -45,6 +46,7 @@ public:
         touch_.emplace(panel480::touch_config());
         sd_.emplace(panel480::sd_config());
         wifi_.emplace();
+        audio_.emplace(panel480::audio_config());
     }
 
     /// Display configuration with two frame buffers, for the constructor.
@@ -95,14 +97,17 @@ public:
     brick::platform::esp32::SdSpiFileSystem&         sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&          time() { return time_; }
     brick::platform::esp32::EspWifi&                 wifi() { return wifi_.get(); }
-    brick::interfaces::memory::IMemoryProvider&      memory() { return memory_; }
-    brick::interfaces::logging::ILogger&             logger() { return logger_.get(); }
+    /// The speaker; start() it with a format, then write frames.
+    brick::platform::esp32::audio::I2sPcmOutput& audio() { return audio_.get(); }
+    brick::interfaces::memory::IMemoryProvider&  memory() { return memory_; }
+    brick::interfaces::logging::ILogger&         logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
 
-    static constexpr bool kWifi = brick::boards::common::wifi_enabled<Features>;
+    static constexpr bool kWifi  = brick::boards::common::wifi_enabled<Features>;
+    static constexpr bool kAudio = brick::boards::common::audio_enabled<Features>;
 
     brick::platform::esp32::FreeRtosTime time_;
     brick::platform::esp32::EspMemory    memory_;
@@ -113,6 +118,7 @@ private:
     Peripheral<Features::touch, brick::platform::esp32::touch::Gt911Touchscreen> touch_;
     Peripheral<Features::sd, brick::platform::esp32::SdSpiFileSystem>            sd_;
     Peripheral<kWifi, brick::platform::esp32::EspWifi>                           wifi_;
+    Peripheral<kAudio, brick::platform::esp32::audio::I2sPcmOutput>              audio_;
 };
 
 using Panel480Board = Panel480BoardTemplate<>;

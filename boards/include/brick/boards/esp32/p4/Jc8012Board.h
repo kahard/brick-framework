@@ -10,6 +10,8 @@
 #include "brick/platform/esp32/EspMemory.h"
 #include "brick/platform/esp32/FreeRtosTime.h"
 #include "brick/platform/esp32/GpioBacklight.h"
+#include "brick/platform/esp32/audio/Es8311Codec.h"
+#include "brick/platform/esp32/audio/Es8311I2sAudio.h"
 #include "brick/platform/esp32/network/EspWifi.h"
 #include "brick/platform/esp32/p4/MipiDsiDisplay.h"
 #include "brick/platform/esp32/p4/SdmmcFileSystem.h"
@@ -28,7 +30,9 @@ struct Jc8012DefaultFeatures
     static constexpr bool sd        = false;
     /// Wi-Fi radio (station and hotspot), started by begin(). It needs about
     /// 50 KB of RAM, so it is off unless a project enables it.
-    static constexpr bool wifi      = false;
+    static constexpr bool wifi = false;
+    /// ES8311 speaker output (audio()); it shares the touch screen's I2C bus.
+    static constexpr bool audio     = false;
     static constexpr bool logging   = true;
     static constexpr int  log_level = 0;
 };
@@ -49,6 +53,7 @@ public:
         touch_.emplace(jc8012::touch_config(rotation));
         sd_.emplace(jc8012::sd_config());
         wifi_.emplace();
+        audio_.emplace(jc8012::audio_config(), nullptr, brick::platform::esp32::audio::Es8311Codec::kAddress);
     }
 
     static constexpr brick::interfaces::board::BoardDescriptor descriptor_static()
@@ -69,6 +74,9 @@ public:
     Status begin() override
     {
         const Status results[] = { display_.begin(), backlight_.begin(), touch_.begin(), wifi_.begin() };
+        // The codec is a device on the bus the touch screen created.
+        if constexpr (kAudio)
+            audio_.get().registers().set_bus(touch_.get().bus());
         for (const Status status : results)
             if (!is_ok(status))
                 return status;
@@ -95,14 +103,18 @@ public:
     brick::platform::esp32::SdmmcFileSystem&           sd() { return sd_.get(); }
     brick::interfaces::time::ITimeProvider&            time() { return time_; }
     brick::platform::esp32::EspWifi&                   wifi() { return wifi_.get(); }
-    brick::interfaces::memory::IMemoryProvider&        memory() { return memory_; }
-    brick::interfaces::logging::ILogger&               logger() { return logger_.get(); }
+    /// The speaker; start() it with a format, then write frames.
+    brick::platform::esp32::audio::I2sPcmOutput& audio() { return audio_.get().output(); }
+    brick::interfaces::memory::IMemoryProvider&  memory() { return memory_; }
+    brick::interfaces::logging::ILogger&         logger() { return logger_.get(); }
 
 private:
     template <bool Enabled, typename T>
     using Peripheral = brick::boards::common::Peripheral<Enabled, T>;
 
-    static constexpr bool kWifi = brick::boards::common::wifi_enabled<Features>;
+    static constexpr bool kWifi  = brick::boards::common::wifi_enabled<Features>;
+    static constexpr bool kAudio = brick::boards::common::audio_enabled<Features>;
+    static_assert(!kAudio || Features::touch, "The ES8311 is reached over the touch screen's I2C: enable touch");
 
     brick::platform::esp32::FreeRtosTime time_;
     brick::platform::esp32::EspMemory    memory_;
@@ -114,6 +126,8 @@ private:
     Peripheral<Features::touch, brick::platform::esp32::touch::Gsl3680Touchscreen> touch_;
     Peripheral<Features::sd, brick::platform::esp32::SdmmcFileSystem>              sd_;
     Peripheral<kWifi, brick::platform::esp32::EspWifi>                             wifi_;
+    Peripheral<kAudio, brick::platform::esp32::audio::Es8311I2sAudio<brick::platform::esp32::audio::MasterI2cRegisters>>
+        audio_;
 };
 
 using Jc8012Board = Jc8012BoardTemplate<>;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "brick/platform/esp32/SdSpiFileSystem.h"
+#include "brick/platform/esp32/audio/I2sPcmOutput.h"
 #include "brick/platform/esp32/s3/St7701sRgbDisplay.h"
 #include "brick/platform/esp32/touch/Gt911Touchscreen.h"
 #include "driver/gpio.h"
@@ -84,6 +85,17 @@ inline brick::platform::esp32::SdSpiFileSystemConfig sd_config()
     config.sck  = GPIO_NUM_48;
     config.mosi = GPIO_NUM_47;
     config.miso = GPIO_NUM_41;
+    return config;
+}
+
+/// I2S amplifier without a codec (no MCLK, no enable pin): BCLK 1, LRCK 2,
+/// data 40; the volume scales the samples.
+inline brick::platform::esp32::audio::I2sPcmOutputConfig audio_config()
+{
+    brick::platform::esp32::audio::I2sPcmOutputConfig config;
+    config.bclk_gpio = GPIO_NUM_1;
+    config.ws_gpio   = GPIO_NUM_2;
+    config.dout_gpio = GPIO_NUM_40;
     return config;
 }
 

@@ -26,6 +26,10 @@ Status Esp8266TcpListener::listen(std::uint16_t port)
     tcp_pcb* const pcb = tcp_new();
     if (pcb == nullptr)
         return Status::no_memory;
+    // Connections closed on this port wait 2 x TCP_MSL (2 minutes) in
+    // TIME_WAIT; without SO_REUSEADDR they keep the port "in use" and a
+    // listener started again (another page on port 80) fails with busy.
+    ip_set_option(pcb, SOF_REUSEADDR);
     if (const err_t error = tcp_bind(pcb, IP_ADDR_ANY, port); error != ERR_OK)
     {
         tcp_close(pcb);

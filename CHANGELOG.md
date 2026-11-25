@@ -162,6 +162,10 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
 
 ### Fixed
 
+- ESP8266: `Esp8266TcpListener::listen()` ustawia `SO_REUSEADDR`; bez tego
+  zamknięte połączenia na porcie (TIME_WAIT, 2 minuty) blokowały ponowne
+  nasłuchiwanie (`busy`), np. gdy po stronie konfiguracji Wi-Fi na porcie 80
+  startuje inna strona,
 - ESP32-P4 (JC1060, JC8012): Wi-Fi przez ESP32-C6 nie startowało
   („Transport not initialized”): konstruktor esp_hosted leży w pliku
   obiektowym, do którego nic się nie odwołuje, więc linker go pomijał;

@@ -85,13 +85,12 @@ public:
     Status       get_frame_buffer(std::uint8_t index, brick::interfaces::display::WritablePixelBuffer& buffer) override;
     Status       present_frame_buffer(std::uint8_t index) override;
 
-    // Newer framework interfaces declare these three (IDisplayDevice::fill_rect,
-    // IFrameBufferDisplay copies); mark them override once this branch is on top
-    // of them.
-    Status fill_rect(brick::interfaces::display::DisplayRect area, std::uint16_t color);
+    /// CPU fill and copies into the frame buffers (finished on return).
+    Status fill_rect(brick::interfaces::display::DisplayRect area, std::uint16_t color) override;
     Status copy_to_frame_buffer(std::uint8_t index, brick::interfaces::display::DisplayRect area,
-                                const brick::interfaces::display::PixelBuffer& pixels);
-    Status copy_between_frame_buffers(std::uint8_t from, std::uint8_t to, brick::interfaces::display::DisplayRect area);
+                                const brick::interfaces::display::PixelBuffer& pixels) override;
+    Status copy_between_frame_buffers(std::uint8_t from, std::uint8_t to,
+                                      brick::interfaces::display::DisplayRect area) override;
 
     /// Backlight on or off (the enable pin).
     void set_backlight(bool on);

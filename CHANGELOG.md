@@ -112,6 +112,16 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   JC1060, JC8012 (ES8311 + NS4150), ESP32-S3 480x480 (wzmacniacz I2S) i CYD
   (DAC, GPIO26) po włączeniu `audio = true`; PC: `PcPcmOutput` (liczy ramki
   w tempie częstotliwości próbkowania, bez dźwięku),
+- platforma STM32H7 (`brick::platform::stm32::h7`, nagłówki `h7/`, źródła
+  `src/h7/`): zegar z HSE przez PLL1 (domyślnie 400 MHz), MPU (pamięć
+  zewnętrzna write-through, pusty bank FMC zamknięty) i cache, SDRAM na FMC
+  ze sprawdzeniem wzorca, panel RGB na LTDC (`LtdcDisplay`: jedna warstwa
+  RGB565 na jednym lub dwóch buforach, przełączanie w przerwie pionowej,
+  `IFrameBufferDisplay`), `Stm32I2cBus`, `CapacitiveTouchscreen` (FT6x36 albo
+  GT911, do 5 palców), `RttSerialPort` (log przez programator SWD, SEGGER
+  RTT), `Stm32Pwm` z `Stm32PwmBacklight` i `Stm32PwmBuzzer`, `I2cEeprom`,
+  `Stm32SpiBus` i `SpiNorFlash`; płytka ST-1656 (panel 5" 800x480 projektu
+  9785) jest w prywatnym `brick-boards-private`,
 
 ### Changed (wydajność grafiki, bez zmiany API)
 

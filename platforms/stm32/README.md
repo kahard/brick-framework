@@ -21,6 +21,9 @@ adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963
 | `LtdcDisplay.h` | RGB panel on the LTDC, pixel clock from PLL3, one RGB565 layer showing one of one or two frame buffers (`IDisplayDevice` + `IFrameBufferDisplay`); flips at the vertical blanking, panel and backlight enables |
 | `Stm32I2cBus.h` | I2C master; the TIMINGR value comes from the board |
 | `CapacitiveTouchscreen.h` | FT6x36 or GT911, whichever answers; every finger pressed, moved and released |
+| `RttSerialPort.h` | `ISerialPort` over SEGGER RTT (the debug probe), for `SerialLogger` on boards without a free UART |
+| `Stm32Pwm.h`, `Stm32PwmBacklight.h`, `Stm32PwmBuzzer.h` | a timer PWM channel; backlight dimming; a sounder without its own oscillator |
+| `I2cEeprom.h`, `Stm32SpiBus.h`, `SpiNorFlash.h` | the STM32F1 storage drivers on the H7 HAL |
 
 The board starts them in this order: `HAL_Init()`, memory protection, system
 clock, SDRAM, caches, then the peripherals. Frame buffers are cached

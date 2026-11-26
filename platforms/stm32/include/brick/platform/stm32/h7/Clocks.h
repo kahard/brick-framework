@@ -59,4 +59,54 @@ inline Status enable_clock(I2C_TypeDef* i2c)
     return Status::ok;
 }
 
+inline Status enable_clock(TIM_TypeDef* timer)
+{
+    if (timer == TIM1)
+        __HAL_RCC_TIM1_CLK_ENABLE();
+    else if (timer == TIM2)
+        __HAL_RCC_TIM2_CLK_ENABLE();
+    else if (timer == TIM3)
+        __HAL_RCC_TIM3_CLK_ENABLE();
+    else if (timer == TIM4)
+        __HAL_RCC_TIM4_CLK_ENABLE();
+    else if (timer == TIM5)
+        __HAL_RCC_TIM5_CLK_ENABLE();
+    else if (timer == TIM8)
+        __HAL_RCC_TIM8_CLK_ENABLE();
+    else if (timer == TIM12)
+        __HAL_RCC_TIM12_CLK_ENABLE();
+    else if (timer == TIM13)
+        __HAL_RCC_TIM13_CLK_ENABLE();
+    else if (timer == TIM14)
+        __HAL_RCC_TIM14_CLK_ENABLE();
+    else if (timer == TIM15)
+        __HAL_RCC_TIM15_CLK_ENABLE();
+    else if (timer == TIM16)
+        __HAL_RCC_TIM16_CLK_ENABLE();
+    else if (timer == TIM17)
+        __HAL_RCC_TIM17_CLK_ENABLE();
+    else
+        return Status::not_supported;
+    return Status::ok;
+}
+
+inline Status enable_clock(SPI_TypeDef* spi)
+{
+    if (spi == SPI1)
+        __HAL_RCC_SPI1_CLK_ENABLE();
+    else if (spi == SPI2)
+        __HAL_RCC_SPI2_CLK_ENABLE();
+    else if (spi == SPI3)
+        __HAL_RCC_SPI3_CLK_ENABLE();
+    else if (spi == SPI4)
+        __HAL_RCC_SPI4_CLK_ENABLE();
+    else if (spi == SPI5)
+        __HAL_RCC_SPI5_CLK_ENABLE();
+    else if (spi == SPI6)
+        __HAL_RCC_SPI6_CLK_ENABLE();
+    else
+        return Status::not_supported;
+    return Status::ok;
+}
+
 }  // namespace brick::platform::stm32::h7

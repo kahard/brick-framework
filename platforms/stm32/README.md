@@ -25,7 +25,7 @@ adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963
 | `Stm32Pwm.h`, `Stm32PwmBacklight.h`, `Stm32PwmBuzzer.h` | a timer PWM channel; backlight dimming; a sounder without its own oscillator |
 | `I2cEeprom.h`, `Stm32SpiBus.h`, `SpiNorFlash.h` | the STM32F1 storage drivers on the H7 HAL |
 | `Stm32MemoryProvider.h` | `IMemoryProvider` over fixed regions (on-chip RAM reachable by DMA, external RAM) |
-| `Stm32Uart.h` | 8N1 UART up to the kernel clock / 16 on DMA both ways, no interrupts: a receive ring that `read()` empties, a transmit buffer in two halves; `set_baud_rate()` after the queue has drained; framing, noise and overrun counters |
+| `Stm32Uart.h` | 8N1 UART up to the kernel clock / 8 (8x oversampling above / 16) on DMA both ways, no interrupts: a receive ring that `read()` empties, a transmit buffer in two halves; `set_baud_rate()` after the queue has drained; framing, noise and overrun counters |
 | `Stm32JpegDecoder.h` | baseline JPEG with the hardware codec, YCbCr to RGB565 with the DMA2D into a frame buffer; in bands through a small on-chip buffer or the whole image at once |
 
 The board starts them in this order: `HAL_Init()`, memory protection, system

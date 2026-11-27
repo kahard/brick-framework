@@ -37,7 +37,7 @@ struct Stm32UartConfig
     DmaStream      receive_dma;
     DmaStream      transmit_dma;
     /// The ring the receive DMA fills; read() must come back before it
-    /// wraps (32 KB last 65 ms at 5 Mbaud), or the oldest bytes are lost.
+    /// wraps (32 KB last 33 ms at 10 Mbaud), or the oldest bytes are lost.
     std::size_t receive_bytes = 32U * 1024U;
     /// Two halves: the DMA sends one while write() fills the other.
     std::size_t transmit_bytes = 8U * 1024U;
@@ -46,8 +46,11 @@ struct Stm32UartConfig
     brick::interfaces::memory::IMemoryProvider* memory = nullptr;
 };
 
-/// 8N1 UART up to its kernel clock / 16 (6.25 Mbaud from the 100 MHz APB
-/// clock; the reset kernel clock selection is assumed). Both directions run
+/// 8N1 UART up to its kernel clock / 8 (12.5 Mbaud from the 100 MHz APB
+/// clock; the reset kernel clock selection is assumed): 16x oversampling up
+/// to the kernel clock / 16, 8x above, where only rates of the kernel clock
+/// / n are possible. A rate that cannot be made within 2 % is refused.
+/// Both directions run
 /// on DMA without interrupts: the receiver fills a ring that read() empties;
 /// write() queues bytes in the transmit half that is not being sent and
 /// starts the DMA when it is idle. Either call also starts the next half, so
@@ -75,9 +78,16 @@ public:
     std::uint32_t line_errors() const { return errors_.framing + errors_.noise + errors_.parity + errors_.overrun; }
 
 private:
+    /// BRR and the CR1 oversampling bit for a rate; brr is 0 when the
+    /// kernel clock cannot make the rate.
+    struct BaudSetting
+    {
+        std::uint32_t brr   = 0;
+        std::uint32_t over8 = 0;
+    };
+
     std::uint32_t kernel_clock_() const;
-    /// BRR for the rate, 0 when the kernel clock cannot make it.
-    std::uint32_t divisor_(std::uint32_t baud_rate) const;
+    BaudSetting   baud_setting_(std::uint32_t baud_rate) const;
     std::size_t   receive_head_() const;
     void          start_receive_();
     void          service_transmit_();

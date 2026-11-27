@@ -23,8 +23,9 @@ struct CapacitiveTouchscreenConfig
 
 /// Capacitive touch panel with either controller a board may carry: a
 /// FocalTech FT6x36 (two points) or a Goodix GT911 (five points). begin()
-/// probes the bus for one of them; read() reports every finger, pressed,
-/// moved and, once, released.
+/// probes the bus for one of them, for up to half a second after power-on,
+/// when the controller is still starting; read() reports every finger,
+/// pressed, moved and, once, released.
 class CapacitiveTouchscreen final : public brick::interfaces::display::ITouchscreen
 {
 public:
@@ -54,6 +55,7 @@ private:
         std::int16_t pressure = 0;
     };
 
+    Controller  find_controller_();
     Status      probe_ft6x36_();
     Status      probe_gt911_(std::uint8_t address);
     Status      read_ft6x36_(std::size_t& touch_count);

@@ -9,10 +9,14 @@ namespace brick::platform::stm32::h7
 
 namespace
 {
-    constexpr std::uint32_t kI2cTimeoutMs  = 20;
-    constexpr std::uint32_t kProbeTrials   = 2;
-    constexpr std::uint16_t kRegister8Bit  = I2C_MEMADD_SIZE_8BIT;
-    constexpr std::uint16_t kRegister16Bit = I2C_MEMADD_SIZE_16BIT;
+    constexpr std::uint32_t kI2cTimeoutMs = 20;
+    constexpr std::uint32_t kProbeTrials  = 2;
+    // After power-on the controller needs a while before it answers on I2C
+    // (a reset of the processor alone finds it ready at once).
+    constexpr std::uint32_t kStartupTimeoutMs = 500;
+    constexpr std::uint32_t kProbeRetryMs     = 20;
+    constexpr std::uint16_t kRegister8Bit     = I2C_MEMADD_SIZE_8BIT;
+    constexpr std::uint16_t kRegister16Bit    = I2C_MEMADD_SIZE_16BIT;
 
     // FT6x36: register 0x02 holds the number of touches, then six bytes per
     // point: event and X high, X low, touch id and Y high, Y low, weight, area.
@@ -49,21 +53,25 @@ Status CapacitiveTouchscreen::begin()
         return Status::ok;
     if (config_.i2c == nullptr || config_.display_size.width == 0 || config_.display_size.height == 0)
         return Status::invalid_argument;
-    brick::core::input::TouchCalibration calibration = config_.calibration;
-    const bool                           own_range   = calibration.raw_x_max == 0 || calibration.raw_y_max == 0;
-    if (is_ok(probe_ft6x36_()))
+    const std::uint32_t start = HAL_GetTick();
+    Controller          found = find_controller_();
+    while (found == Controller::none && HAL_GetTick() - start < kStartupTimeoutMs)
     {
-        controller_ = Controller::ft6x36;
-        if (own_range)
+        HAL_Delay(kProbeRetryMs);
+        found = find_controller_();
+    }
+    if (found == Controller::none)
+        return Status::not_found;
+
+    brick::core::input::TouchCalibration calibration = config_.calibration;
+    if (calibration.raw_x_max == 0 || calibration.raw_y_max == 0)
+    {
+        if (found == Controller::ft6x36)
         {
             calibration.raw_x_max = static_cast<std::int16_t>(config_.display_size.width);
             calibration.raw_y_max = static_cast<std::int16_t>(config_.display_size.height);
         }
-    }
-    else if (is_ok(probe_gt911_(kGtAddress)) || is_ok(probe_gt911_(kGtAlternateAddress)))
-    {
-        controller_ = Controller::gt911;
-        if (own_range)
+        else
         {
             std::uint8_t data[4]{};
             if (const Status status = read_registers_(kGtResolutionRegister, kRegister16Bit, data, sizeof(data));
@@ -73,17 +81,21 @@ Status CapacitiveTouchscreen::begin()
             calibration.raw_y_max = little_endian(data + 2);
         }
     }
-    else
-    {
-        return Status::not_found;
-    }
     if (calibration.raw_x_max <= 0 || calibration.raw_y_max <= 0)
-    {
-        controller_ = Controller::none;
         return Status::error;
-    }
-    mapper_ = brick::core::input::TouchMapper(config_.display_size, calibration);
+    mapper_     = brick::core::input::TouchMapper(config_.display_size, calibration);
+    controller_ = found;
     return Status::ok;
+}
+
+/// One look at the bus for either controller.
+CapacitiveTouchscreen::Controller CapacitiveTouchscreen::find_controller_()
+{
+    if (is_ok(probe_ft6x36_()))
+        return Controller::ft6x36;
+    if (is_ok(probe_gt911_(kGtAddress)) || is_ok(probe_gt911_(kGtAlternateAddress)))
+        return Controller::gt911;
+    return Controller::none;
 }
 
 Status CapacitiveTouchscreen::read(brick::interfaces::display::TouchPoint* points, std::size_t capacity,

@@ -24,6 +24,8 @@ adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963
 | `RttSerialPort.h` | `ISerialPort` over SEGGER RTT (the debug probe), for `SerialLogger` on boards without a free UART |
 | `Stm32Pwm.h`, `Stm32PwmBacklight.h`, `Stm32PwmBuzzer.h` | a timer PWM channel; backlight dimming; a sounder without its own oscillator |
 | `I2cEeprom.h`, `Stm32SpiBus.h`, `SpiNorFlash.h` | the STM32F1 storage drivers on the H7 HAL |
+| `Stm32MemoryProvider.h` | `IMemoryProvider` over fixed regions (on-chip RAM reachable by DMA, external RAM) |
+| `Stm32JpegDecoder.h` | baseline JPEG with the hardware codec, YCbCr to RGB565 with the DMA2D into a frame buffer; in bands through a small on-chip buffer or the whole image at once |
 
 The board starts them in this order: `HAL_Init()`, memory protection, system
 clock, SDRAM, caches, then the peripherals. Frame buffers are cached

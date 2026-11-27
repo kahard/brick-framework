@@ -90,6 +90,29 @@ inline Status enable_clock(TIM_TypeDef* timer)
     return Status::ok;
 }
 
+inline Status enable_clock(USART_TypeDef* uart)
+{
+    if (uart == USART1)
+        __HAL_RCC_USART1_CLK_ENABLE();
+    else if (uart == USART2)
+        __HAL_RCC_USART2_CLK_ENABLE();
+    else if (uart == USART3)
+        __HAL_RCC_USART3_CLK_ENABLE();
+    else if (uart == UART4)
+        __HAL_RCC_UART4_CLK_ENABLE();
+    else if (uart == UART5)
+        __HAL_RCC_UART5_CLK_ENABLE();
+    else if (uart == USART6)
+        __HAL_RCC_USART6_CLK_ENABLE();
+    else if (uart == UART7)
+        __HAL_RCC_UART7_CLK_ENABLE();
+    else if (uart == UART8)
+        __HAL_RCC_UART8_CLK_ENABLE();
+    else
+        return Status::not_supported;
+    return Status::ok;
+}
+
 inline Status enable_clock(SPI_TypeDef* spi)
 {
     if (spi == SPI1)

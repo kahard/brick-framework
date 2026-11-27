@@ -120,7 +120,9 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   `IFrameBufferDisplay`), `Stm32I2cBus`, `CapacitiveTouchscreen` (FT6x36 albo
   GT911, do 5 palców), `RttSerialPort` (log przez programator SWD, SEGGER
   RTT), `Stm32Pwm` z `Stm32PwmBacklight` i `Stm32PwmBuzzer`, `I2cEeprom`,
-  `Stm32SpiBus` i `SpiNorFlash`; płytka ST-1656 (panel 5" 800x480 projektu
+  `Stm32SpiBus`, `SpiNorFlash` i `Stm32Uart` (UART do 6,25 Mbaud na DMA
+  w obie strony bez przerwań, zmiana prędkości w locie, liczniki błędów
+  linii); płytka ST-1656 (panel 5" 800x480 projektu
   9785) jest w prywatnym `brick-boards-private`,
 
 ### Changed (wydajność grafiki, bez zmiany API)

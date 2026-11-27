@@ -26,6 +26,9 @@ struct Stm32UartErrors
     std::uint32_t noise   = 0;  ///< the samples of a bit disagreed
     std::uint32_t parity  = 0;
     std::uint32_t overrun = 0;  ///< a byte arrived before the DMA took the last
+    /// Transmit transfers that stopped short and were set going again: the
+    /// DMA missed a request of the UART (its FIFO error) while the bus was busy.
+    std::uint32_t transmit_stalls = 0;
 };
 
 struct Stm32UartConfig
@@ -42,8 +45,14 @@ struct Stm32UartConfig
     /// Two halves: the DMA sends one while write() fills the other.
     std::size_t transmit_bytes = 8U * 1024U;
     /// The buffers come from here (MemoryKind::dma: the DMA does not reach
-    /// the DTCM).
+    /// the DTCM), unless buffers is given.
     brick::interfaces::memory::IMemoryProvider* memory = nullptr;
+    /// Memory for both buffers (receive_bytes + transmit_bytes, 32-byte
+    /// aligned) instead of the provider: e.g. the D2 SRAM, which DMA1 and
+    /// DMA2 reach without crossing into the D1 domain, where the LTDC, the
+    /// DMA2D and the JPEG codec keep the AXI bus busy.
+    std::uint8_t* buffers      = nullptr;
+    std::size_t   buffer_bytes = 0;
 };
 
 /// 8N1 UART up to its kernel clock / 8 (12.5 Mbaud from the 100 MHz APB
@@ -91,6 +100,7 @@ private:
     std::size_t   receive_head_() const;
     void          start_receive_();
     void          service_transmit_();
+    void          watch_transmit_(DMA_Stream_TypeDef* stream);
     void          count_line_errors_();
 
     Stm32UartConfig config_;
@@ -102,6 +112,9 @@ private:
     std::size_t     half_bytes_    = 0;
     std::size_t     fill_half_     = 0;  ///< the half write() fills
     std::size_t     fill_count_    = 0;
+    // The transfer on its way: how much was left when it last moved, and when.
+    std::uint32_t   watch_left_ = 0;
+    std::uint32_t   watch_from_ = 0;
     Stm32UartErrors errors_{};
     bool            started_ = false;
 };

@@ -30,7 +30,8 @@ namespace
         const std::uint64_t error = made > baud_rate ? made - baud_rate : baud_rate - made;
         return error * kToleranceParts <= baud_rate;
     }
-    constexpr std::uintptr_t kLine = 32U;  // data cache line
+    constexpr std::uintptr_t kLine    = 32U;  // data cache line
+    constexpr std::uint32_t  kStallMs = 3U;   // a transfer that long without a byte has stopped
 
     bool on_dma2(const DMA_Stream_TypeDef* stream)
     {
@@ -95,7 +96,8 @@ Status Stm32Uart::begin()
     if (started_)
         return Status::ok;
     if (config_.instance == nullptr || !config_.tx.pin.connected() || !config_.rx.pin.connected()
-        || config_.receive_dma.stream == nullptr || config_.transmit_dma.stream == nullptr || config_.memory == nullptr)
+        || config_.receive_dma.stream == nullptr || config_.transmit_dma.stream == nullptr
+        || (config_.memory == nullptr && config_.buffers == nullptr))
         return Status::invalid_argument;
     receive_bytes_            = round_up(config_.receive_bytes);
     half_bytes_               = round_up(config_.transmit_bytes / 2U);
@@ -107,8 +109,19 @@ Status Stm32Uart::begin()
         return status;
 
     using brick::interfaces::memory::MemoryKind;
-    receive_  = static_cast<std::uint8_t*>(config_.memory->allocate(receive_bytes_, MemoryKind::dma, kLine));
-    transmit_ = static_cast<std::uint8_t*>(config_.memory->allocate(2U * half_bytes_, MemoryKind::dma, kLine));
+    if (config_.buffers != nullptr)
+    {
+        if ((reinterpret_cast<std::uintptr_t>(config_.buffers) & (kLine - 1U)) != 0U
+            || config_.buffer_bytes < receive_bytes_ + 2U * half_bytes_)
+            return Status::invalid_argument;
+        receive_  = config_.buffers;
+        transmit_ = config_.buffers + receive_bytes_;
+    }
+    else
+    {
+        receive_  = static_cast<std::uint8_t*>(config_.memory->allocate(receive_bytes_, MemoryKind::dma, kLine));
+        transmit_ = static_cast<std::uint8_t*>(config_.memory->allocate(2U * half_bytes_, MemoryKind::dma, kLine));
+    }
     if (receive_ == nullptr || transmit_ == nullptr)
     {
         if (transmit_ != nullptr)
@@ -290,16 +303,45 @@ void Stm32Uart::start_receive_()
 void Stm32Uart::service_transmit_()
 {
     DMA_Stream_TypeDef* stream = config_.transmit_dma.stream;
-    if (fill_count_ == 0U || (stream->CR & DMA_SxCR_EN) != 0U)
+    if ((stream->CR & DMA_SxCR_EN) != 0U)
+    {
+        watch_transmit_(stream);
+        return;
+    }
+    if (fill_count_ == 0U)
         return;
     std::uint8_t* half = transmit_ + fill_half_ * half_bytes_;
     SCB_CleanDCache_by_Addr(reinterpret_cast<std::uint32_t*>(half), static_cast<std::int32_t>(round_up(fill_count_)));
     clear_flags(stream);
+    watch_left_  = static_cast<std::uint32_t>(fill_count_);
+    watch_from_  = HAL_GetTick();
     stream->M0AR = bus_address(half);
     stream->NDTR = static_cast<std::uint32_t>(fill_count_);
     stream->CR |= DMA_SxCR_EN;
     fill_half_ ^= 1U;
     fill_count_ = 0;
+}
+
+void Stm32Uart::watch_transmit_(DMA_Stream_TypeDef* stream)
+{
+    // Under bus load the stream can miss the UART's request (a FIFO error in
+    // direct mode); the UART then waits for a write that never comes, the
+    // stream for a request, though the UART's FIFO is empty. Switching the
+    // UART's DMA request off and on again starts the handshake afresh.
+    const std::uint32_t left = stream->NDTR;
+    const std::uint32_t now  = HAL_GetTick();
+    if (left != watch_left_)
+    {
+        watch_left_ = left;
+        watch_from_ = now;
+        return;
+    }
+    if ((config_.instance->ISR & USART_ISR_TXFE) == 0U || now - watch_from_ < kStallMs)
+        return;
+    ++errors_.transmit_stalls;
+    config_.instance->CR3 &= ~USART_CR3_DMAT;
+    config_.instance->CR3 |= USART_CR3_DMAT;
+    watch_from_ = now;
 }
 
 void Stm32Uart::count_line_errors_()

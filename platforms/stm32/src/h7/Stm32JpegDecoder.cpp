@@ -211,9 +211,16 @@ void Stm32JpegDecoder::on_output(std::uint8_t* data, std::uint32_t bytes)
         return;
     const std::size_t   row_bytes = mcu_row_bytes_();
     const auto          mcu_rows  = static_cast<std::uint32_t>((bytes + row_bytes - 1U) / row_bytes);
-    const std::uint32_t rows      = std::min<std::uint32_t>(mcu_rows * mcu_height_(), image_.height - band_.row);
+    const std::uint32_t whole     = mcu_rows * mcu_height_();
+    const std::uint32_t rows      = std::min<std::uint32_t>(whole, image_.height - band_.row);
+    // The DMA2D converts YCbCr only in whole MCU rows (a picture 450 rows
+    // high ends in a part of one): convert the whole last row when the target
+    // has room below the picture, else only the picture's rows.
+    const auto top       = static_cast<std::uint32_t>(band_.y + band_.row);
+    const auto room      = static_cast<std::uint32_t>(band_.buffer->height) - top;
+    const auto converted = static_cast<std::uint16_t>(whole <= room ? whole : rows);
     SCB_CleanDCache_by_Addr(reinterpret_cast<std::uint32_t*>(data), static_cast<std::int32_t>(bytes));
-    band_.status = convert_(data, *band_.buffer, band_.x, band_.y + band_.row, static_cast<std::uint16_t>(rows));
+    band_.status = convert_(data, *band_.buffer, band_.x, band_.y + band_.row, converted);
     band_.row    = static_cast<std::uint16_t>(band_.row + rows);
 }
 

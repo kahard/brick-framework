@@ -112,6 +112,14 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   JC1060, JC8012 (ES8311 + NS4150), ESP32-S3 480x480 (wzmacniacz I2S) i CYD
   (DAC, GPIO26) po włączeniu `audio = true`; PC: `PcPcmOutput` (liczy ramki
   w tempie częstotliwości próbkowania, bez dźwięku),
+- sieć zdalna przez port szeregowy (`brick/core/network`): `SerialPacketLink`
+  (niezawodne pakiety: ramki SLIP, CRC-16, potwierdzenia, selektywne
+  powtarzanie z NAK, synchronizacja po restarcie którejkolwiek strony),
+  `RemoteNetworkDevice` dla koprocesora Wi-Fi i `RemoteNetworkHost` dla
+  procesora aplikacji, który dostaje zwykłe interfejsy sieciowe BRICK
+  (stacja i hotspot Wi-Fi, DNS, połączenia TCP, nasłuch TCP, gniazdo UDP)
+  wykonywane przez koprocesor; test `brick_remote_network_tests` także na
+  linii psującej bajty,
 - platforma STM32H7 (`brick::platform::stm32::h7`, nagłówki `h7/`, źródła
   `src/h7/`): zegar z HSE przez PLL1 (domyślnie 400 MHz), MPU (pamięć
   zewnętrzna write-through, pusty bank FMC zamknięty) i cache, SDRAM na FMC
@@ -122,7 +130,10 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   RTT), `Stm32Pwm` z `Stm32PwmBacklight` i `Stm32PwmBuzzer`, `I2cEeprom`,
   `Stm32SpiBus`, `SpiNorFlash` i `Stm32Uart` (UART do 12,5 Mbaud, powyżej
   zegar/16 z 8-krotnym próbkowaniem, na DMA w obie strony bez przerwań,
-  zmiana prędkości w locie, liczniki błędów linii); płytka ST-1656 (panel 5" 800x480 projektu
+  zmiana prędkości w locie, liczniki błędów linii, bufory z podanej pamięci
+  np. SRAM domeny D2, wznawianie zatrzymanego transferu nadawczego);
+  `Stm32JpegDecoder` konwertuje ostatni pas w pełnych wierszach MCU; płytka
+  ST-1656 (panel 5" 800x480 projektu
   9785) jest w prywatnym `brick-boards-private`,
 
 ### Changed (wydajność grafiki, bez zmiany API)

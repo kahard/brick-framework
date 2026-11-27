@@ -35,7 +35,10 @@ add_library(brick_core STATIC
     libs/core/src/PcmSource.cpp
     libs/core/src/PeriodicAudioPlayer.cpp
     libs/core/src/PeriodicTimer.cpp
+    libs/core/src/RemoteNetworkDevice.cpp
+    libs/core/src/RemoteNetworkHost.cpp
     libs/core/src/SerialLogger.cpp
+    libs/core/src/SerialPacketLink.cpp
     libs/core/src/TouchMapper.cpp
     libs/core/src/WavDecoder.cpp
     libs/core/src/WifiCredentialStore.cpp
@@ -142,6 +145,11 @@ if(BRICK_BUILD_TESTS)
   target_compile_options(brick_network_tests PRIVATE -Wall -Wextra -Werror)
   target_link_libraries(brick_network_tests PRIVATE BRICK::Core BRICK::Mocks)
   add_test(NAME brick_network_tests COMMAND brick_network_tests)
+  add_executable(brick_remote_network_tests tests/brick/brick_remote_network_tests.cpp)
+  target_compile_features(brick_remote_network_tests PRIVATE cxx_std_17)
+  target_compile_options(brick_remote_network_tests PRIVATE -Wall -Wextra -Werror)
+  target_link_libraries(brick_remote_network_tests PRIVATE BRICK::Core BRICK::Mocks)
+  add_test(NAME brick_remote_network_tests COMMAND brick_remote_network_tests)
   add_executable(brick_pcm_tests tests/brick/brick_pcm_tests.cpp)
   target_compile_features(brick_pcm_tests PRIVATE cxx_std_17)
   target_compile_options(brick_pcm_tests PRIVATE -Wall -Wextra -Werror)

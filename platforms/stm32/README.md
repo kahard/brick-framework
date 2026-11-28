@@ -18,7 +18,7 @@ adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963
 |---|---|
 | `SystemSetup.h` | system clock from the HSE through PLL1 (400 MHz by default), memory protection (external RAM write-through, the empty FMC bank closed), caches |
 | `Stm32Sdram.h` | SDRAM on the FMC, kernel clock from PLL2; `begin()` checks a test pattern over the whole memory before the data cache is on |
-| `LtdcDisplay.h` | RGB panel on the LTDC, pixel clock from PLL3, one RGB565 layer showing one of one or two frame buffers (`IDisplayDevice` + `IFrameBufferDisplay`); flips at the vertical blanking, panel and backlight enables |
+| `LtdcDisplay.h` | RGB panel on the LTDC, pixel clock from PLL3, one RGB565 layer showing one of up to three frame buffers (`IDisplayDevice` + `IFrameBufferDisplay`); flips at the vertical blanking (with three buffers the next picture is drawn without waiting for it), panel and backlight enables |
 | `Stm32I2cBus.h` | I2C master; the TIMINGR value comes from the board |
 | `CapacitiveTouchscreen.h` | FT6x36 or GT911, whichever answers; every finger pressed, moved and released |
 | `RttSerialPort.h` | `ISerialPort` over SEGGER RTT (the debug probe), for `SerialLogger` on boards without a free UART |
@@ -26,7 +26,7 @@ adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963
 | `I2cEeprom.h`, `Stm32SpiBus.h`, `SpiNorFlash.h` | the STM32F1 storage drivers on the H7 HAL |
 | `Stm32MemoryProvider.h` | `IMemoryProvider` over fixed regions (on-chip RAM reachable by DMA, external RAM) |
 | `Stm32Uart.h` | 8N1 UART up to the kernel clock / 8 (8x oversampling above / 16) on DMA both ways, no interrupts: a receive ring that `read()` empties, a transmit buffer in two halves; `set_baud_rate()` after the queue has drained; framing, noise and overrun counters. The buffers come from the memory provider or from given memory: with the LTDC, DMA2D and JPEG codec busy on the AXI bus, DMA1 misses requests for buffers in the AXI SRAM, so give it the D2 SRAM; a transmit transfer that stopped that way is set going again |
-| `Stm32JpegDecoder.h` | baseline JPEG with the hardware codec, YCbCr to RGB565 with the DMA2D into a frame buffer; in bands through a small on-chip buffer or the whole image at once |
+| `Stm32JpegDecoder.h` | baseline JPEG with the hardware codec, YCbCr to RGB565 with the DMA2D into a frame buffer; in bands through a small on-chip buffer (one band converted while the codec fills the next: 15 ms for 800x480 4:2:0) or the whole image at once; the CPU moves the codec's data by words, without the HAL's polling loop; `IJpegBandObserver` is told between the bands |
 
 The board starts them in this order: `HAL_Init()`, memory protection, system
 clock, SDRAM, caches, then the peripherals. Frame buffers are cached

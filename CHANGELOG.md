@@ -135,6 +135,17 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   `Stm32JpegDecoder` konwertuje ostatni pas w pełnych wierszach MCU; płytka
   ST-1656 (panel 5" 800x480 projektu
   9785) jest w prywatnym `brick-boards-private`,
+- STM32H7, strumień obrazu (2026-11-28): `Stm32JpegDecoder` sam przenosi dane
+  kodeka (słowami między FIFO a pamięcią, bez pętli HAL-a) i w trybie
+  pasmowym konwertuje jeden pas przez DMA2D, gdy kodek wypełnia następny:
+  800x480 4:2:0 w 15,4 ms zamiast 32,4 ms; `IJpegBandObserver` dostaje
+  wywołanie między pasmami; `LtdcDisplay` ma do trzech buforów ramki, a
+  `wait_for_vsync()` po przełączeniu, które już nastąpiło, wraca od razu,
+- zdalna sieć (2026-11-28): `SerialPacketLink` koduje ramkę i liczy sumę w
+  jednym przebiegu, a o pakiet, który nie doszedł także za drugim razem,
+  pyta ponownie z `poll()` (przy pełnym oknie drugiej strony łącze stało do
+  końca czasu retransmisji); `RemoteNetworkDevice` czyta połączenie po
+  cztery pakiety naraz,
 
 ### Changed (wydajność grafiki, bez zmiany API)
 

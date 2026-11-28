@@ -140,6 +140,15 @@ void SerialPacketLink::poll()
         timer_from_ = now;
         ++retransmissions_;
     }
+    // A packet asked for again that has not come (the request or the packet
+    // was damaged too): the peer may have filled its window and send nothing
+    // more that would bring the question up, so it is asked from here.
+    if (connected_ && kept_present_ != 0 && !nak_due_ && now - nak_at_ >= config_.retransmit_ms / 2U)
+    {
+        nak_due_      = true;
+        nak_sequence_ = expected_;
+        nak_at_       = now;
+    }
     write_();
 }
 

@@ -37,7 +37,10 @@ struct SerialPacketLinkConfig
     /// Packets that arrive after a lost one are kept until it comes again:
     /// as many as the other end's window (a power of two up to kMaxWindow).
     std::size_t receive_packets = 8;
-    /// Packets not confirmed in this time are sent again.
+    /// Packets not confirmed in this time are sent again, and a missing one
+    /// is asked for again after half of it. Several times what a full window
+    /// takes on the line and the peer to answer: 200 ms suits a slow line, a
+    /// fast one recovers sooner with less.
     std::uint32_t retransmit_ms = 200;
     /// Until the other end answers, a sync goes out this often.
     std::uint32_t sync_ms = 200;

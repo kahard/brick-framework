@@ -52,6 +52,11 @@ enum class Message : std::uint8_t
     udp_open,  ///< port
     udp_send,  ///< address, port, data
     udp_close,
+    update_begin,   ///< update, size of the image (u32)
+    update_data,    ///< update, offset (u32), data
+    update_finish,  ///< update
+    update_abort,   ///< update
+    restart,        ///< the device restarts (after an update: into the new program)
 
     // Device to host.
     state = 0x80,  ///< see RemoteState
@@ -63,6 +68,8 @@ enum class Message : std::uint8_t
     tcp_closed,    ///< slot, generation, status of receive() (not_ready: closed by the peer)
     tcp_accepted,  ///< slot, generation
     udp_data,      ///< address, port, data
+    update_state,  ///< update, phase (UpdatePhase), status, bytes written (u32)
+    description,   ///< text naming the device's program; after each hello
 };
 
 /// Interfaces of default_route.
@@ -71,6 +78,26 @@ enum class Interface : std::uint8_t
     station,
     access_point,
 };
+
+/// Where an update of the device's program is, in update_state. The update
+/// number is the host's: a state with another number is of an update before.
+enum class UpdatePhase : std::uint8_t
+{
+    idle,
+    writing,   ///< begun: the device takes the image
+    checking,  ///< all of it written; the device checks it
+    finished,  ///< checked: it starts at the device's next restart
+    failed,    ///< ended, with the status that says why
+};
+
+/// Bytes of an image in one update_data, and how far the host may be ahead of
+/// what the device has reported written: the device is busy with its flash
+/// for tens of milliseconds at a time, and its serial driver holds only a
+/// few packets meanwhile.
+inline constexpr std::size_t   kMaxUpdateData    = kMaxDataBytes;
+inline constexpr std::uint32_t kUpdateAheadBytes = 2U * kMaxDataBytes;
+/// The text naming the device's program, with its end.
+inline constexpr std::size_t kDescriptionBytes = 96;
 
 /// Builds a message payload; a write past the end marks it failed.
 class PacketWriter final

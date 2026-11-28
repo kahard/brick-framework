@@ -526,13 +526,112 @@ namespace remote
         ring_.clear();
     }
 
+    // ------------------------------------------------------ HostFirmwareUpdate
+
+    Status HostFirmwareUpdate::begin(std::uint32_t size)
+    {
+        host_.poll();
+        if (!host_.device_ready())
+            return Status::not_ready;
+        if (running_())
+            return Status::busy;
+        std::uint8_t bytes[kHeadBytes];
+        PacketWriter writer(bytes, sizeof(bytes));
+        writer.u8(static_cast<std::uint8_t>(number_ + 1U));
+        writer.u32(size);
+        if (!host_.queue_(Message::update_begin, writer))
+            return Status::busy;
+        ++number_;
+        state_   = State::starting;
+        size_    = size;
+        sent_    = 0;
+        written_ = 0;
+        return Status::ok;
+    }
+
+    Status HostFirmwareUpdate::write(const std::uint8_t* data, std::size_t size, std::size_t& written)
+    {
+        written = 0;
+        host_.poll();
+        if (state_ == State::failed)
+            return failure_;
+        if (state_ == State::starting)
+            return Status::ok;  // the device has not said yet that it takes the image
+        if (state_ != State::writing)
+            return Status::not_ready;
+        if (size > size_ - sent_)
+            return Status::invalid_argument;
+        while (written < size && sent_ - written_ < kUpdateAheadBytes)
+        {
+            const std::size_t chunk =
+                std::min({ size - written, kMaxUpdateData, std::size_t{ kUpdateAheadBytes - (sent_ - written_) } });
+            std::uint8_t bytes[kHeadBytes];
+            PacketWriter head(bytes, sizeof(bytes));
+            head.u8(number_);
+            head.u32(sent_);
+            if (!host_.send_data_(Message::update_data, head, data + written, chunk))
+                break;
+            written += chunk;
+            sent_ += static_cast<std::uint32_t>(chunk);
+        }
+        return Status::ok;
+    }
+
+    Status HostFirmwareUpdate::finish()
+    {
+        host_.poll();
+        switch (state_)
+        {
+            case State::failed:
+                return failure_;
+            case State::finished:
+                return Status::ok;
+            case State::finishing:
+                return Status::busy;
+            case State::writing:
+            {
+                if (sent_ != size_)
+                    return Status::invalid_argument;
+                if (written_ != size_)
+                    return Status::busy;  // the device still writes what was sent
+                std::uint8_t bytes[kHeadBytes];
+                PacketWriter writer(bytes, sizeof(bytes));
+                writer.u8(number_);
+                if (host_.queue_(Message::update_finish, writer))
+                    state_ = State::finishing;
+                return Status::busy;
+            }
+            default:
+                return Status::not_ready;
+        }
+    }
+
+    void HostFirmwareUpdate::abort()
+    {
+        if (running_())
+        {
+            std::uint8_t bytes[kHeadBytes];
+            PacketWriter writer(bytes, sizeof(bytes));
+            writer.u8(number_);
+            (void)host_.queue_(Message::update_abort, writer);
+        }
+        state_ = State::idle;
+    }
+
+    Status HostFirmwareUpdate::restart()
+    {
+        std::uint8_t bytes[kHeadBytes];
+        PacketWriter writer(bytes, sizeof(bytes));
+        return host_.queue_(Message::restart, writer) ? Status::ok : Status::busy;
+    }
+
 }  // namespace remote
 
 // ------------------------------------------------------------ RemoteNetworkHost
 
 RemoteNetworkHost::RemoteNetworkHost(RemoteNetworkHostConfig config)
     : config_(config), link_(config.link), station_(*this), access_point_(*this), dns_(*this), listener_(*this),
-      udp_(*this)
+      udp_(*this), update_(*this)
 {
     for (std::size_t index = 0; index < remote::kTcpSlots; ++index)
     {
@@ -648,6 +747,12 @@ void RemoteNetworkHost::on_link_reset()
     access_point_.link_    = LinkState::down;
     access_point_.clients_ = 0;
     access_point_.request_ = 0;
+    if (update_.running_())
+    {
+        update_.state_   = remote::HostFirmwareUpdate::State::failed;  // the device started over in the middle
+        update_.failure_ = Status::error;
+    }
+    update_.description_[0] = '\0';
 
     std::uint8_t bytes[kHeadBytes];
     PacketWriter hello(bytes, sizeof(bytes));
@@ -697,12 +802,49 @@ void RemoteNetworkHost::on_packet(std::uint8_t type, const std::uint8_t* payload
         case Message::udp_data:
             on_udp_(reader);
             break;
+        case Message::update_state:
+            on_update_(reader);
+            break;
+        case Message::description:
+            reader.text(update_.description_, sizeof(update_.description_));
+            break;
         case Message::tcp_status:
         case Message::tcp_data:
         case Message::tcp_sent:
         case Message::tcp_closed:
         case Message::tcp_accepted:
             on_tcp_(message, reader);
+            break;
+        default:
+            break;
+    }
+}
+
+void RemoteNetworkHost::on_update_(PacketReader& reader)
+{
+    using State                 = remote::HostFirmwareUpdate::State;
+    const std::uint8_t  number  = reader.u8();
+    const auto          phase   = static_cast<remote::UpdatePhase>(reader.u8());
+    const Status        status  = reader.status();
+    const std::uint32_t written = reader.u32();
+    if (!reader.ok() || number != update_.number_ || !update_.running_())
+        return;
+    switch (phase)
+    {
+        case remote::UpdatePhase::writing:
+        case remote::UpdatePhase::checking:
+            if (update_.state_ == State::starting)
+                update_.state_ = State::writing;
+            if (written <= update_.sent_)
+                update_.written_ = written;
+            break;
+        case remote::UpdatePhase::finished:
+            if (update_.state_ == State::finishing)
+                update_.state_ = State::finished;
+            break;
+        case remote::UpdatePhase::failed:
+            update_.state_   = State::failed;
+            update_.failure_ = is_ok(status) ? Status::error : status;
             break;
         default:
             break;

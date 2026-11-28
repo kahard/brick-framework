@@ -14,6 +14,7 @@
 #include "brick/interfaces/network/IUdpSocket.h"
 #include "brick/interfaces/network/IWifiAccessPoint.h"
 #include "brick/interfaces/network/IWifiStation.h"
+#include "brick/interfaces/system/IFirmwareUpdate.h"
 
 namespace brick::core::network
 {
@@ -30,6 +31,10 @@ struct RemoteNetworkDeviceConfig
     std::array<brick::interfaces::network::ITcpSocket*, remote::kClientSlots> clients{};
     brick::interfaces::network::ITcpListener*                                 listener = nullptr;
     brick::interfaces::network::IUdpSocket*                                   udp      = nullptr;
+    /// Optional: takes a new program for the co-processor from the host (see
+    /// RemoteNetworkHost::update()) and restarts into it. Without it the host
+    /// is told the co-processor takes none.
+    brick::interfaces::system::IFirmwareUpdate* update = nullptr;
     /// Optional: requests that fail, link restarts.
     brick::interfaces::logging::ILogger* logger = nullptr;
 };
@@ -93,6 +98,9 @@ private:
     void service_dns_();
     void service_scan_();
     void service_state_();
+    void service_update_();
+    void handle_update_(remote::Message message, remote::PacketReader& reader);
+    void end_update_(Status status);
     bool send_(remote::Message message, const remote::PacketWriter& head, const std::uint8_t* data = nullptr,
                std::size_t size = 0);
     bool data_room_() const;
@@ -122,6 +130,16 @@ private:
     std::uint32_t                                                                state_checked_at_ = 0;
     std::array<std::uint8_t, SerialPacketLink::kMaxPayload>                      last_state_{};
     std::size_t                                                                  last_state_size_ = 0;
+    // The update of this device's program the host runs.
+    remote::UpdatePhase update_phase_    = remote::UpdatePhase::idle;
+    Status              update_status_   = Status::ok;
+    std::uint8_t        update_number_   = 0;
+    std::uint32_t       update_size_     = 0;
+    std::uint32_t       update_written_  = 0;
+    bool                update_due_      = false;  ///< its state goes to the host
+    bool                description_due_ = false;
+    bool                restart_due_     = false;
+    std::uint32_t       restart_from_    = 0;
     /// A connection is read this many packets at a time: one call of the
     /// socket for all of them.
     static constexpr std::size_t kReadPackets = 4;

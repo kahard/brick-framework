@@ -13,6 +13,7 @@
 #include "brick/interfaces/network/IUdpSocket.h"
 #include "brick/interfaces/network/IWifiAccessPoint.h"
 #include "brick/interfaces/network/IWifiStation.h"
+#include "brick/interfaces/system/IFirmwareUpdate.h"
 
 namespace brick::core::network
 {
@@ -205,6 +206,59 @@ namespace remote
         std::uint16_t      port_ = 0;
         bool               open_ = false;
     };
+
+    /// The device's own program, replaced from the host: the device (with an
+    /// IFirmwareUpdate in its configuration) writes the image as it arrives
+    /// and starts it at restart(). Until then, and after an error, it runs
+    /// what it ran. The link starts over when the device restarts: once
+    /// device_ready() is true again, description() names the program that
+    /// came up.
+    class HostFirmwareUpdate final : public brick::interfaces::system::IFirmwareUpdate
+    {
+    public:
+        explicit HostFirmwareUpdate(RemoteNetworkHost& host) : host_(host) {}
+
+        /// not_ready: the device has not answered yet.
+        Status begin(std::uint32_t size) override;
+        /// Takes what the link and the device have room for now.
+        Status write(const std::uint8_t* data, std::size_t size, std::size_t& written) override;
+        Status finish() override;
+        void   abort() override;
+        Status restart() override;
+        /// What the device said after the link last started; empty until
+        /// then, and from a device that takes no update.
+        const char* description() const override { return description_; }
+
+        /// Bytes of the image the device has written.
+        std::uint32_t written() const { return written_; }
+
+    private:
+        friend class brick::core::network::RemoteNetworkHost;
+
+        enum class State : std::uint8_t
+        {
+            idle,
+            starting,  ///< asked, the device has not answered
+            writing,
+            finishing,  ///< all written, the device checks it
+            finished,
+            failed,
+        };
+
+        bool running_() const
+        {
+            return state_ == State::starting || state_ == State::writing || state_ == State::finishing;
+        }
+
+        RemoteNetworkHost& host_;
+        State              state_   = State::idle;
+        Status             failure_ = Status::error;
+        std::uint8_t       number_  = 0;
+        std::uint32_t      size_    = 0;
+        std::uint32_t      sent_    = 0;
+        std::uint32_t      written_ = 0;
+        char               description_[kDescriptionBytes]{};
+    };
 }  // namespace remote
 
 struct RemoteNetworkHostConfig
@@ -247,7 +301,9 @@ public:
     brick::interfaces::network::ITcpSocket&   socket(std::size_t index) { return sockets_[index]; }
     brick::interfaces::network::ITcpListener& listener() { return listener_; }
     brick::interfaces::network::IUdpSocket&   udp() { return udp_; }
-    const SerialPacketLink&                   link() const { return link_; }
+    /// The device's program: a new one for it, and the name of the one it runs.
+    remote::HostFirmwareUpdate& update() { return update_; }
+    const SerialPacketLink&     link() const { return link_; }
     /// Requests dropped because the queue was full, data over a ring.
     std::uint32_t overflows() const { return overflows_; }
 
@@ -258,6 +314,7 @@ private:
     friend class remote::HostTcpSocket;
     friend class remote::HostTcpListener;
     friend class remote::HostUdpSocket;
+    friend class remote::HostFirmwareUpdate;
 
     static constexpr std::size_t kQueueEntries = 16;
     static constexpr std::size_t kQueueBytes   = 160;
@@ -276,6 +333,7 @@ private:
     void on_scan_(remote::PacketReader& reader);
     void on_tcp_(remote::Message message, remote::PacketReader& reader);
     void on_udp_(remote::PacketReader& reader);
+    void on_update_(remote::PacketReader& reader);
 
     /// Queues a request for the device; false when the queue is full.
     bool queue_(remote::Message message, const remote::PacketWriter& writer);
@@ -293,6 +351,7 @@ private:
     std::array<remote::HostTcpSocket, remote::kTcpSlots> sockets_{};
     remote::HostTcpListener                              listener_;
     remote::HostUdpSocket                                udp_;
+    remote::HostFirmwareUpdate                           update_;
     std::array<Queued, kQueueEntries>                    queue_entries_{};
     std::size_t                                          queue_head_   = 0;
     std::size_t                                          queue_count_  = 0;

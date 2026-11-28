@@ -20,6 +20,12 @@ namespace
     constexpr std::size_t   kMaxCredentialLen = 64;
     constexpr std::size_t   kMaxHostName      = 256;
     constexpr std::uint32_t kClosingTimeoutMs = 5000;  // a peer that takes nothing more
+    constexpr std::uint32_t kRestartDelayMs   = 200;   // what was to be sent goes out first
+
+    bool update_runs(remote::UpdatePhase phase)
+    {
+        return phase == remote::UpdatePhase::writing || phase == remote::UpdatePhase::checking;
+    }
 }  // namespace
 
 RemoteNetworkDevice::RemoteNetworkDevice(RemoteNetworkDeviceConfig config) : config_(config), link_(config.link)
@@ -62,6 +68,7 @@ void RemoteNetworkDevice::poll()
         service_listener_();
         service_tcp_();
         service_udp_();
+        service_update_();
     }
     link_.poll();
 }
@@ -69,6 +76,143 @@ void RemoteNetworkDevice::poll()
 bool RemoteNetworkDevice::send_(Message message, const PacketWriter& head, const std::uint8_t* data, std::size_t size)
 {
     return head.ok() && link_.send(static_cast<std::uint8_t>(message), head.data(), head.size(), data, size);
+}
+
+void RemoteNetworkDevice::handle_update_(Message message, PacketReader& reader)
+{
+    if (message == Message::restart)
+    {
+        restart_due_  = true;
+        restart_from_ = config_.link.time->millis();
+        return;
+    }
+    const std::uint8_t number = reader.u8();
+    if (message == Message::update_begin)
+    {
+        const std::uint32_t size = reader.u32();
+        if (update_runs(update_phase_))
+            config_.update->abort();  // the host starts over
+        update_number_  = number;
+        update_size_    = size;
+        update_written_ = 0;
+        update_status_  = !reader.ok()              ? Status::invalid_argument :
+                          config_.update == nullptr ? Status::not_supported :
+                                                      config_.update->begin(size);
+        update_phase_   = is_ok(update_status_) ? remote::UpdatePhase::writing : remote::UpdatePhase::failed;
+        update_due_     = true;
+        if (is_ok(update_status_))
+            note_("Update of the program begins: %u bytes", static_cast<unsigned>(size));
+        else
+            log_("Update of the program refused (status %u)", static_cast<unsigned>(update_status_));
+        return;
+    }
+    if (number != update_number_ || !update_runs(update_phase_))
+        return;  // of an update that has ended
+    switch (message)
+    {
+        case Message::update_data:
+        {
+            const std::uint32_t offset = reader.u32();
+            const std::size_t   size   = reader.remaining();
+            if (update_phase_ != remote::UpdatePhase::writing || !reader.ok() || offset != update_written_
+                || size > update_size_ - update_written_)
+            {
+                end_update_(Status::invalid_argument);
+                break;
+            }
+            Status      status = Status::ok;
+            std::size_t done   = 0;
+            while (is_ok(status) && done < size)
+            {
+                std::size_t written = 0;
+                status              = config_.update->write(reader.rest() + done, size - done, written);
+                if (is_ok(status) && written == 0)
+                    status = Status::busy;  // a device's own flash takes all it is given
+                done += written;
+            }
+            update_written_ += static_cast<std::uint32_t>(done);
+            if (is_ok(status))
+                update_due_ = true;  // the host sends on as this reaches it
+            else
+                end_update_(status);
+            break;
+        }
+        case Message::update_finish:
+            if (update_phase_ == remote::UpdatePhase::writing)
+            {
+                if (update_written_ == update_size_)
+                {
+                    update_phase_ = remote::UpdatePhase::checking;  // service_update_() sees it through
+                    update_due_   = true;
+                }
+                else
+                    end_update_(Status::invalid_argument);
+            }
+            break;
+        default:  // update_abort
+            config_.update->abort();
+            update_phase_  = remote::UpdatePhase::idle;
+            update_status_ = Status::ok;
+            update_due_    = true;
+            break;
+    }
+}
+
+/// A running update ends with an error; the program in use stays.
+void RemoteNetworkDevice::end_update_(Status status)
+{
+    if (update_runs(update_phase_))
+        config_.update->abort();
+    update_phase_  = remote::UpdatePhase::failed;
+    update_status_ = status;
+    update_due_    = true;
+    log_("Update of the program failed (status %u)", static_cast<unsigned>(status));
+}
+
+void RemoteNetworkDevice::service_update_()
+{
+    if (update_phase_ == remote::UpdatePhase::checking)
+    {
+        const Status status = config_.update->finish();
+        if (is_ok(status))
+        {
+            update_phase_  = remote::UpdatePhase::finished;
+            update_status_ = Status::ok;
+            update_due_    = true;
+            note_("Update of the program written: %u bytes", static_cast<unsigned>(update_written_));
+        }
+        else if (status != Status::busy)
+        {
+            end_update_(status);
+        }
+    }
+    if (description_due_)
+    {
+        PacketWriter writer(message_.data(), message_.size());
+        char         text[remote::kDescriptionBytes];
+        std::strncpy(text, config_.update->description(), sizeof(text) - 1U);
+        text[sizeof(text) - 1U] = '\0';
+        writer.text(text);
+        if (send_(Message::description, writer))
+            description_due_ = false;
+    }
+    if (update_due_)
+    {
+        std::uint8_t bytes[kHeadBytes];
+        PacketWriter writer(bytes, sizeof(bytes));
+        writer.u8(update_number_);
+        writer.u8(static_cast<std::uint8_t>(update_phase_));
+        writer.status(update_status_);
+        writer.u32(update_written_);
+        if (send_(Message::update_state, writer))
+            update_due_ = false;
+    }
+    if (restart_due_ && config_.link.time->millis() - restart_from_ >= kRestartDelayMs)
+    {
+        restart_due_ = false;
+        if (config_.update != nullptr)
+            (void)config_.update->restart();
+    }
 }
 
 bool RemoteNetworkDevice::data_room_() const
@@ -100,6 +244,11 @@ void RemoteNetworkDevice::on_link_reset()
         (void)config_.station->disconnect();
     if (config_.access_point->link_state() != brick::interfaces::network::LinkState::down)
         (void)config_.access_point->stop();
+    if (update_runs(update_phase_))
+        config_.update->abort();  // the host that sent it is gone
+    update_phase_    = remote::UpdatePhase::idle;
+    update_due_      = false;
+    description_due_ = false;
     listening_       = false;
     udp_open_        = false;
     scanning_        = false;
@@ -132,6 +281,13 @@ void RemoteNetworkDevice::on_packet(std::uint8_t type, const std::uint8_t* paylo
         case Message::tcp_close:
         case Message::tcp_credit:
             handle_tcp_(message, reader);
+            break;
+        case Message::update_begin:
+        case Message::update_data:
+        case Message::update_finish:
+        case Message::update_abort:
+        case Message::restart:
+            handle_update_(message, reader);
             break;
         default:
             handle_other_(message, reader);
@@ -281,7 +437,8 @@ void RemoteNetworkDevice::handle_other_(Message message, PacketReader& reader)
             const std::uint8_t version = reader.u8();
             if (version != remote::kProtocolVersion)
                 log_("Host speaks protocol version %u", version);
-            state_due_ = true;
+            state_due_       = true;
+            description_due_ = config_.update != nullptr;
             break;
         }
         case Message::default_route:

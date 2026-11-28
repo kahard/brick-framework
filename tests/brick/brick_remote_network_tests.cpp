@@ -88,6 +88,66 @@ private:
     std::size_t               used_  = 0;
 };
 
+/// The device's program slot: keeps what it is given and checks only its size.
+class FakeFirmwareUpdate final : public brick::interfaces::system::IFirmwareUpdate
+{
+public:
+    Status begin(std::uint32_t size) override
+    {
+        if (size > capacity)
+            return Status::no_memory;
+        image.clear();
+        expected = size;
+        running  = true;
+        ++begun;
+        return Status::ok;
+    }
+    Status write(const std::uint8_t* data, std::size_t size, std::size_t& written) override
+    {
+        written = 0;
+        if (!running)
+            return Status::not_ready;
+        image.append(reinterpret_cast<const char*>(data), size);
+        written = size;
+        return Status::ok;
+    }
+    Status finish() override
+    {
+        if (checks_left > 0)
+        {
+            --checks_left;
+            return Status::busy;
+        }
+        running = false;
+        if (image.size() != expected)
+            return Status::error;
+        ready = true;
+        return Status::ok;
+    }
+    void abort() override
+    {
+        if (running)
+            ++aborted;
+        running = false;
+    }
+    Status restart() override
+    {
+        ++restarts;
+        return Status::ok;
+    }
+    const char* description() const override { return "bench 1.0 Nov 28 2026 10:00:00"; }
+
+    std::string   image;
+    std::uint32_t capacity    = 1024U * 1024U;
+    std::uint32_t expected    = 0;
+    int           checks_left = 0;
+    int           begun       = 0;
+    int           aborted     = 0;
+    int           restarts    = 0;
+    bool          running     = false;
+    bool          ready       = false;
+};
+
 std::string pattern(std::size_t size)
 {
     std::string text(size, '\0');
@@ -113,6 +173,7 @@ struct Bench
     brick::mocks::FakeTcpSocket       client1;
     brick::mocks::FakeTcpListener     listener;
     brick::mocks::FakeUdpSocket       udp;
+    FakeFirmwareUpdate                update;
     RemoteNetworkHost                 host{ host_config() };
     RemoteNetworkDevice               device{ device_config() };
 
@@ -141,6 +202,7 @@ struct Bench
         config.clients              = { &client0, &client1 };
         config.listener             = &listener;
         config.udp                  = &udp;
+        config.update               = &update;
         return config;
     }
 
@@ -364,6 +426,140 @@ void test_device_restart()
     assert(bench.listener.listening && bench.listener.port == 80);  // listening again
 }
 
+/// A new program for the device, sent from the host; damaged bytes on the line as in test_tcp_stream().
+void test_update(std::size_t corrupt_every)
+{
+    Bench bench;
+    bench.to_device.corrupt_every = corrupt_every;
+    bench.to_host.corrupt_every   = corrupt_every;
+    bench.start();
+    auto& update = bench.host.update();
+    bench.run(20);
+    assert(std::strcmp(update.description(), "bench 1.0 Nov 28 2026 10:00:00") == 0);
+
+    const std::string image  = pattern(150000);
+    bench.update.checks_left = 3;
+    assert(update.finish() == Status::not_ready);
+    assert(update.begin(static_cast<std::uint32_t>(image.size())) == Status::ok);
+    assert(update.begin(static_cast<std::uint32_t>(image.size())) == Status::busy);
+    std::size_t sent = 0;
+    for (int round = 0; round < 40000 && sent < image.size(); ++round)
+    {
+        std::size_t written = 0;
+        assert(update.write(reinterpret_cast<const std::uint8_t*>(image.data()) + sent, image.size() - sent, written)
+               == Status::ok);
+        sent += written;
+        // The host never runs far ahead of what the device has written.
+        assert(sent - bench.update.image.size() <= brick::core::network::remote::kUpdateAheadBytes);
+        bench.run(1);
+    }
+    assert(sent == image.size());
+    Status status = update.finish();
+    for (int round = 0; round < 2000 && status == Status::busy; ++round)
+    {
+        bench.run(1);
+        status = update.finish();
+    }
+    assert(status == Status::ok);
+    assert(update.written() == image.size());
+    assert(bench.update.ready && bench.update.image == image);
+    assert(bench.update.restarts == 0);
+    assert(update.restart() == Status::ok);
+    bench.run(400);
+    assert(bench.update.restarts == 1);
+}
+
+void test_update_refused_and_given_up()
+{
+    Bench bench;
+    bench.start();
+    auto& update          = bench.host.update();
+    bench.update.capacity = 1000;
+    assert(update.begin(5000) == Status::ok);  // the device has not answered yet
+    bench.run(20);
+    std::uint8_t bytes[100]{};
+    std::size_t  written = 1;
+    assert(update.write(bytes, sizeof(bytes), written) == Status::no_memory && written == 0);
+    assert(update.finish() == Status::no_memory);
+
+    // The next one is given up half way: the device drops what it has.
+    bench.update.capacity = 100000;
+    assert(update.begin(5000) == Status::ok);
+    bench.run(20);
+    assert(update.write(bytes, sizeof(bytes), written) == Status::ok && written == sizeof(bytes));
+    bench.run(20);
+    assert(bench.update.image.size() == sizeof(bytes) && bench.update.running);
+    update.abort();
+    bench.run(20);
+    assert(bench.update.aborted == 1 && !bench.update.running);
+    assert(update.write(bytes, sizeof(bytes), written) == Status::not_ready);
+
+    // More than the image has is refused here; the device ends an update that is cut short.
+    assert(update.begin(150) == Status::ok);
+    bench.run(20);
+    assert(update.write(bytes, sizeof(bytes), written) == Status::ok && written == sizeof(bytes));
+    assert(update.write(bytes, sizeof(bytes), written) == Status::invalid_argument);
+    assert(update.finish() == Status::invalid_argument);
+    assert(bench.update.begun == 2);
+}
+
+void test_update_of_a_device_without_it()
+{
+    Bench bench;
+    bench.start();
+    auto config   = bench.device_config();
+    config.update = nullptr;
+    RemoteNetworkDevice plain(config);  // the device restarts with a program that takes none
+    assert(plain.begin() == Status::ok);
+    auto run = [&](int rounds)
+    {
+        for (int round = 0; round < rounds; ++round)
+        {
+            ++bench.clock.now;
+            plain.poll();
+            bench.host.poll();
+        }
+    };
+    run(50);
+    assert(bench.host.device_ready());
+    auto& update = bench.host.update();
+    assert(update.description()[0] == '\0');
+    assert(update.begin(1000) == Status::ok);
+    run(20);
+    std::uint8_t bytes[10]{};
+    std::size_t  written = 0;
+    assert(update.write(bytes, sizeof(bytes), written) == Status::not_supported);
+    assert(update.restart() == Status::ok);  // asked; such a device stays as it is
+    run(400);
+    assert(bench.host.device_ready());
+}
+
+void test_update_cut_by_a_restart()
+{
+    Bench bench;
+    bench.start();
+    auto& update = bench.host.update();
+    assert(update.begin(5000) == Status::ok);
+    bench.run(20);
+    std::uint8_t bytes[100]{};
+    std::size_t  written = 0;
+    assert(update.write(bytes, sizeof(bytes), written) == Status::ok && written == sizeof(bytes));
+    bench.run(20);
+
+    RemoteNetworkDevice restarted(bench.device_config());
+    assert(restarted.begin() == Status::ok);
+    for (int round = 0; round < 50; ++round)
+    {
+        ++bench.clock.now;
+        restarted.poll();
+        bench.host.poll();
+    }
+    assert(bench.host.device_ready());
+    assert(update.write(bytes, sizeof(bytes), written) == Status::error);
+    assert(update.finish() == Status::error);
+    assert(update.begin(5000) == Status::ok);  // and a new one may start
+}
+
 }  // namespace
 
 int main()
@@ -376,6 +572,12 @@ int main()
     test_connect_failure();
     test_listener_and_udp();
     test_device_restart();
+    test_update(0);
+    test_update(20011);
+    test_update(3001);
+    test_update_refused_and_given_up();
+    test_update_of_a_device_without_it();
+    test_update_cut_by_a_restart();
     std::puts("brick_remote_network_tests passed");
     return 0;
 }

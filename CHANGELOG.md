@@ -148,6 +148,16 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   pyta ponownie z `poll()` (przy pełnym oknie drugiej strony łącze stało do
   końca czasu retransmisji); `RemoteNetworkDevice` czyta połączenie po
   cztery pakiety naraz,
+- nowy program dla koprocesora przez łącze (2026-11-28): interfejs
+  `IFirmwareUpdate` (`brick/interfaces/system`: `begin()`, `write()`,
+  `finish()`, `abort()`, `restart()`, `description()`); `EspFirmwareUpdate`
+  (ESP-IDF: obraz trafia do drugiej partycji programu, sektory są kasowane w
+  miarę zapisu, `finish()` sprawdza obraz, a program, który nie wywoła
+  `confirm()`, bootloader zastępuje poprzednim); w zdalnej sieci
+  `RemoteNetworkHost::update()` wysyła obraz koprocesorowi
+  (`RemoteNetworkDevice` z `update` w konfiguracji), wyprzedzając jego zapis
+  najwyżej o dwa pakiety, i podaje nazwę programu, który koprocesor
+  uruchomił; test także na linii psującej bajty,
 
 ### Changed (wydajność grafiki, bez zmiany API)
 

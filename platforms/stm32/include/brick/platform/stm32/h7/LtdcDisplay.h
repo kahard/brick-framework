@@ -40,7 +40,7 @@ struct LtdcClock
 
 struct LtdcDisplayConfig
 {
-    static constexpr std::size_t kMaxFrameBuffers = 2;
+    static constexpr std::size_t kMaxFrameBuffers = 3;
 
     std::uint16_t width  = 0;
     std::uint16_t height = 0;
@@ -63,7 +63,8 @@ struct LtdcDisplayConfig
 
 /// RGB panel on the LTDC, one RGB565 layer showing one of the frame buffers.
 /// With two buffers the application draws the one off the screen and
-/// present_frame_buffer() shows it at the next vertical blanking;
+/// present_frame_buffer() shows it at the next vertical blanking; with three
+/// it need not wait for that before it draws the next one;
 /// wait_for_vsync() returns once it is on the screen. draw_buffer() and the
 /// copies are CPU copies into a frame buffer.
 class LtdcDisplay final : public brick::interfaces::display::IDisplayDevice,
@@ -102,8 +103,9 @@ private:
 
     LtdcDisplayConfig  config_;
     LTDC_HandleTypeDef handle_{};
-    std::uint8_t       shown_   = 0;
-    bool               started_ = false;
+    std::uint8_t       shown_        = 0;
+    bool               flip_pending_ = false;  ///< presented, not yet waited for
+    bool               started_      = false;
 };
 
 }  // namespace brick::platform::stm32::h7

@@ -149,18 +149,20 @@ Status LtdcDisplay::fill_rect(DisplayRect area, std::uint16_t color)
 }
 
 /// After present_frame_buffer(): until the new buffer is on the screen (the
-/// LTDC clears the reload request at the vertical blanking). Otherwise until
-/// the next vertical blanking starts.
+/// LTDC clears the reload request at the vertical blanking), which may
+/// already be the case: then it returns at once. Otherwise until the next
+/// vertical blanking starts.
 Status LtdcDisplay::wait_for_vsync(std::uint32_t timeout_ms)
 {
     if (!started_)
         return Status::not_ready;
     const std::uint32_t start = HAL_GetTick();
-    if ((LTDC->SRCR & LTDC_SRCR_VBR) != 0)
+    if (flip_pending_)
     {
         while ((LTDC->SRCR & LTDC_SRCR_VBR) != 0)
             if (HAL_GetTick() - start > timeout_ms)
                 return Status::timeout;
+        flip_pending_ = false;
         return Status::ok;
     }
     while ((LTDC->CDSR & LTDC_CDSR_VSYNCS) != 0)
@@ -200,6 +202,7 @@ Status LtdcDisplay::present_frame_buffer(std::uint8_t index)
     LTDC_Layer1->CFBAR = reinterpret_cast<std::uint32_t>(config_.frame_buffers[index]);
     LTDC->SRCR         = LTDC_SRCR_VBR;
     shown_             = index;
+    flip_pending_      = true;
     return Status::ok;
 }
 

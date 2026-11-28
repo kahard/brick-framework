@@ -45,6 +45,30 @@ namespace
         return crc;
     }
 
+    /// Copies bytes to out with the two special bytes escaped and adds them
+    /// to the checksum, in one pass over them; returns the end of the copy.
+    std::uint8_t* put_escaped(std::uint8_t* out, const std::uint8_t* bytes, std::size_t count, std::uint16_t& sum)
+    {
+        std::uint16_t crc = sum;
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            const std::uint8_t byte = bytes[index];
+            crc                     = static_cast<std::uint16_t>((crc << kBitsPerByte)
+                                             ^ kCrcTable[((crc >> kBitsPerByte) ^ byte) & kSequenceMask]);
+            if (byte == kEnd || byte == kEscape)
+            {
+                *out++ = kEscape;
+                *out++ = byte == kEnd ? kEscapedEnd : kEscapedEsc;
+            }
+            else
+            {
+                *out++ = byte;
+            }
+        }
+        sum = crc;
+        return out;
+    }
+
     bool power_of_two(std::size_t value)
     {
         return value != 0 && (value & (value - 1U)) == 0;
@@ -410,34 +434,18 @@ void SerialPacketLink::encode_(Control control, std::uint8_t sequence, std::uint
                                std::size_t size)
 {
     const std::uint8_t header[kHeader] = { static_cast<std::uint8_t>(control), sequence, expected_, type };
-    std::uint16_t      crc             = crc_update(kCrcInitial, header, kHeader);
-    crc                                = crc_update(crc, payload, size);
+    std::uint16_t      crc             = kCrcInitial;
+    std::uint8_t*      out             = tx_.data();
+    *out++                             = kEnd;
+    out                                = put_escaped(out, header, kHeader, crc);
+    out                                = put_escaped(out, payload, size, crc);
     const std::uint8_t trailer[kCrc]   = { static_cast<std::uint8_t>(crc & kSequenceMask),
                                            static_cast<std::uint8_t>(crc >> kBitsPerByte) };
-    std::size_t        length          = 0;
-    auto               put             = [this, &length](const std::uint8_t* bytes, std::size_t count)
-    {
-        for (std::size_t index = 0; index < count; ++index)
-        {
-            const std::uint8_t byte = bytes[index];
-            if (byte == kEnd || byte == kEscape)
-            {
-                tx_[length++] = kEscape;
-                tx_[length++] = byte == kEnd ? kEscapedEnd : kEscapedEsc;
-            }
-            else
-            {
-                tx_[length++] = byte;
-            }
-        }
-    };
-    tx_[length++] = kEnd;
-    put(header, kHeader);
-    put(payload, size);
-    put(trailer, kCrc);
-    tx_[length++] = kEnd;
-    tx_length_    = length;
-    tx_sent_      = 0;
+    std::uint16_t      unused          = 0;
+    out                                = put_escaped(out, trailer, kCrc, unused);
+    *out++                             = kEnd;
+    tx_length_                         = static_cast<std::size_t>(out - tx_.data());
+    tx_sent_                           = 0;
 }
 
 }  // namespace brick::core::network

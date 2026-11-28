@@ -440,15 +440,21 @@ void RemoteNetworkDevice::service_slot_(std::size_t index)
         // What the peer sent goes to the host, as far as it has room.
         while (slot.state == SlotState::connected && slot.credit != 0 && data_room_())
         {
-            const std::size_t want     = std::min<std::size_t>(slot.credit, scratch_.size());
+            // As many packets as the link takes now, read from the socket at once.
+            const std::size_t packets  = std::min(link_.room() - kControlReserve, kReadPackets);
+            const std::size_t want     = std::min<std::size_t>(slot.credit, packets * remote::kMaxDataBytes);
             std::size_t       received = 0;
             const Status      status   = slot.socket->receive(scratch_.data(), want, received);
             if (is_ok(status) && received != 0)
             {
-                PacketWriter head(head_bytes, sizeof(head_bytes));
-                head.u8(static_cast<std::uint8_t>(index));
-                head.u8(slot.generation);
-                (void)send_(Message::tcp_data, head, scratch_.data(), received);
+                for (std::size_t sent = 0; sent < received; sent += remote::kMaxDataBytes)
+                {
+                    PacketWriter head(head_bytes, sizeof(head_bytes));
+                    head.u8(static_cast<std::uint8_t>(index));
+                    head.u8(slot.generation);
+                    (void)send_(Message::tcp_data, head, scratch_.data() + sent,
+                                std::min(received - sent, remote::kMaxDataBytes));
+                }
                 slot.credit -= static_cast<std::uint32_t>(received);
                 continue;
             }
@@ -524,7 +530,7 @@ void RemoteNetworkDevice::service_udp_()
     {
         std::size_t                          received = 0;
         brick::interfaces::network::Endpoint from;
-        if (!is_ok(config_.udp->receive_from(scratch_.data(), scratch_.size(), received, from)))
+        if (!is_ok(config_.udp->receive_from(scratch_.data(), remote::kMaxDataBytes, received, from)))
             return;
         std::uint8_t head_bytes[kHeadBytes];
         PacketWriter head(head_bytes, sizeof(head_bytes));

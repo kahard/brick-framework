@@ -122,8 +122,12 @@ private:
     std::uint32_t                                                                state_checked_at_ = 0;
     std::array<std::uint8_t, SerialPacketLink::kMaxPayload>                      last_state_{};
     std::size_t                                                                  last_state_size_ = 0;
-    std::array<std::uint8_t, remote::kMaxDataBytes>                              scratch_{};
-    std::array<std::uint8_t, SerialPacketLink::kMaxPayload>                      message_{};
+    /// A connection is read this many packets at a time: one call of the
+    /// socket for all of them.
+    static constexpr std::size_t kReadPackets = 4;
+
+    std::array<std::uint8_t, kReadPackets * remote::kMaxDataBytes> scratch_{};
+    std::array<std::uint8_t, SerialPacketLink::kMaxPayload>        message_{};
 };
 
 }  // namespace brick::core::network

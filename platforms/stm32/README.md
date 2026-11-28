@@ -18,7 +18,7 @@ adapter accepts packed RGB565 BRICK buffers and expands them to the SSD1963
 |---|---|
 | `SystemSetup.h` | system clock from the HSE through PLL1 (400 MHz by default), memory protection (external RAM write-through, the empty FMC bank closed), caches |
 | `Stm32Sdram.h` | SDRAM on the FMC, kernel clock from PLL2; `begin()` checks a test pattern over the whole memory before the data cache is on |
-| `LtdcDisplay.h` | RGB panel on the LTDC, pixel clock from PLL3, one RGB565 layer showing one of up to three frame buffers (`IDisplayDevice` + `IFrameBufferDisplay`); flips at the vertical blanking (with three buffers the next picture is drawn without waiting for it), panel and backlight enables |
+| `LtdcDisplay.h` | RGB panel on the LTDC, pixel clock from PLL3, one RGB565 layer showing one of up to three frame buffers (`IDisplayDevice` + `IFrameBufferDisplay`); flips at the vertical blanking (with three buffers the next picture is drawn without waiting for it), panel and backlight enables; `set_vsync_front_porch()` changes the blanking, and with it the refresh rate, while the panel runs |
 | `Stm32I2cBus.h` | I2C master; the TIMINGR value comes from the board |
 | `CapacitiveTouchscreen.h` | FT6x36 or GT911, whichever answers; every finger pressed, moved and released |
 | `RttSerialPort.h` | `ISerialPort` over SEGGER RTT (the debug probe), for `SerialLogger` on boards without a free UART |

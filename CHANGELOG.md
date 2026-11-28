@@ -140,7 +140,9 @@ Wszystkie istotne zmiany w BRICK Framework są opisane w tym pliku.
   pasmowym konwertuje jeden pas przez DMA2D, gdy kodek wypełnia następny:
   800x480 4:2:0 w 15,4 ms zamiast 32,4 ms; `IJpegBandObserver` dostaje
   wywołanie między pasmami; `LtdcDisplay` ma do trzech buforów ramki, a
-  `wait_for_vsync()` po przełączeniu, które już nastąpiło, wraca od razu,
+  `wait_for_vsync()` po przełączeniu, które już nastąpiło, wraca od razu;
+  `LtdcDisplay::set_vsync_front_porch()` zmienia w locie wygaszanie po
+  obrazie, czyli częstotliwość odświeżania przy tym samym zegarze pikseli,
 - zdalna sieć (2026-11-28): `SerialPacketLink` koduje ramkę i liczy sumę w
   jednym przebiegu, a o pakiet, który nie doszedł także za drugim razem,
   pyta ponownie z `poll()` (przy pełnym oknie drugiej strony łącze stało do

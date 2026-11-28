@@ -96,6 +96,14 @@ public:
     /// Backlight on or off (the enable pin).
     void set_backlight(bool on);
 
+    /// Changes the blanking after the picture (the vertical front porch, in
+    /// lines) while the display runs. With the pixel clock as it is that
+    /// sets the refresh rate: more lines, fewer refreshes a second (800x480
+    /// at 24 MHz and 854 clocks a line: 10 lines 55.8 Hz, 68 lines 50 Hz).
+    /// The panel must take the longer blanking; lines 0 gives invalid_argument.
+    Status        set_vsync_front_porch(std::uint16_t lines);
+    std::uint16_t vsync_front_porch() const { return config_.timing.vsync_front_porch; }
+
 private:
     bool   inside_(brick::interfaces::display::DisplayRect area) const;
     Status copy_rows_(std::uint8_t index, brick::interfaces::display::DisplayRect area,

@@ -10,7 +10,8 @@ namespace brick::platform::stm32::h7
 
 namespace
 {
-    constexpr std::size_t kPixelBytes = 2;
+    constexpr std::size_t   kPixelBytes        = 2;
+    constexpr std::uint32_t kBlankingTimeoutMs = 100;  // several frames: the picture's lines come every one
 
     using brick::interfaces::display::DisplayRect;
     using brick::interfaces::display::PixelBuffer;
@@ -203,6 +204,24 @@ Status LtdcDisplay::present_frame_buffer(std::uint8_t index)
     LTDC->SRCR         = LTDC_SRCR_VBR;
     shown_             = index;
     flip_pending_      = true;
+    return Status::ok;
+}
+
+Status LtdcDisplay::set_vsync_front_porch(std::uint16_t lines)
+{
+    if (!started_)
+        return Status::not_ready;
+    const std::uint32_t total = config_.timing.vsync_width + config_.timing.vsync_back_porch + config_.height + lines;
+    if (lines == 0 || total - 1U > LTDC_TWCR_TOTALH)
+        return Status::invalid_argument;
+    // The total is not shadowed: written while the picture's lines go out,
+    // both the old end of the frame and the new one are still ahead.
+    const std::uint32_t start = HAL_GetTick();
+    while ((LTDC->CDSR & LTDC_CDSR_VDES) == 0U)
+        if (HAL_GetTick() - start > kBlankingTimeoutMs)
+            return Status::timeout;
+    LTDC->TWCR                       = (LTDC->TWCR & ~LTDC_TWCR_TOTALH) | (total - 1U);
+    config_.timing.vsync_front_porch = lines;
     return Status::ok;
 }
 

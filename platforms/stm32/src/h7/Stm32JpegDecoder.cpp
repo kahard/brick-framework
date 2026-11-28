@@ -1,6 +1,7 @@
 #include "brick/platform/stm32/h7/Stm32JpegDecoder.h"
 
 #include <algorithm>
+#include <cstring>
 
 #include "brick/platform/stm32/h7/HalStatus.h"
 
@@ -12,9 +13,14 @@ namespace
     // Bytes of one MCU in the codec's output: 8x8 blocks of Y, Cb and Cr.
     constexpr std::size_t   kBlockBytes = 64;
     constexpr std::uint32_t kPixelBytes = 2;
-
-    /// The decoder the HAL callbacks report to while decode() runs.
-    Stm32JpegDecoder* g_active = nullptr;
+    constexpr std::size_t   kWordBytes  = sizeof(std::uint32_t);
+    /// Words a FIFO of the codec takes or gives at once when it flags its threshold.
+    constexpr std::size_t kFifoBurst = 8;
+    /// Rounds of the codec loop between two looks at the clock.
+    constexpr std::uint32_t kClockRounds = 1024;
+    constexpr std::uint32_t kInterrupts =
+        JPEG_CR_IFTIE | JPEG_CR_IFNFIE | JPEG_CR_OFTIE | JPEG_CR_OFNEIE | JPEG_CR_EOCIE | JPEG_CR_HPDIE;
+    constexpr std::uint32_t kClearFlags = JPEG_CFR_CEOCF | JPEG_CFR_CHPDF;
 
     std::uint32_t mcu_width(std::uint32_t subsampling)
     {
@@ -44,7 +50,8 @@ Status Stm32JpegDecoder::begin()
 {
     if (started_)
         return Status::ok;
-    if (config_.ycbcr == nullptr || config_.ycbcr_capacity == 0)
+    if (config_.ycbcr == nullptr || config_.ycbcr_capacity == 0
+        || reinterpret_cast<std::uintptr_t>(config_.ycbcr) % kWordBytes != 0)
         return Status::invalid_argument;
     __HAL_RCC_JPGDECEN_CLK_ENABLE();
     __HAL_RCC_DMA2D_CLK_ENABLE();
@@ -59,13 +66,10 @@ Status Stm32JpegDecoder::begin()
 Status Stm32JpegDecoder::decode(const std::uint8_t* jpeg, std::size_t size, JpegImage& image)
 {
     banded_ = false;
-    if (const Status status = start_(jpeg, size); !is_ok(status))
+    if (const Status status = run_(jpeg, size); !is_ok(status))
         return status;
-    if (const Status status = finish_(); !is_ok(status))
-        return status;
-    const std::size_t mcu_rows = (image_.height + mcu_height_() - 1U) / mcu_height_();
-    if (output_bytes_ < mcu_rows * mcu_row_bytes_())
-        return Status::no_memory;  // the YCbCr buffer is too small for this image
+    if (output_bytes_ < band_bytes_)
+        return Status::error;  // the codec gave less than the image holds
     image = image_;
     return Status::ok;
 }
@@ -77,13 +81,9 @@ Status Stm32JpegDecoder::decode_to_rgb565(const std::uint8_t* jpeg, std::size_t 
     if (!target.valid() || target.format != brick::interfaces::display::PixelFormat::rgb565 || x < 0 || y < 0)
         return Status::invalid_argument;
     banded_ = true;
-    band_   = { &target, x, y, 0, Status::ok };
-    if (const Status status = start_(jpeg, size); !is_ok(status))
+    band_   = { &target, x, y, 0 };
+    if (const Status status = run_(jpeg, size); !is_ok(status))
         return status;
-    if (const Status status = finish_(); !is_ok(status))
-        return status;
-    if (!is_ok(band_.status))
-        return band_.status;
     if (band_.row < image_.height)
         return Status::error;  // the codec gave fewer rows than the image has
     image = image_;
@@ -99,44 +99,199 @@ Status Stm32JpegDecoder::to_rgb565(const brick::interfaces::display::WritablePix
         return Status::invalid_argument;
     if (rows == 0 || first_row + rows > image_.height)
         rows = static_cast<std::uint16_t>(image_.height - first_row);
-    return convert_(config_.ycbcr + (first_row / mcu_height_()) * mcu_row_bytes_(), target, x, y, rows);
+    if (const Status status =
+            convert_(config_.ycbcr + (first_row / mcu_height_()) * mcu_row_bytes_(), target, x, y, rows);
+        !is_ok(status))
+        return status;
+    return wait_converted_();
 }
 
-/// Runs the codec over the whole JPEG; the callbacks fill in the image and,
-/// in band mode, convert the bands.
-Status Stm32JpegDecoder::start_(const std::uint8_t* jpeg, std::size_t size)
+/// Runs the codec over the whole JPEG: its input FIFO fed from the data, its
+/// output FIFO emptied into the YCbCr buffer, both by words as the FIFOs
+/// flag room and data. The header, once the codec has parsed it, says where
+/// the output goes (header_parsed_()).
+Status Stm32JpegDecoder::run_(const std::uint8_t* jpeg, std::size_t size)
 {
     if (!started_)
         return Status::not_ready;
     if (jpeg == nullptr || size == 0)
         return Status::invalid_argument;
-    if (g_active != nullptr)
-        return Status::busy;
-    g_active         = this;
-    decoded_         = false;
-    failed_          = false;
-    output_bytes_    = 0;
-    color_space_     = JPEG_GRAYSCALE_COLORSPACE;
-    image_           = {};
-    const auto words = static_cast<std::uint32_t>((size + 3U) & ~static_cast<std::size_t>(3U));
-    // HAL_JPEG_Decode takes a non-const input buffer but only reads it.
-    const HAL_StatusTypeDef result =
-        HAL_JPEG_Decode(&jpeg_, const_cast<std::uint8_t*>(jpeg), words, config_.ycbcr,
-                        static_cast<std::uint32_t>(config_.ycbcr_capacity), config_.timeout_ms);
-    g_active = nullptr;
-    return to_status(result);
+    image_        = {};
+    output_       = nullptr;
+    output_from_  = nullptr;
+    output_end_   = nullptr;
+    band_bytes_   = 0;
+    output_bytes_ = 0;
+
+    JPEG_TypeDef& codec = *jpeg_.Instance;
+    codec.CONFR0 &= ~JPEG_CONFR0_START;
+    codec.CONFR1 |= JPEG_CONFR1_DE | JPEG_CONFR1_HDR;
+    codec.CR &= ~kInterrupts;
+    codec.CR |= JPEG_CR_IFF;
+    codec.CR |= JPEG_CR_OFF;
+    codec.CFR = kClearFlags;
+    codec.CONFR0 |= JPEG_CONFR0_START;
+
+    const std::uint8_t*       input     = jpeg;
+    const std::uint8_t* const input_end = jpeg + ((size + kWordBytes - 1U) & ~(kWordBytes - 1U));
+    const std::uint32_t       from      = HAL_GetTick();
+    std::uint32_t             rounds    = 0;
+    Status                    status    = Status::ok;
+    while (is_ok(status))
+    {
+        const std::uint32_t flags = codec.SR;
+        if ((flags & JPEG_SR_HPDF) != 0U)
+        {
+            codec.CFR = JPEG_CFR_CHPDF;
+            status    = header_parsed_();
+            continue;
+        }
+        if (input != input_end && (flags & (JPEG_SR_IFTF | JPEG_SR_IFNFF)) != 0U)
+        {
+            const std::size_t room = (flags & JPEG_SR_IFTF) != 0U ? kFifoBurst : 1U;
+            const auto        left = static_cast<std::size_t>(input_end - input) / kWordBytes;
+            for (std::size_t words = std::min(room, left); words != 0; --words)
+            {
+                std::uint32_t word = 0;
+                std::memcpy(&word, input, kWordBytes);  // the JPEG need not be word-aligned
+                codec.DIR = word;
+                input += kWordBytes;
+            }
+        }
+        if ((flags & (JPEG_SR_OFTF | JPEG_SR_OFNEF)) != 0U)
+        {
+            if (output_ == output_end_)
+            {
+                status = Status::error;  // data without a header, or more than the image holds
+                break;
+            }
+            const std::size_t ready = (flags & JPEG_SR_OFTF) != 0U ? kFifoBurst : 1U;
+            const auto        left  = static_cast<std::size_t>(output_end_ - output_);
+            for (std::size_t words = std::min(ready, left); words != 0; --words)
+                *output_++ = codec.DOR;
+            if (output_ == output_end_)
+                status = output_filled_();
+        }
+        else if ((flags & JPEG_SR_EOCF) != 0U)
+        {
+            break;  // the end of the image, and nothing left in the FIFO
+        }
+        if (++rounds % kClockRounds == 0U && HAL_GetTick() - from > config_.timeout_ms)
+            status = Status::timeout;
+    }
+    codec.CONFR0 &= ~JPEG_CONFR0_START;
+    codec.CFR = kClearFlags;
+    if (!is_ok(status))
+    {
+        // What the codec still holds of this image must not reach the next one.
+        codec.CR |= JPEG_CR_IFF;
+        codec.CR |= JPEG_CR_OFF;
+    }
+    if (is_ok(status) && output_from_ == nullptr)
+        status = Status::error;  // the codec found no image in the data
+    if (is_ok(status) && banded_ && output_ != output_from_)
+        status = band_decoded_();  // the image's last band
+    if (!banded_)
+        output_bytes_ = static_cast<std::uint32_t>((output_ - output_from_) * kWordBytes);
+    if (const Status converted = wait_converted_(); is_ok(status))
+        status = converted;
+    return status;
 }
 
-Status Stm32JpegDecoder::finish_()
+/// The codec has read the image's header: its size and layout are known, and
+/// with them where the output goes: the whole image (decode()) or bands of
+/// whole MCU rows, two of them when the buffer holds two.
+Status Stm32JpegDecoder::header_parsed_()
 {
-    if (failed_ || !decoded_ || image_.width == 0 || image_.height == 0)
+    JPEG_ConfTypeDef info{};
+    if (const HAL_StatusTypeDef result = HAL_JPEG_GetInfo(&jpeg_, &info); result != HAL_OK)
+        return to_status(result);
+    image_.width       = static_cast<std::uint16_t>(info.ImageWidth);
+    image_.height      = static_cast<std::uint16_t>(info.ImageHeight);
+    image_.subsampling = info.ChromaSubsampling;
+    if (image_.width == 0 || image_.height == 0)
         return Status::error;
-    if (color_space_ != JPEG_YCBCR_COLORSPACE)
+    if (info.ColorSpace != JPEG_YCBCR_COLORSPACE)
         return Status::not_supported;
+    const std::size_t row_bytes = mcu_row_bytes_();
+    if (banded_)
+    {
+        if (band_.x + image_.width > static_cast<std::int32_t>(band_.buffer->width)
+            || band_.y + image_.height > static_cast<std::int32_t>(band_.buffer->height))
+            return Status::invalid_argument;
+        const std::size_t half = config_.ycbcr_capacity / 2U / row_bytes * row_bytes;
+        two_bands_             = half != 0;
+        band_bytes_            = two_bands_ ? half : config_.ycbcr_capacity / row_bytes * row_bytes;
+    }
+    else
+    {
+        band_bytes_ = (image_.height + mcu_height_() - 1U) / mcu_height_() * row_bytes;
+    }
+    if (band_bytes_ == 0 || band_bytes_ > config_.ycbcr_capacity)
+        return Status::no_memory;
+    output_from_ = reinterpret_cast<std::uint32_t*>(config_.ycbcr);
+    output_      = output_from_;
+    output_end_  = output_from_ + band_bytes_ / kWordBytes;
     return Status::ok;
 }
 
-/// rows rows of the image from source (whole MCU rows) to RGB565 at (x, y).
+/// The codec filled what it was given: a band, which the DMA2D takes over
+/// while the codec goes on (the whole image of decode() is simply full).
+Status Stm32JpegDecoder::output_filled_()
+{
+    if (!banded_)
+        return Status::ok;
+    if (const Status status = band_decoded_(); !is_ok(status))
+        return status;
+    if (config_.observer != nullptr)
+        config_.observer->band_decoded();
+    return Status::ok;
+}
+
+/// The band at output_from_ goes to the target: the DMA2D converts it while
+/// the codec fills the buffer's other half, where the band before has been
+/// converted by now (or is waited for).
+Status Stm32JpegDecoder::band_decoded_()
+{
+    auto* const data  = reinterpret_cast<std::uint8_t*>(output_from_);
+    const auto  bytes = static_cast<std::uint32_t>((output_ - output_from_) * kWordBytes);
+    output_bytes_ += bytes;
+    if (band_.row < image_.height)
+    {
+        const std::size_t   row_bytes = mcu_row_bytes_();
+        const auto          mcu_rows  = static_cast<std::uint32_t>((bytes + row_bytes - 1U) / row_bytes);
+        const std::uint32_t whole     = mcu_rows * mcu_height_();
+        const std::uint32_t rows      = std::min<std::uint32_t>(whole, image_.height - band_.row);
+        // The DMA2D converts YCbCr only in whole MCU rows (a picture 450 rows
+        // high ends in a part of one): convert the whole last row when the
+        // target has room below the picture, else only the picture's rows.
+        const auto top       = static_cast<std::uint32_t>(band_.y + band_.row);
+        const auto room      = static_cast<std::uint32_t>(band_.buffer->height) - top;
+        const auto converted = static_cast<std::uint16_t>(whole <= room ? whole : rows);
+        if (const Status status = wait_converted_(); !is_ok(status))
+            return status;
+        SCB_CleanDCache_by_Addr(reinterpret_cast<std::uint32_t*>(data), static_cast<std::int32_t>(bytes));
+        if (const Status status = convert_(data, *band_.buffer, band_.x, band_.y + band_.row, converted);
+            !is_ok(status))
+            return status;
+        band_.row = static_cast<std::uint16_t>(band_.row + rows);
+    }
+    if (two_bands_)
+    {
+        auto* const first = reinterpret_cast<std::uint32_t*>(config_.ycbcr);
+        output_from_      = output_from_ == first ? first + band_bytes_ / kWordBytes : first;
+    }
+    else if (const Status status = wait_converted_(); !is_ok(status))
+    {
+        return status;  // the one band is in use until it is converted
+    }
+    output_     = output_from_;
+    output_end_ = output_from_ + band_bytes_ / kWordBytes;
+    return Status::ok;
+}
+
+/// Starts the DMA2D on rows rows of the image from source (whole MCU rows)
+/// to RGB565 at (x, y); wait_converted_() ends it.
 Status Stm32JpegDecoder::convert_(const std::uint8_t*                                    source,
                                   const brick::interfaces::display::WritablePixelBuffer& target, std::int32_t x,
                                   std::int32_t y, std::uint16_t rows)
@@ -173,61 +328,17 @@ Status Stm32JpegDecoder::convert_(const std::uint8_t*                           
                                                          reinterpret_cast<std::uint32_t>(output), image_.width, rows);
         result != HAL_OK)
         return to_status(result);
+    converting_ = true;
+    return Status::ok;
+}
+
+/// Waits for the conversion convert_() started, if one runs.
+Status Stm32JpegDecoder::wait_converted_()
+{
+    if (!converting_)
+        return Status::ok;
+    converting_ = false;
     return to_status(HAL_DMA2D_PollForTransfer(&dma2d_, config_.timeout_ms));
-}
-
-void Stm32JpegDecoder::on_info(const JPEG_ConfTypeDef& info)
-{
-    color_space_       = info.ColorSpace;
-    image_.width       = static_cast<std::uint16_t>(info.ImageWidth);
-    image_.height      = static_cast<std::uint16_t>(info.ImageHeight);
-    image_.subsampling = info.ChromaSubsampling;
-    if (!banded_)
-        return;
-    // Bands of whole MCU rows, as many as the buffer holds.
-    const std::size_t row_bytes  = mcu_row_bytes_();
-    const std::size_t band_bytes = row_bytes == 0 ? 0 : config_.ycbcr_capacity / row_bytes * row_bytes;
-    if (band_bytes == 0 || band_.x + image_.width > static_cast<std::int32_t>(band_.buffer->width)
-        || band_.y + image_.height > static_cast<std::int32_t>(band_.buffer->height))
-    {
-        band_.status = band_bytes == 0 ? Status::no_memory : Status::invalid_argument;
-        return;
-    }
-    HAL_JPEG_ConfigOutputBuffer(&jpeg_, config_.ycbcr, static_cast<std::uint32_t>(band_bytes));
-}
-
-void Stm32JpegDecoder::on_input_used()
-{
-    // The whole JPEG was handed over at once: no more input.
-    HAL_JPEG_ConfigInputBuffer(&jpeg_, jpeg_.pJpegInBuffPtr, 0);
-}
-
-/// The codec filled the buffer (or ended): in band mode the band goes to the
-/// target now, and the codec goes on into the same buffer.
-void Stm32JpegDecoder::on_output(std::uint8_t* data, std::uint32_t bytes)
-{
-    output_bytes_ += bytes;
-    if (!banded_ || !is_ok(band_.status) || band_.row >= image_.height)
-        return;
-    const std::size_t   row_bytes = mcu_row_bytes_();
-    const auto          mcu_rows  = static_cast<std::uint32_t>((bytes + row_bytes - 1U) / row_bytes);
-    const std::uint32_t whole     = mcu_rows * mcu_height_();
-    const std::uint32_t rows      = std::min<std::uint32_t>(whole, image_.height - band_.row);
-    // The DMA2D converts YCbCr only in whole MCU rows (a picture 450 rows
-    // high ends in a part of one): convert the whole last row when the target
-    // has room below the picture, else only the picture's rows.
-    const auto top       = static_cast<std::uint32_t>(band_.y + band_.row);
-    const auto room      = static_cast<std::uint32_t>(band_.buffer->height) - top;
-    const auto converted = static_cast<std::uint16_t>(whole <= room ? whole : rows);
-    SCB_CleanDCache_by_Addr(reinterpret_cast<std::uint32_t*>(data), static_cast<std::int32_t>(bytes));
-    band_.status = convert_(data, *band_.buffer, band_.x, band_.y + band_.row, converted);
-    band_.row    = static_cast<std::uint16_t>(band_.row + rows);
-}
-
-void Stm32JpegDecoder::on_done(bool error)
-{
-    failed_  = failed_ || error;
-    decoded_ = true;
 }
 
 std::uint32_t Stm32JpegDecoder::mcu_height_() const
@@ -242,40 +353,3 @@ std::size_t Stm32JpegDecoder::mcu_row_bytes_() const
 }
 
 }  // namespace brick::platform::stm32::h7
-
-// The HAL's JPEG callbacks, passed on to the decoder that is decoding.
-extern "C" void HAL_JPEG_InfoReadyCallback(JPEG_HandleTypeDef* handle, JPEG_ConfTypeDef* info)
-{
-    (void)handle;
-    if (brick::platform::stm32::h7::g_active != nullptr && info != nullptr)
-        brick::platform::stm32::h7::g_active->on_info(*info);
-}
-
-extern "C" void HAL_JPEG_GetDataCallback(JPEG_HandleTypeDef* handle, uint32_t decoded)
-{
-    (void)handle;
-    (void)decoded;
-    if (brick::platform::stm32::h7::g_active != nullptr)
-        brick::platform::stm32::h7::g_active->on_input_used();
-}
-
-extern "C" void HAL_JPEG_DataReadyCallback(JPEG_HandleTypeDef* handle, uint8_t* data, uint32_t bytes)
-{
-    (void)handle;
-    if (brick::platform::stm32::h7::g_active != nullptr)
-        brick::platform::stm32::h7::g_active->on_output(data, bytes);
-}
-
-extern "C" void HAL_JPEG_DecodeCpltCallback(JPEG_HandleTypeDef* handle)
-{
-    (void)handle;
-    if (brick::platform::stm32::h7::g_active != nullptr)
-        brick::platform::stm32::h7::g_active->on_done(false);
-}
-
-extern "C" void HAL_JPEG_ErrorCallback(JPEG_HandleTypeDef* handle)
-{
-    (void)handle;
-    if (brick::platform::stm32::h7::g_active != nullptr)
-        brick::platform::stm32::h7::g_active->on_done(true);
-}
